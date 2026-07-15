@@ -12,8 +12,8 @@ Perform an evidence-based review of the current change. Report findings only; do
 ## 1. Establish the review scope
 
 1. Read the repository-root `AGENTS.md` and every architecture document it requires for the changed paths.
-2. Use a base ref named by the caller. Otherwise read `verification.changed_base` from `.agent_harness.yaml`, falling back to `origin/main` only when the setting is absent.
-3. Verify that the base ref exists before reviewing committed branch changes. If it does not exist, ask for a valid base instead of silently reviewing a partial diff.
+2. Use a base ref named by the caller. Otherwise read `verification.changed_base` from `.agent_harness.yaml`, defaulting to `origin/main` when the setting is absent. If the selected base is `origin/main` and it does not exist, use `main`.
+3. Verify that the selected base exists after applying the fallback. If it does not exist, ask for a valid base instead of silently reviewing a partial diff.
 4. Collect committed changes from `base...HEAD`, tracked working-tree changes from `HEAD`, and untracked files. Deduplicate the paths.
 5. If the scope is empty, report that no changes were available and stop without spawning reviewers.
 
