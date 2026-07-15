@@ -1,0 +1,4 @@
+[submodule "tool/flutter_agentic_harness"]
+	path = tool/flutter_agentic_harness
+	url = https://github.com/ChabanovX/flutter-harness.git
+	branch = main

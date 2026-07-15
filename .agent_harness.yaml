@@ -1,0 +1,122 @@
+version: 1
+
+project:
+  lib_root: lib
+  feature_root: lib/features
+  app_root: lib/app
+  core_root: lib/core
+  shared_root: lib/shared
+
+architecture:
+  baseline: .agent_harness/baseline.json
+  fail_on_stale_baseline: true
+  allow_cross_feature_imports: false
+
+  # Generated Dart is validated by dart/flutter analyze, not by layer checks.
+  excluded_paths:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+    - "**/*.mocks.dart"
+    - "**/*.gr.dart"
+
+  # Pure-Dart packages allowed in domain/shared-domain code.
+  allowed_domain_packages:
+    - collection
+    - meta
+
+  # Pure-Dart packages allowed in application code.
+  allowed_application_packages:
+    - collection
+    - meta
+    - async
+
+  # Keep pure domain/application layers independent from platform SDK APIs.
+  pure_layer_forbidden_dart_libraries:
+    - dart:developer
+    - dart:ffi
+    - dart:html
+    - dart:io
+    - dart:isolate
+    - dart:js
+    - dart:js_interop
+    - dart:mirrors
+    - dart:ui
+
+  # Presentation may use Flutter/UI packages, but not these infrastructure packages.
+  presentation_forbidden_packages:
+    - dio
+    - retrofit
+    - http
+    - get_it
+    - injectable
+    - shared_preferences
+    - flutter_secure_storage
+    - drift
+    - sqflite
+    - objectbox
+    - isar
+    - hive
+
+  # Even when wrapped by the app, infrastructure must not leak into UI code.
+  presentation_forbidden_internal_roots:
+    - lib/core/network
+    - lib/core/storage
+    - lib/core/database
+    - lib/core/cache
+    - lib/core/di
+    - lib/core/errors
+
+  service_locator_identifiers:
+    - getIt
+    - locator
+
+  enforce_dto_location: true
+  forbid_print: true
+
+  # Temporary, reviewed exceptions. Keep this list small and include a reason.
+  exceptions: []
+  # Example:
+  # - rule: cross_feature_import
+  #   source: lib/features/orders/application/**
+  #   target: lib/features/catalog/domain/**
+  #   reason: Temporary migration bridge; tracked by ADR-0012.
+
+quality:
+  enforce_design_tokens: true
+  enforce_localization: true
+  enforce_assets: true
+  enforce_logging: true
+  design_tokens_path: lib/core/design_system/tokens/tokens.dart
+  ui_constants_path: lib/core/constants/ui_constants.dart
+  localizations_class: AppLocalizations
+  assets_class: Assets
+  logging_facade_class: AppLogger
+
+golden:
+  enabled: true
+  test_path: test/golden
+
+verification:
+  format_paths:
+    - lib
+    - test
+    - integration_test
+    - tool
+
+  analyze: true
+  tests: true
+  changed_base: origin/main
+  fallback_to_all_tests: true
+
+  # Commands run after format, analyze, architecture, and tests.
+  # Each command is executed from the application root.
+  extra_commands:
+    - dart run bloc_tools:bloc lint .
+  # Example:
+  # - dart run build_runner build --delete-conflicting-outputs
+  # - git diff --exit-code -- '*.g.dart' '*.freezed.dart'
+
+scaffolding:
+  default_state_style: sealed
+  generate_get_it_module: true
+  generate_widget_test: true
