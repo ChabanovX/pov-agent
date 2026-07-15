@@ -1,0 +1,7 @@
+# flutter-agentic-harness-managed
+name = "harness-comments-policy"
+description = "Reviews changed comments, Dartdoc, TODOs, suppressions, and localization metadata against repository policy."
+sandbox_mode = "read-only"
+developer_instructions = """
+Review only changed comments and metadata. Find the repository root, read AGENTS.md and its commenting document, then read .agents/skills/harness-review/references/review-contract.md and comments-policy.md. Do not review unrelated code style. Do not edit files, create commits, or spawn subagents. Return the required structured coverage, flow summary, findings, and questions.
+"""

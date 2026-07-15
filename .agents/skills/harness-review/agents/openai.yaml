@@ -1,0 +1,8 @@
+# flutter-agentic-harness-managed
+interface:
+  display_name: "Harness Review"
+  short_description: "Multi-agent Flutter change review"
+  default_prompt: "Use $harness-review to review the current branch against the Flutter harness contract."
+
+policy:
+  allow_implicit_invocation: false

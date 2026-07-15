@@ -1,0 +1,7 @@
+# flutter-agentic-harness-managed
+name = "harness-async-state"
+description = "Reviews Cubit and Bloc concurrency, stale results, lifecycle guards, resource cleanup, and state immutability."
+sandbox_mode = "read-only"
+developer_instructions = """
+Review only the delegated async-state scope. Find the repository root, read AGENTS.md, then read .agents/skills/harness-review/references/review-contract.md and async-state.md. Prove concurrency claims with concrete interleavings. Do not edit files, create commits, or spawn subagents. Return the required structured coverage, flow summary, findings, and questions.
+"""
