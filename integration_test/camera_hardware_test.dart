@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:some_camera_with_llm/app/app.dart';
+import 'package:some_camera_with_llm/app/di/app_di.dart';
 import 'package:some_camera_with_llm/core/design_system/tokens/tokens.dart';
 
 const _runHardwareCameraTest = bool.fromEnvironment(
@@ -13,25 +14,32 @@ void main() {
   testWidgets(
     'real camera preview survives controls and visibility changes',
     (tester) async {
-      await tester.pumpWidget(const SomeCameraWithLlmApp());
-      await _pumpUntilFound(tester, find.bySemanticsLabel('Disable camera'));
+      final runtime = configureDependencies();
+      await runtime.start();
+      try {
+        await tester.pumpWidget(const SomeCameraWithLlmApp());
+        await _pumpUntilFound(tester, find.bySemanticsLabel('Disable camera'));
 
-      await tester.tap(find.bySemanticsLabel('Switch camera'));
-      await _pumpUntilFound(tester, find.bySemanticsLabel('Disable camera'));
+        await tester.tap(find.bySemanticsLabel('Switch camera'));
+        await _pumpUntilFound(tester, find.bySemanticsLabel('Disable camera'));
 
-      await tester.tap(find.text('Assistant'));
-      await tester.pumpAndSettle();
-      expect(find.text('Assistant placeholder'), findsOneWidget);
+        await tester.tap(find.text('Assistant'));
+        await tester.pumpAndSettle();
+        expect(find.text('Assistant placeholder'), findsOneWidget);
 
-      await tester.tap(find.text('Camera'));
-      await _pumpUntilFound(tester, find.bySemanticsLabel('Disable camera'));
+        await tester.tap(find.text('Camera'));
+        await _pumpUntilFound(tester, find.bySemanticsLabel('Disable camera'));
 
-      await tester.tap(find.bySemanticsLabel('Disable camera'));
-      await tester.pumpAndSettle();
-      expect(find.text('Camera is off.'), findsOneWidget);
+        await tester.tap(find.bySemanticsLabel('Disable camera'));
+        await tester.pumpAndSettle();
+        expect(find.text('Camera is off.'), findsOneWidget);
 
-      await tester.tap(find.text('Enable camera'));
-      await _pumpUntilFound(tester, find.bySemanticsLabel('Disable camera'));
+        await tester.tap(find.text('Enable camera'));
+        await _pumpUntilFound(tester, find.bySemanticsLabel('Disable camera'));
+      } finally {
+        await runtime.close();
+        await appDependencies.reset(dispose: false);
+      }
     },
     skip: !_runHardwareCameraTest,
   );
