@@ -37,7 +37,9 @@ dependencies:
   flutter_bloc: ^9.1.1
   get_it: ^9.2.1
   logger: ^2.7.0
-  intl: ^0.20.3
+  intl: ^0.20.2
+  flutter_localizations:
+    sdk: flutter
 
 dev_dependencies:
   flutter_test:
@@ -48,7 +50,11 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^6.0.0
+  very_good_analysis: 10.2.0
+  assetify: ^1.0.2
+  alchemist: ^0.14.0
+  bloc_lint: ^0.4.2
+  bloc_tools: ^0.1.0-dev.8
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
