@@ -20,6 +20,12 @@ final class AppSpacing extends ThemeExtension<AppSpacing> {
 
   EdgeInsets get page => EdgeInsets.all(lg);
 
+  EdgeInsets get insetSm => EdgeInsets.all(sm);
+
+  EdgeInsets get topMd => EdgeInsets.only(top: md);
+
+  EdgeInsets get topLg => EdgeInsets.only(top: lg);
+
   EdgeInsets get section => EdgeInsets.symmetric(
     horizontal: lg,
     vertical: md,

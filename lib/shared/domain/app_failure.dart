@@ -69,6 +69,24 @@ final class CacheFailure extends AppFailure {
   });
 }
 
+final class PermissionDeniedFailure extends AppFailure {
+  const PermissionDeniedFailure({
+    super.code = 'permission_denied',
+    super.message,
+    super.cause,
+    super.stackTrace,
+  });
+}
+
+final class DeviceUnavailableFailure extends AppFailure {
+  const DeviceUnavailableFailure({
+    super.code = 'device_unavailable',
+    super.message,
+    super.cause,
+    super.stackTrace,
+  });
+}
+
 final class UnexpectedFailure extends AppFailure {
   const UnexpectedFailure({
     super.code = 'unexpected',

@@ -20,6 +20,34 @@
   "@assistantPlaceholderTitle": {
     "description": "Placeholder message centered on the AI assistant tab."
   },
+  "cameraDisabledMessage": "Camera is off.",
+  "@cameraDisabledMessage": {
+    "description": "Message shown when the user has manually disabled the camera."
+  },
+  "cameraEnableAction": "Enable camera",
+  "@cameraEnableAction": {
+    "description": "Button and accessibility label for enabling the camera."
+  },
+  "cameraDisableAction": "Disable camera",
+  "@cameraDisableAction": {
+    "description": "Accessibility label for disabling the camera."
+  },
+  "cameraSwitchAction": "Switch camera",
+  "@cameraSwitchAction": {
+    "description": "Accessibility label for switching between front and rear cameras."
+  },
+  "cameraPermissionDeniedMessage": "Camera access is disabled. Allow camera access in Settings, then retry.",
+  "@cameraPermissionDeniedMessage": {
+    "description": "Guidance shown when camera permission is denied."
+  },
+  "cameraUnavailableMessage": "No supported camera is available on this device.",
+  "@cameraUnavailableMessage": {
+    "description": "Message shown when the device has no supported camera."
+  },
+  "cameraFailureMessage": "The camera could not be started.",
+  "@cameraFailureMessage": {
+    "description": "Fallback message shown when camera startup fails."
+  },
   "featurePageTitle": "{featureName}",
   "@featurePageTitle": {
     "description": "Generic scaffolded feature page title.",

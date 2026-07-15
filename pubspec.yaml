@@ -46,6 +46,8 @@ dev_dependencies:
   bloc_tools: ^0.1.0-dev.24
   flutter_test:
     sdk: flutter
+  integration_test:
+    sdk: flutter
   very_good_analysis: 10.2.0
 
 # For information on the generic Dart part of this file, see the

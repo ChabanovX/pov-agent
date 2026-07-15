@@ -121,6 +121,48 @@ abstract class AppLocalizations {
   /// **'Assistant placeholder'**
   String get assistantPlaceholderTitle;
 
+  /// Message shown when the user has manually disabled the camera.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera is off.'**
+  String get cameraDisabledMessage;
+
+  /// Button and accessibility label for enabling the camera.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable camera'**
+  String get cameraEnableAction;
+
+  /// Accessibility label for disabling the camera.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable camera'**
+  String get cameraDisableAction;
+
+  /// Accessibility label for switching between front and rear cameras.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch camera'**
+  String get cameraSwitchAction;
+
+  /// Guidance shown when camera permission is denied.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera access is disabled. Allow camera access in Settings, then retry.'**
+  String get cameraPermissionDeniedMessage;
+
+  /// Message shown when the device has no supported camera.
+  ///
+  /// In en, this message translates to:
+  /// **'No supported camera is available on this device.'**
+  String get cameraUnavailableMessage;
+
+  /// Fallback message shown when camera startup fails.
+  ///
+  /// In en, this message translates to:
+  /// **'The camera could not be started.'**
+  String get cameraFailureMessage;
+
   /// Generic scaffolded feature page title.
   ///
   /// In en, this message translates to:
