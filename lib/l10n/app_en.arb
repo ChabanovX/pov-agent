@@ -1,0 +1,40 @@
+{
+  "@@locale": "en",
+  "appTitle": "Camera Assistant",
+  "@appTitle": {
+    "description": "Application title used by the operating system."
+  },
+  "cameraTabLabel": "Camera",
+  "@cameraTabLabel": {
+    "description": "Label and page title for the camera tab."
+  },
+  "assistantTabLabel": "Assistant",
+  "@assistantTabLabel": {
+    "description": "Label and page title for the AI assistant tab."
+  },
+  "cameraPlaceholderTitle": "Camera placeholder",
+  "@cameraPlaceholderTitle": {
+    "description": "Placeholder message centered on the camera tab."
+  },
+  "assistantPlaceholderTitle": "Assistant placeholder",
+  "@assistantPlaceholderTitle": {
+    "description": "Placeholder message centered on the AI assistant tab."
+  },
+  "featurePageTitle": "{featureName}",
+  "@featurePageTitle": {
+    "description": "Generic scaffolded feature page title.",
+    "placeholders": {
+      "featureName": {
+        "type": "String"
+      }
+    }
+  },
+  "emptyStateMessage": "Nothing here yet.",
+  "@emptyStateMessage": {
+    "description": "Message shown when a load-once list has no items."
+  },
+  "retryAction": "Retry",
+  "@retryAction": {
+    "description": "Button label for retrying a failed operation."
+  }
+}

@@ -5,10 +5,10 @@ packages:
     dependency: transitive
     description:
       name: _fe_analyzer_shared
-      sha256: f6526c100095fd63a916824e3da344bbbd50c25c8f56bcd52d13c59d35bbe422
+      sha256: cd6add6f846f35fb79f3c315296703c1a24f3cfd7f4739d91a74961c1c7e9f1b
       url: "https://pub.dev"
     source: hosted
-    version: "104.0.0"
+    version: "100.0.0"
   alchemist:
     dependency: "direct dev"
     description:
@@ -17,6 +17,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.14.0"
+  analyzer:
+    dependency: transitive
+    description:
+      name: analyzer
+      sha256: "6ba98576948803398b69e3a444df24eacdbe12ed699c7014e120ea38552debbf"
+      url: "https://pub.dev"
+    source: hosted
+    version: "13.0.0"
   archive:
     dependency: transitive
     description:
@@ -69,10 +77,10 @@ packages:
     dependency: "direct dev"
     description:
       name: bloc_tools
-      sha256: "278a15b1181291775f7b04c77be9d04d5e2953d4a4b7db8cec7f33c129f073ca"
+      sha256: fa7fdef35d4ec5e8f2111a2079cef2204008d20dc15953812f46afde379b33ba
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.0-dev.8"
+    version: "0.1.0-dev.24"
   boolean_selector:
     dependency: transitive
     description:
@@ -137,6 +145,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.9"
+  dart_style:
+    dependency: transitive
+    description:
+      name: dart_style
+      sha256: "59d53ef8eaed9d288ed9767618e2b31c4fa0383a127db59d5eb2e737a7638a60"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.1.9"
   equatable:
     dependency: transitive
     description:
@@ -248,6 +264,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.12.0"
+  json_rpc_2:
+    dependency: transitive
+    description:
+      name: json_rpc_2
+      sha256: "246b321532f0e8e2ba474b4d757eaa558ae4fdd0688fdbc1e1ca9705f9b8ca0e"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.3"
   leak_tracker:
     dependency: transitive
     description:
@@ -280,6 +304,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.7.0"
+  lsp_server_ce:
+    dependency: transitive
+    description:
+      name: lsp_server_ce
+      sha256: "06fb741620aad5529996ecced8fae132b5737a3f95c660a0e69b8ac9a5a5ec8d"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.4.0"
   mason:
     dependency: transitive
     description:
@@ -336,6 +368,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.0"
+  package_config:
+    dependency: transitive
+    description:
+      name: package_config
+      sha256: f096c55ebb7deb7e384101542bfba8c52696c1b56fca2eb62827989ef2353bbc
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.2.0"
   path:
     dependency: transitive
     description:
@@ -493,6 +533,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "15.2.0"
+  watcher:
+    dependency: transitive
+    description:
+      name: watcher
+      sha256: "1398c9f081a753f9226febe8900fce8f7d0a67163334e1c94a2438339d79d635"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.2.1"
   web:
     dependency: transitive
     description:

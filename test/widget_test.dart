@@ -1,30 +1,30 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:some_camera_with_llm/main.dart';
+import 'package:some_camera_with_llm/app/app.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('switches between two Cupertino placeholder tabs', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const SomeCameraWithLlmApp());
+    await tester.pumpAndSettle();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.byType(CupertinoApp), findsOneWidget);
+    expect(find.text('Camera placeholder'), findsOneWidget);
+    expect(find.text('Assistant placeholder'), findsNothing);
+    expect(
+      tester.widget<CupertinoTabBar>(find.byType(CupertinoTabBar)).currentIndex,
+      0,
+    );
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    await tester.tap(find.text('Assistant'));
+    await tester.pumpAndSettle();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Camera placeholder'), findsNothing);
+    expect(find.text('Assistant placeholder'), findsOneWidget);
+    expect(
+      tester.widget<CupertinoTabBar>(find.byType(CupertinoTabBar)).currentIndex,
+      1,
+    );
   });
 }
