@@ -28,6 +28,7 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  bloc_concurrency: ^0.3.0
   camera: ^0.12.0+2
   cupertino_icons: ^1.0.8
   flutter:
@@ -36,6 +37,7 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   get_it: ^9.2.1
+  go_router: ^17.3.0
   intl: ^0.20.2
   logger: ^2.7.0
 
@@ -43,7 +45,7 @@ dev_dependencies:
   alchemist: ^0.14.0
   assetify: ^1.0.2
   bloc_lint: ^0.4.2
-  bloc_tools: ^0.1.0-dev.24
+  bloc_tools: ^0.1.0-dev.8
   flutter_test:
     sdk: flutter
   integration_test:
