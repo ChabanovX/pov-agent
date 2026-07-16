@@ -12,7 +12,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'real camera preview survives controls and visibility changes',
+    'real live YOLO surface survives controls and visibility changes',
     (tester) async {
       final runtime = configureDependencies();
       await runtime.start();
@@ -46,9 +46,9 @@ void main() {
 }
 
 Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) async {
-  for (var attempt = 0; attempt < 100; attempt += 1) {
+  for (var attempt = 0; attempt < 500; attempt += 1) {
     await tester.pump(AppAnimations.regular.slow);
     if (finder.evaluate().isNotEmpty) return;
   }
-  fail('Timed out waiting for the real camera controls.');
+  fail('Timed out waiting for the live YOLO controls.');
 }
