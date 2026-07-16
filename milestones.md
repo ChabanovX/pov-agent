@@ -24,9 +24,30 @@ iPhone 11 с 4 ГБ RAM. Deployment target проекта остаётся iOS 1
   выходят из `data/` или app-level composition.
 - Асинхронные операции имеют явно определённую concurrency policy и корректно
   освобождают камеры, модели, таймеры, подписки и аудиоресурсы.
-- После каждого этапа выполняется
-  `dart run tool/harness.dart verify --changed`.
 - Каждый milestone оформляется отдельным Conventional Commit.
+
+## Quality gate после каждого milestone
+
+Milestone не считается завершённым, пока не пройдены статическая проверка и
+семантический review Flutter Agentic Harness.
+
+Обязательная последовательность:
+
+1. Завершить реализацию и ближайшие полезные тесты milestone.
+2. Выполнить static Harness check:
+   `dart run tool/harness.dart verify --changed`.
+3. Запустить skill `$harness-review` для полного diff текущего milestone.
+4. Если review нашёл verified findings уровня `blocker` или `major`, запустить
+   цикл:
+   `Fix → Static Harness check → $harness-review again`.
+5. Повторять цикл, пока `$harness-review` не вернёт ни одного verified
+   `blocker` или `major`.
+6. Только после закрытия блокирующих findings milestone можно коммитить и
+   переходить к следующему.
+
+Исправления из review должны сопровождаться ближайшими регрессионными тестами,
+когда finding описывает проверяемое поведение. Нельзя ослаблять architecture
+checks, quality checks или baseline ради прохождения цикла.
 
 ## 1. Live YOLO
 
