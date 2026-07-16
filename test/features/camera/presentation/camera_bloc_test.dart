@@ -1,7 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:some_camera_with_llm/features/camera/application/models/observation_event.dart';
 import 'package:some_camera_with_llm/features/camera/domain/entities/camera_lens.dart';
+import 'package:some_camera_with_llm/features/camera/domain/entities/detection.dart';
+import 'package:some_camera_with_llm/features/camera/domain/entities/normalized_box.dart';
+import 'package:some_camera_with_llm/features/camera/domain/entities/observation_diagnostics.dart';
 import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_bloc.dart';
 import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_state.dart';
 import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
@@ -14,7 +18,11 @@ void main() {
     final bloc = CameraBloc(controller);
     final statuses = <CameraStatus>[];
     final subscription = bloc.stream.listen(
-      (state) => statuses.add(state.status),
+      (state) {
+        if (statuses.lastOrNull != state.status) {
+          statuses.add(state.status);
+        }
+      },
     );
 
     bloc.add(const CameraStarted());
@@ -33,6 +41,8 @@ void main() {
       ],
     );
     expect(bloc.state.selectedLens, CameraLens.back);
+    expect(bloc.state.modelStatus, ObservationModelStatus.ready);
+    expect(bloc.state.surfaceMounted, isTrue);
     expect(controller.enableCalls, [CameraLens.back]);
 
     await subscription.cancel();
@@ -165,6 +175,76 @@ void main() {
     );
 
     expect(controller.initCalls, 2);
+
+    await bloc.close();
+  });
+
+  test('tracks download, detections, diagnostics, and model retry', () async {
+    final controller = FakeCameraController(emitModelReadyOnInit: false);
+    final bloc = CameraBloc(controller)..add(const CameraStarted());
+    await _waitForState(
+      bloc,
+      (state) => state.status == CameraStatus.enabled,
+    );
+
+    controller
+      ..emit(const ObservationModelDownloadProgressed(0.42))
+      ..emit(
+        ObservationDetectionsUpdated(
+          detections: const [
+            Detection(
+              classId: 0,
+              label: 'person',
+              confidence: 0.9,
+              box: NormalizedBox(
+                left: 0.1,
+                top: 0.1,
+                right: 0.5,
+                bottom: 0.9,
+              ),
+            ),
+          ],
+          observedAt: DateTime.utc(2026, 7, 16),
+        ),
+      )
+      ..emit(
+        ObservationDiagnosticsUpdated(
+          ObservationDiagnostics(
+            framesPerSecond: 18,
+            inferenceTimeMs: 24,
+            processingTimeMs: 30,
+            frameNumber: 12,
+            sampledAt: DateTime.utc(2026, 7, 16),
+          ),
+        ),
+      );
+    await _waitForState(
+      bloc,
+      (state) => state.diagnostics?.frameNumber == 12,
+    );
+
+    expect(bloc.state.modelStatus, ObservationModelStatus.downloading);
+    expect(bloc.state.modelDownloadProgress, 0.42);
+    expect(bloc.state.detections.single.label, 'person');
+
+    controller.emit(
+      const ObservationFailed(NetworkFailure(code: 'model_download')),
+    );
+    await _waitForState(
+      bloc,
+      (state) => state.modelStatus == ObservationModelStatus.failure,
+    );
+    expect(bloc.state.detections, isEmpty);
+    expect(bloc.state.diagnostics, isNull);
+
+    bloc.add(const CameraRetryRequested());
+    await _waitForState(
+      bloc,
+      (state) => state.modelStatus == ObservationModelStatus.ready,
+    );
+
+    expect(controller.retryModelCalls, 1);
+    expect(controller.initCalls, 1);
 
     await bloc.close();
   });

@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:some_camera_with_llm/core/logging/app_logger.dart';
-import 'package:some_camera_with_llm/features/camera/application/ports/camera_controller.dart';
+import 'package:some_camera_with_llm/features/camera/application/models/observation_event.dart';
+import 'package:some_camera_with_llm/features/camera/application/ports/observation_controller.dart';
 import 'package:some_camera_with_llm/features/camera/domain/entities/camera_capabilities.dart';
 import 'package:some_camera_with_llm/features/camera/domain/entities/camera_lens.dart';
 import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_state.dart';
@@ -46,14 +49,17 @@ final class _CameraReconciliationRequested extends CameraEvent {
   const _CameraReconciliationRequested();
 }
 
-/// Reconciles current camera intent with one serialized native camera session.
+final class _ObservationRuntimeEventReceived extends CameraEvent {
+  const _ObservationRuntimeEventReceived(this.event);
+
+  final ObservationEvent event;
+}
+
+/// Reconciles user intent with one serialized native YOLO camera session.
 ///
-/// Responsibilities:
-/// - Apply visibility and user intent without waiting for native I/O.
-/// - Discover available front and rear lenses.
-/// - Serialize native enable, disable, and lens replacement operations.
-/// - Ignore stale native results when newer intent has already arrived.
-/// - Normalize camera results into presentation state.
+/// Intent remains responsive while camera and model retries execute in one
+/// sequential reconciliation bucket. Native callbacks are normalized by the
+/// observation adapter before this Bloc receives them.
 final class CameraBloc extends Bloc<CameraEvent, CameraState> {
   CameraBloc(
     this._controller, {
@@ -61,6 +67,10 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
   }) : super(CameraState(surfaceActive: initiallySurfaceActive)) {
     on<CameraIntentEvent>(
       _onIntent,
+      transformer: sequential(),
+    );
+    on<_ObservationRuntimeEventReceived>(
+      _onObservationRuntimeEvent,
       transformer: sequential(),
     );
     on<_CameraReconciliationRequested>(
@@ -71,15 +81,22 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
 
   static final AppLogger _logger = AppLogger('CameraBloc');
 
-  final CameraController _controller;
+  final ObservationController _controller;
 
+  StreamSubscription<ObservationEvent>? _observationSubscription;
   int _discoveryRequest = 0;
   int _completedDiscoveryRequest = 0;
+  int _modelRetryRequest = 0;
+  int _completedModelRetryRequest = 0;
   bool _nativeEnabled = false;
   CameraLens? _nativeLens;
 
   bool get _hasPendingDiscovery {
     return _completedDiscoveryRequest < _discoveryRequest;
+  }
+
+  bool get _hasPendingModelRetry {
+    return _completedModelRetryRequest < _modelRetryRequest;
   }
 
   bool get _shouldEnable {
@@ -93,19 +110,28 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
     switch (event) {
       case CameraStarted():
         if (state.status != CameraStatus.initial) return;
+        _ensureObservationSubscription();
         _requestDiscovery();
         emit(
           state.copyWith(
             status: CameraStatus.initializing,
-            failure: () => null,
+            modelStatus: ObservationModelStatus.preparing,
+            cameraFailure: () => null,
+            modelFailure: () => null,
           ),
         );
       case CameraRetryRequested():
-        _requestDiscovery();
+        final retryModel = state.modelFailure != null || state.modelStatus == ObservationModelStatus.failure;
+        final retryCamera = state.cameraFailure != null || state.status == CameraStatus.failure;
+        if (retryModel || !retryCamera) _requestModelRetry();
+        if (retryCamera || !retryModel) _requestDiscovery();
         emit(
           state.copyWith(
-            status: CameraStatus.initializing,
-            failure: () => null,
+            status: retryCamera ? CameraStatus.initializing : state.status,
+            modelStatus: retryModel ? ObservationModelStatus.preparing : state.modelStatus,
+            modelDownloadProgress: retryModel ? () => null : null,
+            cameraFailure: retryCamera ? () => null : null,
+            modelFailure: retryModel ? () => null : null,
           ),
         );
       case CameraEnableRequested():
@@ -121,7 +147,7 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
                 ? CameraStatus.initializing
                 : state.status,
             requestedEnabled: true,
-            failure: () => null,
+            cameraFailure: () => null,
           ),
         );
       case CameraDisableRequested():
@@ -132,7 +158,7 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
           state.copyWith(
             status: _nativeEnabled ? state.status : CameraStatus.disabled,
             requestedEnabled: false,
-            failure: () => null,
+            cameraFailure: () => null,
           ),
         );
       case CameraLensToggleRequested():
@@ -142,7 +168,7 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
           state.copyWith(
             status: state.requestedEnabled && state.surfaceActive ? CameraStatus.switching : CameraStatus.disabled,
             selectedLens: nextLens,
-            failure: () => null,
+            cameraFailure: () => null,
           ),
         );
       case CameraSurfaceActivityChanged(:final active):
@@ -153,8 +179,66 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
     _scheduleReconciliation();
   }
 
+  void _ensureObservationSubscription() {
+    _observationSubscription ??= _controller.events.listen((event) {
+      if (!isClosed) add(_ObservationRuntimeEventReceived(event));
+    });
+  }
+
+  void _onObservationRuntimeEvent(
+    _ObservationRuntimeEventReceived event,
+    Emitter<CameraState> emit,
+  ) {
+    switch (event.event) {
+      case ObservationModelPreparing():
+        emit(
+          state.copyWith(
+            modelStatus: ObservationModelStatus.preparing,
+            modelDownloadProgress: () => null,
+            detections: const [],
+            diagnostics: () => null,
+            modelFailure: () => null,
+          ),
+        );
+      case ObservationModelDownloadProgressed(:final progress):
+        emit(
+          state.copyWith(
+            modelStatus: ObservationModelStatus.downloading,
+            modelDownloadProgress: () => progress.clamp(0, 1).toDouble(),
+            modelFailure: () => null,
+          ),
+        );
+      case ObservationModelReady():
+        emit(
+          state.copyWith(
+            modelStatus: ObservationModelStatus.ready,
+            modelDownloadProgress: () => null,
+            modelFailure: () => null,
+          ),
+        );
+      case ObservationDetectionsUpdated(:final detections):
+        emit(state.copyWith(detections: detections));
+      case ObservationDiagnosticsUpdated(:final diagnostics):
+        emit(state.copyWith(diagnostics: () => diagnostics));
+      case ObservationFailed(:final failure):
+        emit(
+          state.copyWith(
+            modelStatus: ObservationModelStatus.failure,
+            modelDownloadProgress: () => null,
+            detections: const [],
+            diagnostics: () => null,
+            modelFailure: () => failure,
+          ),
+        );
+    }
+  }
+
   void _requestDiscovery() {
     _discoveryRequest += 1;
+  }
+
+  void _requestModelRetry() {
+    _modelRetryRequest += 1;
   }
 
   void _scheduleReconciliation() {
@@ -166,9 +250,14 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
     _CameraReconciliationRequested event,
     Emitter<CameraState> emit,
   ) async {
-    // Concurrency policy: every native operation runs in this single sequential
-    // event bucket, while intent events may update the desired state immediately.
+    // Concurrency policy: model retries and native camera operations are
+    // serialized here while newer intent may update desired state immediately.
     while (!emit.isDone) {
+      if (_hasPendingModelRetry) {
+        final canContinue = await _retryModel(emit);
+        if (!canContinue) return;
+        continue;
+      }
       if (_hasPendingDiscovery) {
         final canContinue = await _discoverCameras(emit);
         if (!canContinue) return;
@@ -177,6 +266,27 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
 
       final settled = await _reconcileNativePower(emit);
       if (settled) return;
+    }
+  }
+
+  Future<bool> _retryModel(Emitter<CameraState> emit) async {
+    final request = _modelRetryRequest;
+    final result = await _controller.retryModel();
+    if (emit.isDone) return false;
+    if (request != _modelRetryRequest) return true;
+    _completedModelRetryRequest = request;
+
+    switch (result) {
+      case AppSuccess<void>():
+        return true;
+      case AppError<void>(:final failure):
+        emit(
+          state.copyWith(
+            modelStatus: ObservationModelStatus.failure,
+            modelFailure: () => failure,
+          ),
+        );
+        return false;
     }
   }
 
@@ -195,7 +305,7 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
         _emitCapabilities(emit, capabilities);
         return true;
       case AppError(:final failure):
-        _emitFailure(emit, failure);
+        _emitCameraFailure(emit, failure);
         return false;
     }
   }
@@ -204,7 +314,10 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
     Emitter<CameraState> emit,
     CameraCapabilities capabilities,
   ) {
-    final selectedLens = capabilities.availableLenses.contains(state.selectedLens)
+    final selectedLens =
+        capabilities.availableLenses.contains(
+          state.selectedLens,
+        )
         ? state.selectedLens
         : capabilities.preferredLens;
     emit(
@@ -212,7 +325,8 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
         status: _nativeEnabled ? CameraStatus.enabled : CameraStatus.disabled,
         selectedLens: selectedLens,
         availableLenses: capabilities.availableLenses,
-        failure: () => null,
+        surfaceMounted: true,
+        cameraFailure: () => null,
       ),
     );
   }
@@ -230,11 +344,11 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
     Emitter<CameraState> emit,
   ) async {
     if (!_nativeEnabled) {
-      if (state.failure == null && state.status != CameraStatus.disabled) {
+      if (state.cameraFailure == null && state.status != CameraStatus.disabled) {
         emit(
           state.copyWith(
             status: CameraStatus.disabled,
-            failure: () => null,
+            cameraFailure: () => null,
           ),
         );
       }
@@ -252,13 +366,13 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
         emit(
           state.copyWith(
             status: CameraStatus.disabled,
-            failure: () => null,
+            cameraFailure: () => null,
           ),
         );
         return true;
       case AppError<void>(:final failure):
         if (_shouldEnable) return false;
-        _emitFailure(emit, failure);
+        _emitCameraFailure(emit, failure);
         return true;
     }
   }
@@ -268,11 +382,11 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
   ) async {
     final targetLens = state.selectedLens;
     if (_nativeEnabled && _nativeLens == targetLens) {
-      if (state.status != CameraStatus.enabled || state.failure != null) {
+      if (state.status != CameraStatus.enabled || state.cameraFailure != null) {
         emit(
           state.copyWith(
             status: CameraStatus.enabled,
-            failure: () => null,
+            cameraFailure: () => null,
           ),
         );
       }
@@ -282,7 +396,7 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
     emit(
       state.copyWith(
         status: _nativeEnabled ? CameraStatus.switching : CameraStatus.initializing,
-        failure: () => null,
+        cameraFailure: () => null,
       ),
     );
     final result = await _controller.enable(targetLens);
@@ -298,7 +412,7 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
         emit(
           state.copyWith(
             status: CameraStatus.enabled,
-            failure: () => null,
+            cameraFailure: () => null,
           ),
         );
         return true;
@@ -308,31 +422,33 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
         if (!_shouldEnable || state.selectedLens != targetLens) {
           return false;
         }
-        _emitFailure(emit, failure);
+        _emitCameraFailure(emit, failure);
         return true;
     }
   }
 
-  void _emitFailure(
+  void _emitCameraFailure(
     Emitter<CameraState> emit,
     AppFailure failure,
   ) {
     emit(
       state.copyWith(
         status: CameraStatus.failure,
-        failure: () => failure,
+        cameraFailure: () => failure,
       ),
     );
   }
 
   @override
   Future<void> close() async {
-    await super.close();
+    final blocClose = super.close();
+    await _observationSubscription?.cancel();
+    await blocClose;
     try {
       await _controller.close();
     } on Exception catch (error, stackTrace) {
       _logger.e(
-        'Could not release the camera controller cleanly.',
+        'Could not release the YOLO observation controller cleanly.',
         error: error,
         stackTrace: stackTrace,
       );
