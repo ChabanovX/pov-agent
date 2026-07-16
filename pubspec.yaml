@@ -40,6 +40,8 @@ dependencies:
   go_router: ^17.3.0
   intl: ^0.20.2
   logger: ^2.7.0
+  permission_handler: ^12.0.3
+  ultralytics_yolo: ^0.6.10
 
 dev_dependencies:
   alchemist: ^0.14.0
