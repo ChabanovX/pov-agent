@@ -18,7 +18,7 @@ void main() {
       await tester.pumpWidget(const SomeCameraWithLlmApp());
       await tester.pumpAndSettle();
 
-      expect(find.byKey(testCameraPreviewKey), findsOneWidget);
+      expect(find.byKey(testObservationSurfaceKey), findsOneWidget);
 
       await tester.tap(find.bySemanticsLabel('Switch camera'));
       await tester.pumpAndSettle();
@@ -30,7 +30,7 @@ void main() {
 
       await tester.tap(find.text('Enable camera'));
       await tester.pumpAndSettle();
-      expect(find.byKey(testCameraPreviewKey), findsOneWidget);
+      expect(find.byKey(testObservationSurfaceKey), findsOneWidget);
 
       await tester.tap(find.text('Assistant'));
       await tester.pumpAndSettle();
@@ -38,7 +38,7 @@ void main() {
 
       await tester.tap(find.text('Camera'));
       await tester.pumpAndSettle();
-      expect(find.byKey(testCameraPreviewKey), findsOneWidget);
+      expect(find.byKey(testObservationSurfaceKey), findsOneWidget);
     } finally {
       await disposeTestAppRuntime(runtime);
     }
