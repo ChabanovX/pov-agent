@@ -48,6 +48,14 @@
 - Tests may start with a scenario matrix for complex behavior. Inline comments should explain the regression risk or async setup, not repeat the `expect`.
 - Do not comment trivial constructors, field assignments, obvious branches, simple mapping, or UI layout labels unless the file is large enough that section markers improve navigation.
 
+## Git workflow
+
+- Once implementation and review are complete, inspect the final diff and split it into independently reviewable, revertible, logical commits. Never leave a substantial multi-concern change as one catch-all or blob commit.
+- Keep each implementation together with its closest tests, and ensure every intermediate commit remains coherent and passes its closest applicable validation.
+- If later validation or review reveals that an existing commit is incomplete, add a new focused `fix` commit. Do not amend or silently fold the correction into the earlier commit unless the user explicitly requests history rewriting.
+- When replacing a local large commit with an atomic stack, preserve a reference to the original commit and verify identical final content with `git diff --exit-code <original-commit> <new-head>` or matching tree hashes.
+- Never rewrite commits already pushed to a shared branch without explicit user approval.
+
 ## Completion contract
 
 1. Add or update tests at the closest useful layer.
