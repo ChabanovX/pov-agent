@@ -2,8 +2,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:some_camera_with_llm/core/design_system/tokens/tokens.dart';
 import 'package:some_camera_with_llm/core/l10n/app_localizations.dart';
-import 'package:some_camera_with_llm/features/camera/presentation/cubit/camera_cubit.dart';
-import 'package:some_camera_with_llm/features/camera/presentation/cubit/camera_state.dart';
+import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_bloc.dart';
+import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_state.dart';
 import 'package:some_camera_with_llm/features/camera/presentation/widgets/camera_widget.dart';
 import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
 
@@ -25,7 +25,7 @@ final class CameraPage extends StatelessWidget {
       ),
       child: SafeArea(
         bottom: false,
-        child: BlocBuilder<CameraCubit, CameraState>(
+        child: BlocBuilder<CameraBloc, CameraState>(
           builder: (context, state) {
             return switch (state.status) {
               CameraStatus.initial || CameraStatus.initializing || CameraStatus.switching => const Center(
@@ -33,19 +33,35 @@ final class CameraPage extends StatelessWidget {
               ),
               CameraStatus.enabled => CameraWidget(
                 previewBuilder: previewBuilder,
-                onDisableCamera: context.read<CameraCubit>().disableCamera,
-                onToggleCamera: context.read<CameraCubit>().toggleCamera,
+                onDisableCamera: () {
+                  context.read<CameraBloc>().add(
+                    const CameraDisableRequested(),
+                  );
+                },
+                onToggleCamera: () {
+                  context.read<CameraBloc>().add(
+                    const CameraLensToggleRequested(),
+                  );
+                },
                 canToggleCamera: state.canToggleLens,
               ),
               CameraStatus.disabled => _CameraMessage(
                 icon: CupertinoIcons.camera,
                 message: localizations.cameraDisabledMessage,
                 actionLabel: localizations.cameraEnableAction,
-                onAction: context.read<CameraCubit>().enableCamera,
+                onAction: () {
+                  context.read<CameraBloc>().add(
+                    const CameraEnableRequested(),
+                  );
+                },
               ),
               CameraStatus.failure => _CameraFailureMessage(
                 failure: state.failure,
-                onRetry: context.read<CameraCubit>().init,
+                onRetry: () {
+                  context.read<CameraBloc>().add(
+                    const CameraRetryRequested(),
+                  );
+                },
               ),
             };
           },

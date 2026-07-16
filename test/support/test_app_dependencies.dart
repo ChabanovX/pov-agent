@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:some_camera_with_llm/app/bootstrap/app_runtime.dart';
 import 'package:some_camera_with_llm/app/di/app_di.dart';
-import 'package:some_camera_with_llm/features/camera/presentation/cubit/camera_cubit.dart';
+import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_bloc.dart';
 
 import 'fake_camera_controller.dart';
 
@@ -9,7 +9,7 @@ Future<AppRuntime> startTestAppRuntime(
   FakeCameraController controller,
 ) async {
   final runtime = AppRuntime(
-    cameraCubit: CameraCubit(controller),
+    cameraBloc: CameraBloc(controller),
     cameraPreview: const Builder(builder: buildTestCameraPreview),
   );
   appDependencies.registerSingleton<AppRuntime>(runtime);

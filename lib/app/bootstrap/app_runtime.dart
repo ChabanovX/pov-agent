@@ -1,7 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
-import 'package:some_camera_with_llm/features/camera/presentation/cubit/camera_cubit.dart';
+import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_bloc.dart';
+import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_state.dart';
 
 /// Owns process-level application resources and their lifecycle.
 ///
@@ -9,11 +10,11 @@ import 'package:some_camera_with_llm/features/camera/presentation/cubit/camera_c
 /// begins the camera session, while [close] is the single shutdown boundary.
 final class AppRuntime with WidgetsBindingObserver {
   AppRuntime({
-    required this.cameraCubit,
+    required this.cameraBloc,
     required this.cameraPreview,
   });
 
-  final CameraCubit cameraCubit;
+  final CameraBloc cameraBloc;
   final Widget cameraPreview;
 
   Future<void>? _startFuture;
@@ -25,18 +26,15 @@ final class AppRuntime with WidgetsBindingObserver {
 
   Future<void> _start() async {
     WidgetsBinding.instance.addObserver(this);
-    await cameraCubit.init();
+    final settled = cameraBloc.stream.firstWhere(_isCameraSettled);
+    cameraBloc.add(const CameraStarted());
+    await settled;
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.detached) return;
-    unawaited(_closeAfterSurfaceDeactivation());
-  }
-
-  Future<void> _closeAfterSurfaceDeactivation() async {
-    await cameraCubit.setSurfaceActive(active: false);
-    await close();
+    unawaited(close());
   }
 
   Future<void> close() {
@@ -45,6 +43,12 @@ final class AppRuntime with WidgetsBindingObserver {
 
   Future<void> _close() async {
     WidgetsBinding.instance.removeObserver(this);
-    await cameraCubit.close();
+    await cameraBloc.close();
   }
+}
+
+bool _isCameraSettled(CameraState state) {
+  if (state.status == CameraStatus.failure) return true;
+  final shouldEnable = state.requestedEnabled && state.surfaceActive;
+  return shouldEnable ? state.status == CameraStatus.enabled : state.status == CameraStatus.disabled;
 }

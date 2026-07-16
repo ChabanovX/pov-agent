@@ -53,7 +53,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(controller.enableCalls, hasLength(3));
     } finally {
-      await disposeTestAppRuntime(runtime);
+      await tester.runAsync(() => disposeTestAppRuntime(runtime));
     }
   });
 
@@ -76,7 +76,7 @@ void main() {
       expect(find.text('Camera is off.'), findsOneWidget);
       expect(controller.enableCalls, hasLength(1));
     } finally {
-      await disposeTestAppRuntime(runtime);
+      await tester.runAsync(() => disposeTestAppRuntime(runtime));
     }
   });
 
@@ -100,7 +100,7 @@ void main() {
       expect(controller.initCalls, 1);
       expect(controller.closeCalls, 0);
     } finally {
-      await disposeTestAppRuntime(runtime);
+      await tester.runAsync(() => disposeTestAppRuntime(runtime));
     }
   });
 }

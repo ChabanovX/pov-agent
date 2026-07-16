@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:some_camera_with_llm/app/bootstrap/app_runtime.dart';
@@ -7,6 +5,7 @@ import 'package:some_camera_with_llm/app/di/app_di.dart';
 import 'package:some_camera_with_llm/core/design_system/tokens/tokens.dart';
 import 'package:some_camera_with_llm/core/l10n/app_localizations.dart';
 import 'package:some_camera_with_llm/features/assistant/presentation/pages/assistant_page.dart';
+import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_bloc.dart';
 import 'package:some_camera_with_llm/features/camera/presentation/pages/camera_page.dart';
 
 enum _AppTab { camera, assistant }
@@ -34,8 +33,10 @@ final class _AppRouterState extends State<AppRouter> with WidgetsBindingObserver
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _appForegrounded = state == AppLifecycleState.resumed;
-    unawaited(
-      _runtime.cameraCubit.setSurfaceActive(
+    final cameraBloc = _runtime.cameraBloc;
+    if (cameraBloc.isClosed) return;
+    cameraBloc.add(
+      CameraSurfaceActivityChanged(
         active: _appForegrounded && _selectedTab == _AppTab.camera,
       ),
     );
@@ -59,7 +60,7 @@ final class _AppRouterState extends State<AppRouter> with WidgetsBindingObserver
               index: _selectedTab.index,
               children: [
                 BlocProvider.value(
-                  value: _runtime.cameraCubit,
+                  value: _runtime.cameraBloc,
                   child: CameraPage(
                     previewBuilder: (_) => _runtime.cameraPreview,
                   ),
@@ -95,8 +96,10 @@ final class _AppRouterState extends State<AppRouter> with WidgetsBindingObserver
     if (selectedTab == _selectedTab) return;
 
     setState(() => _selectedTab = selectedTab);
-    unawaited(
-      _runtime.cameraCubit.setSurfaceActive(
+    final cameraBloc = _runtime.cameraBloc;
+    if (cameraBloc.isClosed) return;
+    cameraBloc.add(
+      CameraSurfaceActivityChanged(
         active: _appForegrounded && selectedTab == _AppTab.camera,
       ),
     );

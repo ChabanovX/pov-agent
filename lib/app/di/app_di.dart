@@ -4,7 +4,7 @@ import 'package:some_camera_with_llm/app/widgets/native_camera_preview.dart';
 import 'package:some_camera_with_llm/features/camera/data/datasources/flutter_camera_driver.dart';
 import 'package:some_camera_with_llm/features/camera/data/mappers/camera_failure_mapper.dart';
 import 'package:some_camera_with_llm/features/camera/data/repositories/camera_controller_impl.dart';
-import 'package:some_camera_with_llm/features/camera/presentation/cubit/camera_cubit.dart';
+import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_bloc.dart';
 
 final GetIt appDependencies = GetIt.instance;
 
@@ -15,7 +15,7 @@ AppRuntime configureDependencies() {
     const CameraFailureMapper(),
   );
   final runtime = AppRuntime(
-    cameraCubit: CameraCubit(controller),
+    cameraBloc: CameraBloc(controller),
     cameraPreview: NativeCameraPreview(driver: driver),
   );
 

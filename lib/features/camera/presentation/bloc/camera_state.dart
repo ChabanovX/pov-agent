@@ -1,7 +1,14 @@
 import 'package:some_camera_with_llm/features/camera/domain/entities/camera_lens.dart';
 import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
 
-enum CameraStatus { initial, initializing, enabled, disabled, switching, failure }
+enum CameraStatus {
+  initial,
+  initializing,
+  enabled,
+  disabled,
+  switching,
+  failure,
+}
 
 /// Uses one immutable state because camera availability, user intent, app
 /// visibility, lens selection, and native lifecycle change independently.

@@ -3,7 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:some_camera_with_llm/core/design_system/app_theme.dart';
 import 'package:some_camera_with_llm/core/l10n/app_localizations.dart';
-import 'package:some_camera_with_llm/features/camera/presentation/cubit/camera_cubit.dart';
+import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_bloc.dart';
+import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_state.dart';
 import 'package:some_camera_with_llm/features/camera/presentation/pages/camera_page.dart';
 import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
 
@@ -14,10 +15,13 @@ void main() {
     tester,
   ) async {
     final controller = FakeCameraController();
-    final cubit = CameraCubit(controller);
-    await cubit.init();
+    final bloc = CameraBloc(controller)..add(const CameraStarted());
+    await _waitForState(
+      bloc,
+      (state) => state.status == CameraStatus.enabled,
+    );
 
-    await tester.pumpWidget(_TestCameraApp(cubit: cubit));
+    await tester.pumpWidget(_TestCameraApp(bloc: bloc));
 
     expect(find.byKey(testCameraPreviewKey), findsOneWidget);
     expect(find.bySemanticsLabel('Disable camera'), findsOneWidget);
@@ -29,7 +33,7 @@ void main() {
     expect(find.text('Camera is off.'), findsOneWidget);
     expect(find.text('Enable camera'), findsOneWidget);
 
-    await cubit.close();
+    await tester.runAsync(bloc.close);
   });
 
   testWidgets('shows permission guidance and retries initialization', (
@@ -38,10 +42,13 @@ void main() {
     final controller = FakeCameraController(
       initFailure: const PermissionDeniedFailure(),
     );
-    final cubit = CameraCubit(controller);
-    await cubit.init();
+    final bloc = CameraBloc(controller)..add(const CameraStarted());
+    await _waitForState(
+      bloc,
+      (state) => state.status == CameraStatus.failure,
+    );
 
-    await tester.pumpWidget(_TestCameraApp(cubit: cubit));
+    await tester.pumpWidget(_TestCameraApp(bloc: bloc));
 
     expect(
       find.text(
@@ -57,14 +64,14 @@ void main() {
     expect(find.byKey(testCameraPreviewKey), findsOneWidget);
     expect(controller.initCalls, 2);
 
-    await cubit.close();
+    await tester.runAsync(bloc.close);
   });
 }
 
 final class _TestCameraApp extends StatelessWidget {
-  const _TestCameraApp({required this.cubit});
+  const _TestCameraApp({required this.bloc});
 
-  final CameraCubit cubit;
+  final CameraBloc bloc;
 
   @override
   Widget build(BuildContext context) {
@@ -73,9 +80,17 @@ final class _TestCameraApp extends StatelessWidget {
       supportedLocales: AppLocalizations.supportedLocales,
       theme: AppTheme.light(),
       home: BlocProvider.value(
-        value: cubit,
+        value: bloc,
         child: const CameraPage(previewBuilder: buildTestCameraPreview),
       ),
     );
   }
+}
+
+Future<CameraState> _waitForState(
+  CameraBloc bloc,
+  bool Function(CameraState state) predicate,
+) {
+  if (predicate(bloc.state)) return Future.value(bloc.state);
+  return bloc.stream.firstWhere(predicate);
 }

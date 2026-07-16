@@ -29,7 +29,10 @@ final class FakeCameraController implements CameraController {
     this.initFailure,
     this.enableFailure,
     this.disableFailure,
+    this.onInit,
     this.onEnable,
+    this.onDisable,
+    this.onClose,
   }) : capabilities =
            capabilities ??
            CameraCapabilities(
@@ -43,7 +46,10 @@ final class FakeCameraController implements CameraController {
   AppFailure? initFailure;
   AppFailure? enableFailure;
   AppFailure? disableFailure;
+  Future<void> Function()? onInit;
   Future<void> Function(CameraLens lens)? onEnable;
+  Future<void> Function()? onDisable;
+  Future<void> Function()? onClose;
 
   int initCalls = 0;
   int disableCalls = 0;
@@ -56,6 +62,7 @@ final class FakeCameraController implements CameraController {
   @override
   Future<AppResult<CameraCapabilities>> init() async {
     initCalls += 1;
+    await onInit?.call();
     final failure = initFailure;
     return failure == null ? AppSuccess(capabilities) : AppError(failure);
   }
@@ -71,6 +78,7 @@ final class FakeCameraController implements CameraController {
   @override
   Future<AppResult<void>> disable() async {
     disableCalls += 1;
+    await onDisable?.call();
     final failure = disableFailure;
     return failure == null ? const AppSuccess<void>(null) : AppError<void>(failure);
   }
@@ -78,6 +86,7 @@ final class FakeCameraController implements CameraController {
   @override
   Future<void> close() async {
     closeCalls += 1;
+    await onClose?.call();
     if (!_frames.isClosed) await _frames.close();
   }
 }
