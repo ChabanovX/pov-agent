@@ -9,7 +9,6 @@ import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
 import 'package:some_camera_with_llm/shared/domain/app_result.dart';
 
 const testObservationSurfaceKey = Key('test-observation-surface');
-const Key testCameraPreviewKey = testObservationSurfaceKey;
 
 Widget buildTestObservationSurface(BuildContext _) {
   return const ColoredBox(
@@ -22,10 +21,6 @@ Widget buildTestObservationSurface(BuildContext _) {
       ),
     ),
   );
-}
-
-Widget buildTestCameraPreview(BuildContext context) {
-  return buildTestObservationSurface(context);
 }
 
 final class FakeCameraController implements ObservationController {

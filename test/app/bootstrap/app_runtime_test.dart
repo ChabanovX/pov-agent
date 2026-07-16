@@ -12,7 +12,7 @@ void main() {
     final controller = FakeCameraController();
     final runtime = AppRuntime(
       cameraBloc: CameraBloc(controller),
-      cameraPreview: const SizedBox.expand(),
+      observationSurface: const SizedBox.expand(),
     );
 
     expect(controller.initCalls, 0);

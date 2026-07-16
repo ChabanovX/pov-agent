@@ -163,6 +163,48 @@ abstract class AppLocalizations {
   /// **'The camera could not be started.'**
   String get cameraFailureMessage;
 
+  /// Message shown while the native camera session starts or switches lenses.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting the camera…'**
+  String get cameraStartingMessage;
+
+  /// Message shown while the YOLO model is resolved from cache or prepared.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing the YOLO model…'**
+  String get cameraModelPreparingMessage;
+
+  /// Progress message shown during the first YOLO model download.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading the YOLO model: {percent}%'**
+  String cameraModelDownloadingMessage(int percent);
+
+  /// Fallback message shown when the YOLO model cannot be loaded.
+  ///
+  /// In en, this message translates to:
+  /// **'The YOLO model could not be prepared.'**
+  String get cameraModelFailureMessage;
+
+  /// Message shown when the first YOLO model download fails because of connectivity.
+  ///
+  /// In en, this message translates to:
+  /// **'The YOLO model could not be downloaded. Check your connection and retry.'**
+  String get cameraModelNetworkFailureMessage;
+
+  /// Compact live inference frame-rate diagnostic.
+  ///
+  /// In en, this message translates to:
+  /// **'FPS {fps}'**
+  String cameraFpsLabel(String fps);
+
+  /// Compact live model inference-time diagnostic.
+  ///
+  /// In en, this message translates to:
+  /// **'Inference {milliseconds} ms'**
+  String cameraInferenceLabel(String milliseconds);
+
   /// Generic scaffolded feature page title.
   ///
   /// In en, this message translates to:

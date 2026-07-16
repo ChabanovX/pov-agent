@@ -18,7 +18,7 @@ AppRuntime configureDependencies() {
   );
   final runtime = AppRuntime(
     cameraBloc: CameraBloc(observationAdapter),
-    cameraPreview: ObservationSurface(adapter: observationAdapter),
+    observationSurface: ObservationSurface(adapter: observationAdapter),
   );
 
   appDependencies.registerSingleton<AppRuntime>(runtime);

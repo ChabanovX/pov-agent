@@ -11,11 +11,11 @@ import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_st
 final class AppRuntime with WidgetsBindingObserver {
   AppRuntime({
     required this.cameraBloc,
-    required this.cameraPreview,
+    required this.observationSurface,
   });
 
   final CameraBloc cameraBloc;
-  final Widget cameraPreview;
+  final Widget observationSurface;
 
   Future<void>? _startFuture;
   Future<void>? _closeFuture;

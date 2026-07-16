@@ -10,7 +10,9 @@ Future<AppRuntime> startTestAppRuntime(
 ) async {
   final runtime = AppRuntime(
     cameraBloc: CameraBloc(controller),
-    cameraPreview: const Builder(builder: buildTestCameraPreview),
+    observationSurface: const Builder(
+      builder: buildTestObservationSurface,
+    ),
   );
   appDependencies.registerSingleton<AppRuntime>(runtime);
   await runtime.start();

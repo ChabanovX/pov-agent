@@ -62,7 +62,7 @@ final class _AppRouterState extends State<AppRouter> with WidgetsBindingObserver
                 BlocProvider.value(
                   value: _runtime.cameraBloc,
                   child: CameraPage(
-                    previewBuilder: (_) => _runtime.cameraPreview,
+                    surfaceBuilder: (_) => _runtime.observationSurface,
                   ),
                 ),
                 const AssistantPage(),

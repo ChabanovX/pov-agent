@@ -28,6 +28,7 @@ const double kRadiusLg = 12;
 
 const double kIconSize = 24;
 const double kControlHeight = 48;
+const double kProgressTrackWidth = 240;
 const double kMaxContentWidth = 720;
 
 const int kShadowLevel1ColorValue = 0x1F000000;

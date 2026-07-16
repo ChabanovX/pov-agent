@@ -45,6 +45,34 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cameraFailureMessage => 'The camera could not be started.';
 
   @override
+  String get cameraStartingMessage => 'Starting the camera…';
+
+  @override
+  String get cameraModelPreparingMessage => 'Preparing the YOLO model…';
+
+  @override
+  String cameraModelDownloadingMessage(int percent) {
+    return 'Downloading the YOLO model: $percent%';
+  }
+
+  @override
+  String get cameraModelFailureMessage => 'The YOLO model could not be prepared.';
+
+  @override
+  String get cameraModelNetworkFailureMessage =>
+      'The YOLO model could not be downloaded. Check your connection and retry.';
+
+  @override
+  String cameraFpsLabel(String fps) {
+    return 'FPS $fps';
+  }
+
+  @override
+  String cameraInferenceLabel(String milliseconds) {
+    return 'Inference $milliseconds ms';
+  }
+
+  @override
   String featurePageTitle(String featureName) {
     return '$featureName';
   }

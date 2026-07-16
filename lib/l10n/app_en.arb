@@ -48,6 +48,49 @@
   "@cameraFailureMessage": {
     "description": "Fallback message shown when camera startup fails."
   },
+  "cameraStartingMessage": "Starting the camera…",
+  "@cameraStartingMessage": {
+    "description": "Message shown while the native camera session starts or switches lenses."
+  },
+  "cameraModelPreparingMessage": "Preparing the YOLO model…",
+  "@cameraModelPreparingMessage": {
+    "description": "Message shown while the YOLO model is resolved from cache or prepared."
+  },
+  "cameraModelDownloadingMessage": "Downloading the YOLO model: {percent}%",
+  "@cameraModelDownloadingMessage": {
+    "description": "Progress message shown during the first YOLO model download.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "cameraModelFailureMessage": "The YOLO model could not be prepared.",
+  "@cameraModelFailureMessage": {
+    "description": "Fallback message shown when the YOLO model cannot be loaded."
+  },
+  "cameraModelNetworkFailureMessage": "The YOLO model could not be downloaded. Check your connection and retry.",
+  "@cameraModelNetworkFailureMessage": {
+    "description": "Message shown when the first YOLO model download fails because of connectivity."
+  },
+  "cameraFpsLabel": "FPS {fps}",
+  "@cameraFpsLabel": {
+    "description": "Compact live inference frame-rate diagnostic.",
+    "placeholders": {
+      "fps": {
+        "type": "String"
+      }
+    }
+  },
+  "cameraInferenceLabel": "Inference {milliseconds} ms",
+  "@cameraInferenceLabel": {
+    "description": "Compact live model inference-time diagnostic.",
+    "placeholders": {
+      "milliseconds": {
+        "type": "String"
+      }
+    }
+  },
   "featurePageTitle": "{featureName}",
   "@featurePageTitle": {
     "description": "Generic scaffolded feature page title.",

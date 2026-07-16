@@ -16,7 +16,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(CupertinoApp), findsOneWidget);
-      expect(find.byKey(testCameraPreviewKey), findsOneWidget);
+      expect(find.byKey(testObservationSurfaceKey), findsOneWidget);
       expect(find.text('Assistant placeholder'), findsNothing);
       expect(controller.enableCalls, hasLength(1));
       expect(
@@ -27,7 +27,7 @@ void main() {
       await tester.tap(find.text('Assistant'));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(testCameraPreviewKey), findsNothing);
+      expect(find.byKey(testObservationSurfaceKey), findsNothing);
       expect(find.text('Assistant placeholder'), findsOneWidget);
       expect(controller.disableCalls, 1);
       expect(
@@ -38,7 +38,7 @@ void main() {
       await tester.tap(find.text('Camera'));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(testCameraPreviewKey), findsOneWidget);
+      expect(find.byKey(testObservationSurfaceKey), findsOneWidget);
       expect(controller.enableCalls, hasLength(2));
 
       tester.binding.handleAppLifecycleStateChanged(
@@ -96,7 +96,7 @@ void main() {
       await tester.pumpWidget(const SomeCameraWithLlmApp());
       await tester.pumpAndSettle();
 
-      expect(find.byKey(testCameraPreviewKey), findsOneWidget);
+      expect(find.byKey(testObservationSurfaceKey), findsOneWidget);
       expect(controller.initCalls, 1);
       expect(controller.closeCalls, 0);
     } finally {
