@@ -4,9 +4,10 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:some_camera_with_llm/features/camera/application/models/observation_event.dart';
+import 'package:some_camera_with_llm/features/camera/application/models/recorded_video_frame.dart';
 import 'package:some_camera_with_llm/features/camera/application/ports/recorded_frame_detector.dart';
+import 'package:some_camera_with_llm/features/camera/application/ports/recorded_video_frame_source.dart';
 import 'package:some_camera_with_llm/features/camera/data/adapters/recorded_observation_adapter.dart';
-import 'package:some_camera_with_llm/features/camera/data/debug/recorded_bus_fixture.dart';
 import 'package:some_camera_with_llm/features/camera/domain/entities/camera_capabilities.dart';
 import 'package:some_camera_with_llm/features/camera/domain/entities/camera_lens.dart';
 import 'package:some_camera_with_llm/features/camera/domain/entities/detection.dart';
@@ -17,11 +18,13 @@ import 'package:some_camera_with_llm/shared/domain/app_result.dart';
 import 'package:ultralytics_yolo/core/yolo_model_manager.dart';
 
 void main() {
-  test('loads and replays recorded frames only while enabled', () async {
+  test('opens video and pulls frames only while enabled', () async {
     final detector = _FakeRecordedFrameDetector();
+    final frameSource = _FakeRecordedVideoFrameSource();
     final timers = <_ManualTimer>[];
     final adapter = _createAdapter(
       detector,
+      frameSource: frameSource,
       timerFactory: (interval, onTick) {
         final timer = _ManualTimer(onTick);
         timers.add(timer);
@@ -31,6 +34,7 @@ void main() {
     final events = <ObservationEvent>[];
     final subscription = adapter.events.listen(events.add);
 
+    expect(adapter.currentFrame, isNull);
     final initResult = await adapter.init();
     await _flushMicrotasks();
 
@@ -38,6 +42,7 @@ void main() {
     final capabilities = (initResult as AppSuccess<CameraCapabilities>).value;
     expect(capabilities.availableLenses, [CameraLens.back]);
     expect(capabilities.canToggleLens, isFalse);
+    expect(frameSource.openCalls, 1);
     expect(events, contains(isA<ObservationModelReady>()));
     expect(timers, isEmpty);
 
@@ -45,26 +50,29 @@ void main() {
     await _flushMicrotasks();
 
     expect(timers, hasLength(1));
+    expect(frameSource.nextFrameCalls, 1);
     expect(detector.detectCalls, 1);
-    expect(adapter.currentFrame.detections.single.label, 'person');
+    expect(adapter.currentFrame?.detections.single.label, 'person');
+    expect(adapter.currentFrame?.frameWidth, 320);
+    expect(adapter.currentFrame?.frameHeight, 240);
     expect(events, contains(isA<ObservationDetectionsUpdated>()));
     expect(events, contains(isA<ObservationDiagnosticsUpdated>()));
 
     await adapter.disable();
     timers.single.fire();
     await _flushMicrotasks();
-    expect(detector.detectCalls, 1);
+    expect(frameSource.nextFrameCalls, 1);
 
     await adapter.enable(CameraLens.back);
     await _flushMicrotasks();
     expect(timers, hasLength(2));
-    expect(detector.detectCalls, 2);
+    expect(frameSource.nextFrameCalls, 2);
 
     await subscription.cancel();
     await adapter.close();
   });
 
-  test('drops busy ticks and rejects a result after disable', () async {
+  test('drops busy ticks and rejects inference after disable', () async {
     final firstDetection = Completer<AppResult<ObservationSnapshot>>();
     final detector = _FakeRecordedFrameDetector(
       onDetect: (call, _) {
@@ -72,9 +80,11 @@ void main() {
         return Future.value(AppSuccess(_snapshot(call)));
       },
     );
+    final frameSource = _FakeRecordedVideoFrameSource();
     late _ManualTimer timer;
     final adapter = _createAdapter(
       detector,
+      frameSource: frameSource,
       timerFactory: (interval, onTick) {
         return timer = _ManualTimer(onTick);
       },
@@ -89,33 +99,88 @@ void main() {
     await _flushMicrotasks();
     await adapter.enable(CameraLens.back);
     await _flushMicrotasks();
+    expect(frameSource.nextFrameCalls, 1);
     expect(detector.detectCalls, 1);
 
     timer
       ..fire()
       ..fire();
     await _flushMicrotasks();
-    expect(detector.detectCalls, 1);
+    expect(frameSource.nextFrameCalls, 1);
 
     await adapter.disable();
     firstDetection.complete(AppSuccess(_snapshot(1)));
     await _flushMicrotasks();
 
     expect(detections, isEmpty);
-    expect(adapter.currentFrame.detections, isEmpty);
+    expect(adapter.currentFrame, isNull);
 
     await subscription.cancel();
     await adapter.close();
   });
 
-  test('retries a failed model load without recreating the adapter', () async {
+  test('does not infer a decoded frame completed after disable', () async {
+    final pendingFrame = Completer<AppResult<RecordedVideoFrame>>();
+    final frameSource = _FakeRecordedVideoFrameSource(
+      onNextFrame: (_) => pendingFrame.future,
+    );
+    final detector = _FakeRecordedFrameDetector();
+    final adapter = _createAdapter(detector, frameSource: frameSource);
+
+    await adapter.init();
+    await _flushMicrotasks();
+    await adapter.enable(CameraLens.back);
+    await _flushMicrotasks();
+    expect(frameSource.nextFrameCalls, 1);
+
+    await adapter.disable();
+    pendingFrame.complete(AppSuccess(_videoFrame(1)));
+    await _flushMicrotasks();
+
+    expect(detector.detectCalls, 0);
+    expect(adapter.currentFrame, isNull);
+
+    await adapter.close();
+  });
+
+  test('retry cannot be overtaken by a stale decoded frame', () async {
+    final pendingFrame = Completer<AppResult<RecordedVideoFrame>>();
+    final frameSource = _FakeRecordedVideoFrameSource(
+      onNextFrame: (call) {
+        if (call == 1) return pendingFrame.future;
+        return Future.value(AppSuccess(_videoFrame(call)));
+      },
+    );
+    final detector = _FakeRecordedFrameDetector();
+    final adapter = _createAdapter(detector, frameSource: frameSource);
+
+    await adapter.init();
+    await _flushMicrotasks();
+    await adapter.enable(CameraLens.back);
+    await _flushMicrotasks();
+
+    final retryFuture = adapter.retryObservation();
+    await _flushMicrotasks();
+    pendingFrame.complete(AppSuccess(_videoFrame(1)));
+    await retryFuture;
+    await _flushMicrotasks();
+
+    expect(frameSource.nextFrameCalls, 2);
+    expect(detector.detectCalls, 1);
+    expect(adapter.currentFrame?.encodedImage, _videoFrame(2).encodedImage);
+
+    await adapter.close();
+  });
+
+  test('retries a failed model load without reopening video', () async {
     final detector = _FakeRecordedFrameDetector(
       loadResults: Queue.of([
         const AppError<void>(NetworkFailure(code: 'model_download')),
         const AppSuccess<void>(null),
       ]),
     );
-    final adapter = _createAdapter(detector);
+    final frameSource = _FakeRecordedVideoFrameSource();
+    final adapter = _createAdapter(detector, frameSource: frameSource);
     final events = <ObservationEvent>[];
     final subscription = adapter.events.listen(events.add);
 
@@ -127,37 +192,73 @@ void main() {
     await _flushMicrotasks();
 
     expect(detector.loadCalls, 2);
+    expect(frameSource.openCalls, 1);
     expect(events.last, isA<ObservationModelReady>());
 
     await subscription.cancel();
     await adapter.close();
   });
 
-  test('waits for an in-flight model load before closing the detector', () async {
-    final loadResult = Completer<AppResult<void>>();
-    final detector = _FakeRecordedFrameDetector(
-      onLoad: (_) => loadResult.future,
+  test('reports decoder open failure after model readiness and reopens on retry', () async {
+    final frameSource = _FakeRecordedVideoFrameSource(
+      openResults: Queue.of([
+        const AppError<RecordedVideoMetadata>(
+          DeviceUnavailableFailure(code: 'decoder_failed'),
+        ),
+        const AppSuccess(_metadata),
+      ]),
     );
-    final adapter = _createAdapter(detector);
+    final detector = _FakeRecordedFrameDetector();
+    final adapter = _createAdapter(detector, frameSource: frameSource);
+    final events = <ObservationEvent>[];
+    final subscription = adapter.events.listen(events.add);
+
+    await adapter.init();
+    await _flushMicrotasks();
+
+    expect(events, contains(isA<ObservationModelReady>()));
+    expect(events.last, isA<ObservationInferenceFailed>());
+    expect(frameSource.closeCalls, 1);
+
+    await adapter.retryObservation();
+    await _flushMicrotasks();
+
+    expect(frameSource.openCalls, 2);
+    expect(detector.loadCalls, 1);
+
+    await subscription.cancel();
+    await adapter.close();
+  });
+
+  test('waits for video open before closing native resources', () async {
+    final openResult = Completer<AppResult<RecordedVideoMetadata>>();
+    final frameSource = _FakeRecordedVideoFrameSource(
+      onOpen: (_) => openResult.future,
+    );
+    final detector = _FakeRecordedFrameDetector();
+    final adapter = _createAdapter(detector, frameSource: frameSource);
 
     await adapter.init();
     final closeFuture = adapter.close();
     await _flushMicrotasks();
 
+    expect(frameSource.closeCalls, 0);
     expect(detector.closeCalls, 0);
 
-    loadResult.complete(const AppSuccess<void>(null));
+    openResult.complete(const AppSuccess(_metadata));
     await closeFuture;
 
+    expect(frameSource.closeCalls, 1);
     expect(detector.closeCalls, 1);
   });
 
-  test('waits for in-flight inference before closing the detector', () async {
+  test('waits for in-flight inference before closing native resources', () async {
     final detection = Completer<AppResult<ObservationSnapshot>>();
     final detector = _FakeRecordedFrameDetector(
       onDetect: (_, _) => detection.future,
     );
-    final adapter = _createAdapter(detector);
+    final frameSource = _FakeRecordedVideoFrameSource();
+    final adapter = _createAdapter(detector, frameSource: frameSource);
 
     await adapter.init();
     await _flushMicrotasks();
@@ -166,10 +267,38 @@ void main() {
 
     final closeFuture = adapter.close();
     await _flushMicrotasks();
+    expect(frameSource.closeCalls, 0);
     expect(detector.closeCalls, 0);
 
     detection.complete(AppSuccess(_snapshot(1)));
     await closeFuture;
+    expect(frameSource.closeCalls, 1);
+    expect(detector.closeCalls, 1);
+  });
+
+  test('waits for an in-flight decode before closing native resources', () async {
+    final pendingFrame = Completer<AppResult<RecordedVideoFrame>>();
+    final frameSource = _FakeRecordedVideoFrameSource(
+      onNextFrame: (_) => pendingFrame.future,
+    );
+    final detector = _FakeRecordedFrameDetector();
+    final adapter = _createAdapter(detector, frameSource: frameSource);
+
+    await adapter.init();
+    await _flushMicrotasks();
+    await adapter.enable(CameraLens.back);
+    await _flushMicrotasks();
+
+    final closeFuture = adapter.close();
+    await _flushMicrotasks();
+    expect(frameSource.closeCalls, 0);
+    expect(detector.closeCalls, 0);
+
+    pendingFrame.complete(AppSuccess(_videoFrame(1)));
+    await closeFuture;
+
+    expect(detector.detectCalls, 0);
+    expect(frameSource.closeCalls, 1);
     expect(detector.closeCalls, 1);
   });
 
@@ -177,7 +306,10 @@ void main() {
     const modelId = 'yolo26n';
     final load = Completer<AppResult<void>>();
     final detector = _FakeRecordedFrameDetector(onLoad: (_) => load.future);
-    final adapter = _createAdapter(detector);
+    final adapter = _createAdapter(
+      detector,
+      frameSource: _FakeRecordedVideoFrameSource(),
+    );
 
     await adapter.init();
     final closeFuture = adapter.close();
@@ -196,18 +328,26 @@ void main() {
     }
   });
 
-  test('publishes read-only frame bytes', () async {
-    final adapter = _createAdapter(_FakeRecordedFrameDetector());
+  test('publishes read-only decoded frame bytes', () async {
+    final adapter = _createAdapter(
+      _FakeRecordedFrameDetector(),
+      frameSource: _FakeRecordedVideoFrameSource(),
+    );
+
+    await adapter.init();
+    await _flushMicrotasks();
+    await adapter.enable(CameraLens.back);
+    await _flushMicrotasks();
 
     expect(
-      () => adapter.currentFrame.encodedImage[0] = 0,
+      () => adapter.currentFrame!.encodedImage[0] = 0,
       throwsA(isA<UnsupportedError>()),
     );
 
     await adapter.close();
   });
 
-  test('clears stale boxes and retries inference without reloading', () async {
+  test('clears stale boxes and retries inference without reopening video', () async {
     final detector = _FakeRecordedFrameDetector(
       onDetect: (call, _) async {
         if (call == 2) {
@@ -218,9 +358,11 @@ void main() {
         return AppSuccess(_snapshot(call));
       },
     );
+    final frameSource = _FakeRecordedVideoFrameSource();
     final timers = <_ManualTimer>[];
     final adapter = _createAdapter(
       detector,
+      frameSource: frameSource,
       timerFactory: (interval, onTick) {
         final timer = _ManualTimer(onTick);
         timers.add(timer);
@@ -234,35 +376,93 @@ void main() {
     await _flushMicrotasks();
     await adapter.enable(CameraLens.back);
     await _flushMicrotasks();
-    expect(adapter.currentFrame.detections, isNotEmpty);
+    expect(adapter.currentFrame?.detections, isNotEmpty);
 
     timers.single.fire();
     await _flushMicrotasks();
     expect(events.last, isA<ObservationInferenceFailed>());
-    expect(adapter.currentFrame.detections, isEmpty);
+    expect(adapter.currentFrame?.detections, isEmpty);
 
     await adapter.retryObservation();
     await _flushMicrotasks();
     expect(detector.loadCalls, 1);
+    expect(frameSource.openCalls, 1);
     expect(detector.detectCalls, 3);
-    expect(adapter.currentFrame.detections.single.label, 'person');
+    expect(adapter.currentFrame?.detections.single.label, 'person');
+
+    await subscription.cancel();
+    await adapter.close();
+  });
+
+  test('reopens decoder when re-enabled after a frame transport failure', () async {
+    final closeResult = Completer<AppResult<void>>();
+    final frameSource = _FakeRecordedVideoFrameSource(
+      frameResults: Queue.of([
+        AppSuccess(_videoFrame(1)),
+        const AppError<RecordedVideoFrame>(
+          DeviceUnavailableFailure(code: 'frame_decode_failed'),
+        ),
+        AppSuccess(_videoFrame(3)),
+      ]),
+      onClose: (_) => closeResult.future,
+    );
+    final detector = _FakeRecordedFrameDetector();
+    final timers = <_ManualTimer>[];
+    final adapter = _createAdapter(
+      detector,
+      frameSource: frameSource,
+      timerFactory: (interval, onTick) {
+        final timer = _ManualTimer(onTick);
+        timers.add(timer);
+        return timer;
+      },
+    );
+    final events = <ObservationEvent>[];
+    final subscription = adapter.events.listen(events.add);
+
+    await adapter.init();
+    await _flushMicrotasks();
+    await adapter.enable(CameraLens.back);
+    await _flushMicrotasks();
+    timers.single.fire();
+    await _flushMicrotasks();
+
+    expect(events.last, isA<ObservationInferenceFailed>());
+    expect(frameSource.closeCalls, 1);
+
+    await adapter.disable();
+    await adapter.enable(CameraLens.back);
+    await _flushMicrotasks();
+
+    expect(frameSource.openCalls, 1);
+
+    closeResult.complete(const AppSuccess<void>(null));
+    await _flushMicrotasks();
+
+    expect(frameSource.openCalls, 2);
+    expect(detector.loadCalls, 1);
+    expect(adapter.currentFrame?.encodedImage, _videoFrame(3).encodedImage);
 
     await subscription.cancel();
     await adapter.close();
   });
 }
 
+const _metadata = RecordedVideoMetadata(
+  frameWidth: 320,
+  frameHeight: 240,
+  duration: Duration(seconds: 4),
+);
+
 RecordedObservationAdapter _createAdapter(
   RecordedFrameDetector detector, {
+  required RecordedVideoFrameSource frameSource,
   RecordedReplayTimerFactory? timerFactory,
 }) {
-  final fixture = recordedBusFixture();
   return RecordedObservationAdapter.withTimerFactory(
     detector,
+    frameSource,
     timerFactory ?? _unusedTimerFactory,
-    frames: fixture.frames,
-    frameWidth: fixture.frameWidth,
-    frameHeight: fixture.frameHeight,
   );
 }
 
@@ -271,6 +471,60 @@ Timer _unusedTimerFactory(Duration interval, void Function() onTick) {
 }
 
 Future<void> _flushMicrotasks() => Future<void>.delayed(Duration.zero);
+
+final class _FakeRecordedVideoFrameSource implements RecordedVideoFrameSource {
+  _FakeRecordedVideoFrameSource({
+    Queue<AppResult<RecordedVideoMetadata>>? openResults,
+    Queue<AppResult<RecordedVideoFrame>>? frameResults,
+    this.onOpen,
+    this.onNextFrame,
+    this.onClose,
+  }) : openResults = openResults ?? Queue.of([const AppSuccess(_metadata)]),
+       frameResults = frameResults ?? Queue<AppResult<RecordedVideoFrame>>();
+
+  final Queue<AppResult<RecordedVideoMetadata>> openResults;
+  final Queue<AppResult<RecordedVideoFrame>> frameResults;
+  final Future<AppResult<RecordedVideoMetadata>> Function(int call)? onOpen;
+  final Future<AppResult<RecordedVideoFrame>> Function(int call)? onNextFrame;
+  final Future<AppResult<void>> Function(int call)? onClose;
+  int openCalls = 0;
+  int nextFrameCalls = 0;
+  int closeCalls = 0;
+
+  @override
+  Future<AppResult<RecordedVideoMetadata>> open() async {
+    openCalls += 1;
+    final handler = onOpen;
+    if (handler != null) return handler(openCalls);
+    if (openResults.length > 1) return openResults.removeFirst();
+    return openResults.first;
+  }
+
+  @override
+  Future<AppResult<RecordedVideoFrame>> nextFrame() async {
+    nextFrameCalls += 1;
+    final handler = onNextFrame;
+    if (handler != null) return handler(nextFrameCalls);
+    if (frameResults.isNotEmpty) return frameResults.removeFirst();
+    return AppSuccess(_videoFrame(nextFrameCalls));
+  }
+
+  @override
+  Future<AppResult<void>> close() async {
+    closeCalls += 1;
+    final handler = onClose;
+    if (handler != null) return handler(closeCalls);
+    return const AppSuccess<void>(null);
+  }
+}
+
+RecordedVideoFrame _videoFrame(int frameNumber) {
+  return RecordedVideoFrame(
+    encodedImage: Uint8List.fromList([0xFF, 0xD8, frameNumber, 0xFF, 0xD9]),
+    sourceFrameNumber: frameNumber,
+    presentationTime: Duration(milliseconds: frameNumber * 200),
+  );
+}
 
 final class _FakeRecordedFrameDetector implements RecordedFrameDetector {
   _FakeRecordedFrameDetector({
@@ -355,7 +609,7 @@ ObservationSnapshot _snapshot(int frameNumber) {
     ],
     processingTimeMs: 12,
     observedAt: DateTime.utc(2026, 7, 17).add(
-      Duration(milliseconds: frameNumber * 500),
+      Duration(milliseconds: frameNumber * 200),
     ),
   );
 }

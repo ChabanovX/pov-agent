@@ -22,15 +22,16 @@ final class RecordedObservationSurface extends StatelessWidget {
 
     return ColoredBox(
       color: colors.onSurface,
-      child: Center(
-        child: AspectRatio(
-          aspectRatio: frameSource.frameAspectRatio,
-          child: StreamBuilder<RecordedObservationFrame>(
-            initialData: frameSource.currentFrame,
-            stream: frameSource.frames,
-            builder: (context, snapshot) {
-              final frame = snapshot.requireData;
-              return Stack(
+      child: StreamBuilder<RecordedObservationFrame>(
+        initialData: frameSource.currentFrame,
+        stream: frameSource.frames,
+        builder: (context, snapshot) {
+          final frame = snapshot.data;
+          if (frame == null) return const SizedBox.expand();
+          return Center(
+            child: AspectRatio(
+              aspectRatio: frame.aspectRatio,
+              child: Stack(
                 fit: StackFit.expand,
                 children: [
                   Image.memory(
@@ -51,10 +52,10 @@ final class RecordedObservationSurface extends StatelessWidget {
                     ),
                   ),
                 ],
-              );
-            },
-          ),
-        ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

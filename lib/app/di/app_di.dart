@@ -6,9 +6,9 @@ import 'package:some_camera_with_llm/app/widgets/observation_surface.dart';
 import 'package:some_camera_with_llm/core/constants/environment_constants.dart';
 import 'package:some_camera_with_llm/features/camera/application/ports/observation_controller.dart';
 import 'package:some_camera_with_llm/features/camera/data/adapters/recorded_observation_adapter.dart';
+import 'package:some_camera_with_llm/features/camera/data/datasources/method_channel_recorded_video_frame_source.dart';
 import 'package:some_camera_with_llm/features/camera/data/datasources/permission_handler_camera_permission_gateway.dart';
 import 'package:some_camera_with_llm/features/camera/data/datasources/recorded_frame_inference.dart';
-import 'package:some_camera_with_llm/features/camera/data/debug/recorded_bus_fixture.dart';
 import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_failure_mapper.dart';
 import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_result_mapper.dart';
 import 'package:some_camera_with_llm/features/camera/data/repositories/recorded_frame_detector_impl.dart';
@@ -16,6 +16,8 @@ import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_bl
 import 'package:some_camera_with_llm/features/camera/presentation/widgets/recorded_observation_surface.dart';
 
 final GetIt appDependencies = GetIt.instance;
+
+const _recordedVideoAssetPath = 'assets/video/pedestrians.mp4';
 
 AppRuntime configureDependencies({ObservationSource? observationSource}) {
   final source = observationSource ?? ObservationSource.parse(kObservationSource);
@@ -47,7 +49,6 @@ AppRuntime configureDependencies({ObservationSource? observationSource}) {
 }
 
 (ObservationController, Widget) _recordedObservationComposition() {
-  final fixture = recordedBusFixture();
   final detector = RecordedFrameDetectorImpl(
     UltralyticsRecordedFrameInference(),
     const YoloResultMapper(),
@@ -55,9 +56,9 @@ AppRuntime configureDependencies({ObservationSource? observationSource}) {
   );
   final observationAdapter = RecordedObservationAdapter(
     detector: detector,
-    frames: fixture.frames,
-    frameWidth: fixture.frameWidth,
-    frameHeight: fixture.frameHeight,
+    frameSource: MethodChannelRecordedVideoFrameSource(
+      assetPath: _recordedVideoAssetPath,
+    ),
   );
   return (
     observationAdapter,
