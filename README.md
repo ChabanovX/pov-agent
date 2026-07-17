@@ -1,17 +1,46 @@
 # some_camera_with_llm
 
-A new Flutter project.
+Flutter camera observation prototype backed by Ultralytics YOLO.
 
-## Getting Started
+## Live camera
 
-This project is a starting point for a Flutter application.
+The default build uses the native camera surface and should be run on physical
+hardware:
 
-A few resources to get you started if this is your first Flutter project:
+```sh
+flutter run -d <device-id>
+```
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Runtime video input
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+The recorded mode runs on the iOS Simulator without camera hardware:
+
+```sh
+flutter run -d <simulator-id> --dart-define=OBSERVATION_SOURCE=recorded
+```
+
+The ordinary app decodes a bundled MP4 at runtime through `AVAssetReader`,
+encodes each selected frame as JPEG, and sends those bytes through the same
+single-image `YOLO.predict` boundary used by repository integration tests. The
+decoder is pull-based, so slow inference drops timing opportunities instead of
+building an unbounded frame queue.
+
+The iOS build bundles the pinned official `yolo26n` Core ML archive, so the
+recorded mode and its acceptance lane do not depend on a first-run download.
+Omit the define, or set `OBSERVATION_SOURCE=camera`, to restore camera input.
+
+## Verification
+
+Run the deterministic local gates on any development machine:
+
+```sh
+dart run tool/harness.dart verify --changed
+```
+
+The runtime video acceptance lane requires a booted iOS Simulator. It fails if
+either native decoding/looping or the full MP4-to-YOLO app journey fails:
+
+```sh
+flutter devices
+tool/verify_recorded_ios.sh <simulator-id>
+```
