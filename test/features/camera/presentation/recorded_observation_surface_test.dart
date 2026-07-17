@@ -10,6 +10,30 @@ import 'package:some_camera_with_llm/features/camera/domain/entities/normalized_
 import 'package:some_camera_with_llm/features/camera/presentation/widgets/recorded_observation_surface.dart';
 
 void main() {
+  testWidgets('renders an empty surface before the decoder publishes a frame', (
+    tester,
+  ) async {
+    final source = _EmptyRecordedObservationFrameSource();
+    try {
+      await tester.pumpWidget(
+        CupertinoApp(
+          home: RecordedObservationSurface(frameSource: source),
+        ),
+      );
+
+      expect(find.byType(Image), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(RecordedObservationSurface),
+          matching: find.byType(CustomPaint),
+        ),
+        findsNothing,
+      );
+    } finally {
+      await source.close();
+    }
+  });
+
   testWidgets('renders a recorded detection with matching semantics', (
     tester,
   ) async {
@@ -39,7 +63,7 @@ void main() {
       expect(
         tester.getSize(find.byType(Image)).aspectRatio,
         closeTo(
-          source.frameAspectRatio,
+          source.currentFrame.aspectRatio,
           0.001,
         ),
       );
@@ -48,6 +72,18 @@ void main() {
       await source.close();
     }
   });
+}
+
+final class _EmptyRecordedObservationFrameSource implements RecordedObservationFrameSource {
+  final StreamController<RecordedObservationFrame> _frames = StreamController<RecordedObservationFrame>.broadcast();
+
+  @override
+  RecordedObservationFrame? get currentFrame => null;
+
+  @override
+  Stream<RecordedObservationFrame> get frames => _frames.stream;
+
+  Future<void> close() => _frames.close();
 }
 
 final class _FakeRecordedObservationFrameSource implements RecordedObservationFrameSource {
@@ -70,16 +106,14 @@ final class _FakeRecordedObservationFrameSource implements RecordedObservationFr
           ),
         ],
         frameNumber: 1,
-      ),
-      frameAspectRatio = fixture.frameWidth / fixture.frameHeight;
+        frameWidth: fixture.frameWidth,
+        frameHeight: fixture.frameHeight,
+      );
 
   final StreamController<RecordedObservationFrame> _frames = StreamController<RecordedObservationFrame>.broadcast();
 
   @override
   final RecordedObservationFrame currentFrame;
-
-  @override
-  final double frameAspectRatio;
 
   @override
   Stream<RecordedObservationFrame> get frames => _frames.stream;

@@ -60,13 +60,16 @@ dev_dependencies:
 flutter:
   generate: true
 
+  assets:
+    - assets/models/yolo26n.mlpackage.zip
+    - assets/video/pedestrians.mp4
+
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
 
-  # To add assets to your application, add an assets section, like this:
-  # assets:
+  # To add more assets to your application, extend the assets section:
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 

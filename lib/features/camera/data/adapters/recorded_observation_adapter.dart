@@ -1,20 +1,22 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:some_camera_with_llm/features/camera/application/models/observation_configuration.dart';
 import 'package:some_camera_with_llm/features/camera/application/models/observation_event.dart';
 import 'package:some_camera_with_llm/features/camera/application/models/recorded_observation_frame.dart';
+import 'package:some_camera_with_llm/features/camera/application/models/recorded_video_frame.dart';
 import 'package:some_camera_with_llm/features/camera/application/ports/observation_controller.dart';
 import 'package:some_camera_with_llm/features/camera/application/ports/recorded_frame_detector.dart';
 import 'package:some_camera_with_llm/features/camera/application/ports/recorded_observation_frame_source.dart';
+import 'package:some_camera_with_llm/features/camera/application/ports/recorded_video_frame_source.dart';
 import 'package:some_camera_with_llm/features/camera/domain/entities/camera_capabilities.dart';
 import 'package:some_camera_with_llm/features/camera/domain/entities/camera_lens.dart';
 import 'package:some_camera_with_llm/features/camera/domain/entities/observation_diagnostics.dart';
+import 'package:some_camera_with_llm/features/camera/domain/entities/observation_snapshot.dart';
 import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
 import 'package:some_camera_with_llm/shared/domain/app_result.dart';
 import 'package:ultralytics_yolo/core/yolo_model_manager.dart';
 
-const _recordedObservationFrameInterval = Duration(milliseconds: 500);
+const _recordedObservationFrameInterval = Duration(milliseconds: 200);
 
 /// Creates the periodic replay timer used by [RecordedObservationAdapter].
 typedef RecordedReplayTimerFactory =
@@ -23,27 +25,23 @@ typedef RecordedReplayTimerFactory =
       void Function() onTick,
     );
 
-/// Replays encoded frames through the production single-image YOLO runtime.
+/// Pulls runtime-decoded video frames through single-image YOLO inference.
 ///
-/// Concurrency policy: drop timer ticks while inference is active. Disabling,
-/// retrying, or closing increments the replay revision so an in-flight result
-/// cannot update a hidden or obsolete surface. Shutdown joins owned model and
-/// inference work before disposing the detector.
+/// Concurrency policy: drop timer ticks while frame decoding or inference is
+/// active. Disable, retry, and close revise the replay so stale work cannot
+/// publish. The adapter joins decoder/model work before disposing either
+/// native runtime.
 final class RecordedObservationAdapter implements ObservationController, RecordedObservationFrameSource {
   factory RecordedObservationAdapter({
     required RecordedFrameDetector detector,
-    required List<Uint8List> frames,
-    required int frameWidth,
-    required int frameHeight,
+    required RecordedVideoFrameSource frameSource,
     ObservationConfiguration configuration = ObservationConfiguration.milestoneOne,
     Duration frameInterval = _recordedObservationFrameInterval,
   }) {
     return RecordedObservationAdapter.withTimerFactory(
       detector,
+      frameSource,
       _createReplayTimer,
-      frames: frames,
-      frameWidth: frameWidth,
-      frameHeight: frameHeight,
       configuration: configuration,
       frameInterval: frameInterval,
     );
@@ -51,50 +49,37 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
 
   RecordedObservationAdapter.withTimerFactory(
     this._detector,
+    this._frameSource,
     this._timerFactory, {
-    required List<Uint8List> frames,
-    required this.frameWidth,
-    required this.frameHeight,
     this.configuration = ObservationConfiguration.milestoneOne,
     this.frameInterval = _recordedObservationFrameInterval,
-  }) : assert(frames.isNotEmpty, 'Recorded replay requires at least one frame.'),
-       assert(frameWidth > 0, 'Recorded frame width must be positive.'),
-       assert(frameHeight > 0, 'Recorded frame height must be positive.') {
-    _frames = List.unmodifiable(
-      frames.map(
-        (frame) => Uint8List.fromList(frame).asUnmodifiableView(),
-      ),
-    );
-    _currentFrame = RecordedObservationFrame(
-      encodedImage: _frames.first,
-      detections: const [],
-      frameNumber: 0,
-    );
-  }
+  });
 
   final ObservationConfiguration configuration;
   final Duration frameInterval;
-  final int frameWidth;
-  final int frameHeight;
   final RecordedFrameDetector _detector;
+  final RecordedVideoFrameSource _frameSource;
   final RecordedReplayTimerFactory _timerFactory;
-  late final List<Uint8List> _frames;
-  late RecordedObservationFrame _currentFrame;
   final StreamController<ObservationEvent> _eventsController = StreamController<ObservationEvent>.broadcast();
   final StreamController<RecordedObservationFrame> _framesController =
       StreamController<RecordedObservationFrame>.broadcast();
 
   StreamSubscription<DownloadProgress>? _downloadSubscription;
   Future<void>? _loadFuture;
+  Future<void>? _frameSourceOpenFuture;
   Future<void>? _activeInference;
   Timer? _replayTimer;
+  RecordedObservationFrame? _currentFrame;
+  RecordedVideoMetadata? _videoMetadata;
+  AppFailure? _frameSourceFailure;
   DateTime? _lastObservationAt;
-  var _nextFrameIndex = 0;
   var _frameNumber = 0;
   var _loadRevision = 0;
+  var _frameSourceOpenRevision = 0;
   var _replayRevision = 0;
   var _initialized = false;
   var _modelReady = false;
+  var _frameSourceReady = false;
   var _requestedEnabled = false;
   var _closed = false;
 
@@ -105,10 +90,7 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
   Stream<RecordedObservationFrame> get frames => _framesController.stream;
 
   @override
-  RecordedObservationFrame get currentFrame => _currentFrame;
-
-  @override
-  double get frameAspectRatio => frameWidth / frameHeight;
+  RecordedObservationFrame? get currentFrame => _currentFrame;
 
   @override
   Future<AppResult<CameraCapabilities>> init() async {
@@ -119,11 +101,12 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
         _handleDownloadProgress,
       );
       _eventsController.add(const ObservationModelPreparing());
+      _startFrameSourceOpen();
       _startModelLoad();
     }
 
-    // A single virtual lens keeps the existing observation power contract
-    // while naturally hiding the live-only camera switch control.
+    // A virtual back lens preserves the existing power contract while the
+    // platform decoder owns the recorded input instead of camera hardware.
     return AppSuccess(
       CameraCapabilities(
         availableLenses: const [CameraLens.back],
@@ -136,6 +119,7 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
   Future<AppResult<void>> enable(CameraLens lens) async {
     if (_closed) return _closedResult();
     _requestedEnabled = true;
+    if (!_frameSourceReady) _startFrameSourceOpen();
     _startReplayIfReady();
     return const AppSuccess<void>(null);
   }
@@ -170,9 +154,17 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
     if (_closed) return _closedResult();
     _stopReplay();
     await _activeInference;
+    await _frameSourceOpenFuture;
     if (_closed) return _closedResult();
     _clearDetections();
-    _startReplayIfReady();
+
+    if (_frameSourceReady) {
+      _startReplayIfReady();
+      return const AppSuccess<void>(null);
+    }
+
+    _frameSourceFailure = null;
+    _startFrameSourceOpen();
     return const AppSuccess<void>(null);
   }
 
@@ -200,15 +192,77 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
       case AppSuccess<void>():
         _modelReady = true;
         _eventsController.add(const ObservationModelReady());
-        _startReplayIfReady();
+        final frameSourceFailure = _frameSourceFailure;
+        if (frameSourceFailure == null) {
+          _startReplayIfReady();
+        } else {
+          _eventsController.add(
+            ObservationInferenceFailed(frameSourceFailure),
+          );
+        }
       case AppError<void>(:final failure):
         _modelReady = false;
-        _eventsController.add(ObservationInferenceFailed(failure));
+        _eventsController.add(ObservationFailed(failure));
+    }
+  }
+
+  void _startFrameSourceOpen() {
+    if (_closed || _frameSourceReady || _frameSourceOpenFuture != null) return;
+    final activeInference = _activeInference;
+    if (activeInference != null) {
+      // A failed frame pull closes the decoder inside the active replay task.
+      // Join that task before reopening so close/open cannot overlap at the
+      // application port when the user quickly disables and re-enables.
+      unawaited(_startFrameSourceOpenAfter(activeInference));
+      return;
+    }
+    final revision = ++_frameSourceOpenRevision;
+    final openFuture = _openFrameSource(revision);
+    _frameSourceOpenFuture = openFuture;
+    unawaited(_releaseFrameSourceOpenFuture(openFuture));
+  }
+
+  Future<void> _startFrameSourceOpenAfter(Future<void> activeInference) async {
+    await activeInference;
+    _startFrameSourceOpen();
+  }
+
+  Future<void> _releaseFrameSourceOpenFuture(Future<void> openFuture) async {
+    try {
+      await openFuture;
+    } finally {
+      if (identical(_frameSourceOpenFuture, openFuture)) {
+        _frameSourceOpenFuture = null;
+      }
+    }
+  }
+
+  Future<void> _openFrameSource(int revision) async {
+    final result = await _frameSource.open();
+    if (_closed || revision != _frameSourceOpenRevision) return;
+
+    switch (result) {
+      case AppSuccess(value: final metadata):
+        _videoMetadata = metadata;
+        _frameSourceFailure = null;
+        _frameSourceReady = true;
+        _startReplayIfReady();
+      case AppError(:final failure):
+        // A native open may succeed before Dart rejects malformed metadata.
+        // Close defensively so every failed open remains transactional.
+        await _frameSource.close();
+        if (_closed || revision != _frameSourceOpenRevision) return;
+        _videoMetadata = null;
+        _frameSourceFailure = failure;
+        _frameSourceReady = false;
+        if (_modelReady) {
+          _eventsController.add(ObservationInferenceFailed(failure));
+        }
     }
   }
 
   void _startReplayIfReady() {
-    if (_closed || !_requestedEnabled || !_modelReady || _replayTimer != null) {
+    if (_closed || !_requestedEnabled || !_modelReady || !_frameSourceReady || _replayTimer != null) {
       return;
     }
     _replayRevision += 1;
@@ -227,7 +281,7 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
   }
 
   void _scheduleNextFrame() {
-    if (_closed || !_requestedEnabled || !_modelReady || _activeInference != null) {
+    if (_closed || !_requestedEnabled || !_modelReady || !_frameSourceReady || _activeInference != null) {
       return;
     }
     final inference = _processNextFrame(_replayRevision);
@@ -244,13 +298,52 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
   }
 
   Future<void> _processNextFrame(int revision) async {
-    final encodedImage = _frames[_nextFrameIndex];
-    _nextFrameIndex = (_nextFrameIndex + 1) % _frames.length;
-    final result = await _detector.detect(encodedImage);
-    if (_closed || revision != _replayRevision || !_requestedEnabled || !_modelReady) {
-      return;
-    }
+    final frameResult = await _frameSource.nextFrame();
+    if (!_canPublishReplay(revision)) return;
 
+    switch (frameResult) {
+      case AppError(:final failure):
+        await _handleFrameSourceFailure(failure);
+      case AppSuccess(value: final decodedFrame):
+        final metadata = _videoMetadata;
+        if (metadata == null) {
+          await _handleFrameSourceFailure(
+            const UnexpectedFailure(
+              code: 'recorded_video_metadata_missing',
+            ),
+          );
+          return;
+        }
+        final result = await _detector.detect(decodedFrame.encodedImage);
+        if (!_canPublishReplay(revision)) return;
+        _handleDetectionResult(
+          result,
+          decodedFrame,
+          metadata,
+        );
+    }
+  }
+
+  bool _canPublishReplay(int revision) {
+    return !_closed && revision == _replayRevision && _requestedEnabled && _modelReady && _frameSourceReady;
+  }
+
+  Future<void> _handleFrameSourceFailure(AppFailure failure) async {
+    _frameSourceReady = false;
+    _frameSourceFailure = failure;
+    _stopReplay();
+    _clearDetections();
+    if (_requestedEnabled) {
+      _eventsController.add(ObservationInferenceFailed(failure));
+    }
+    await _frameSource.close();
+  }
+
+  void _handleDetectionResult(
+    AppResult<ObservationSnapshot> result,
+    RecordedVideoFrame decodedFrame,
+    RecordedVideoMetadata metadata,
+  ) {
     switch (result) {
       case AppSuccess(value: final snapshot):
         _frameNumber += 1;
@@ -264,9 +357,11 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
               );
         _publishFrame(
           RecordedObservationFrame(
-            encodedImage: encodedImage,
+            encodedImage: decodedFrame.encodedImage,
             detections: snapshot.detections,
             frameNumber: _frameNumber,
+            frameWidth: metadata.frameWidth,
+            frameHeight: metadata.frameHeight,
           ),
         );
         _eventsController
@@ -290,17 +385,20 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
       case AppError(:final failure):
         _stopReplay();
         _clearDetections();
-        _eventsController.add(ObservationFailed(failure));
+        _eventsController.add(ObservationInferenceFailed(failure));
     }
   }
 
   void _clearDetections() {
     final frame = _currentFrame;
+    if (frame == null) return;
     _publishFrame(
       RecordedObservationFrame(
         encodedImage: frame.encodedImage,
         detections: const [],
         frameNumber: frame.frameNumber,
+        frameWidth: frame.frameWidth,
+        frameHeight: frame.frameHeight,
       ),
     );
   }
@@ -329,17 +427,20 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
     _closed = true;
     _requestedEnabled = false;
     _loadRevision += 1;
+    _frameSourceOpenRevision += 1;
     _stopReplay();
     YOLOModelManager.cancelDownload(configuration.modelPath);
     await _downloadSubscription?.cancel();
     try {
       await _loadFuture;
+      await _frameSourceOpenFuture;
       await _activeInference;
     } finally {
       // Keep the pre-registration marker until model resolution settles, then
-      // clear it so a later app runtime does not inherit stale cancellation.
+      // clear it so a later app runtime cannot inherit stale cancellation.
       YOLOModelManager.clearDownloadCancellation(configuration.modelPath);
     }
+    await _frameSource.close();
     await _detector.close();
     await _framesController.close();
     await _eventsController.close();
