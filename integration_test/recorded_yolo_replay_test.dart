@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:some_camera_with_llm/core/logging/app_logger.dart';
 import 'package:some_camera_with_llm/features/camera/data/datasources/recorded_frame_inference.dart';
+import 'package:some_camera_with_llm/features/camera/data/debug/recorded_bus_fixture.dart';
 import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_failure_mapper.dart';
 import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_result_mapper.dart';
 import 'package:some_camera_with_llm/features/camera/data/repositories/recorded_frame_detector_impl.dart';
@@ -9,8 +10,6 @@ import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
 import 'package:some_camera_with_llm/shared/domain/app_result.dart';
 import 'package:ultralytics_yolo/core/yolo_model_manager.dart';
 import 'package:ultralytics_yolo/core/yolo_model_resolver.dart';
-
-import 'fixtures/recorded_bus_sequence.dart';
 
 const _modelId = 'yolo26n';
 const _runRecordedYoloReplayTest = bool.fromEnvironment(
@@ -25,7 +24,7 @@ void main() {
     'real yolo26n recognizes recorded frames and reopens from cache',
     (tester) async {
       await tester.runAsync<void>(() async {
-        final frames = recordedBusSequence();
+        final frames = recordedBusFixture().frames;
         expect(frames, hasLength(3));
         expect(frames.first, isNotEmpty);
 

@@ -1,19 +1,44 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-/// A short deterministic sequence derived from Ultralytics' public bus.jpg
-/// sample. Repeated frames exercise the same production model path without
-/// depending on camera hardware or test-time network access.
-List<Uint8List> recordedBusSequence({int frameCount = 3}) {
+/// Bundled recorded input and the dimensions required to render it correctly.
+final class RecordedObservationFixture {
+  RecordedObservationFixture({
+    required List<Uint8List> frames,
+    required this.frameWidth,
+    required this.frameHeight,
+  }) : frames = List.unmodifiable(
+         frames.map(
+           (frame) => Uint8List.fromList(frame).asUnmodifiableView(),
+         ),
+       );
+
+  final List<Uint8List> frames;
+  final int frameWidth;
+  final int frameHeight;
+}
+
+/// Returns a local sequence derived from Ultralytics' public bus.jpg sample.
+///
+/// The frame bytes are bundled with the app, while the official model may
+/// still be downloaded on its first load and reused from cache afterward.
+RecordedObservationFixture recordedBusFixture({int frameCount = 3}) {
   final frame = base64Decode(
     _recordedBusFrameBase64.replaceAll(RegExp(r'\s'), ''),
   );
-  return List.generate(
-    frameCount,
-    (_) => Uint8List.fromList(frame),
-    growable: false,
+  return RecordedObservationFixture(
+    frames: List.generate(
+      frameCount,
+      (_) => frame,
+      growable: false,
+    ),
+    frameWidth: _recordedBusFrameWidth,
+    frameHeight: _recordedBusFrameHeight,
   );
 }
+
+const _recordedBusFrameWidth = 180;
+const _recordedBusFrameHeight = 240;
 
 const _recordedBusFrameBase64 = '''
 /9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAtKADAAQAAAAB
