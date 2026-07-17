@@ -50,6 +50,8 @@
 
 ## Git workflow
 
+- For medium or larger features, mini-features, multi-layer changes, migrations, or work likely to require multiple logical commits, invoke `$develop-in-worktree`. Complete implementation, review, validation, and atomic commits in its isolated worktree, then merge the feature branch into the original base branch with `--no-ff` without asking for additional merge confirmation.
+- Skip the worktree workflow for trivial one-file fixes, tiny documentation edits, formatting-only changes, and other clearly small patches unless the user explicitly requests it.
 - Once implementation and review are complete, inspect the final diff and split it into independently reviewable, revertible, logical commits. Never leave a substantial multi-concern change as one catch-all or blob commit.
 - Keep each implementation together with its closest tests, and ensure every intermediate commit remains coherent and passes its closest applicable validation.
 - If later validation or review reveals that an existing commit is incomplete, add a new focused `fix` commit. Do not amend or silently fold the correction into the earlier commit unless the user explicitly requests history rewriting.
