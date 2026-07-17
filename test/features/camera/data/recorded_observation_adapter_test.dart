@@ -121,7 +121,7 @@ void main() {
 
     await adapter.init();
     await _flushMicrotasks();
-    expect(events.last, isA<ObservationInferenceFailed>());
+    expect(events.last, isA<ObservationFailed>());
 
     await adapter.retryModel();
     await _flushMicrotasks();
@@ -238,7 +238,7 @@ void main() {
 
     timers.single.fire();
     await _flushMicrotasks();
-    expect(events.last, isA<ObservationFailed>());
+    expect(events.last, isA<ObservationInferenceFailed>());
     expect(adapter.currentFrame.detections, isEmpty);
 
     await adapter.retryObservation();

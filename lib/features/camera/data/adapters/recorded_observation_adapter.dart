@@ -203,7 +203,7 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
         _startReplayIfReady();
       case AppError<void>(:final failure):
         _modelReady = false;
-        _eventsController.add(ObservationInferenceFailed(failure));
+        _eventsController.add(ObservationFailed(failure));
     }
   }
 
@@ -290,7 +290,7 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
       case AppError(:final failure):
         _stopReplay();
         _clearDetections();
-        _eventsController.add(ObservationFailed(failure));
+        _eventsController.add(ObservationInferenceFailed(failure));
     }
   }
 
