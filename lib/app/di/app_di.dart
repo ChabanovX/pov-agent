@@ -1,14 +1,38 @@
+import 'package:flutter/widgets.dart';
 import 'package:get_it/get_it.dart';
 import 'package:some_camera_with_llm/app/bootstrap/app_runtime.dart';
+import 'package:some_camera_with_llm/app/di/observation_source.dart';
 import 'package:some_camera_with_llm/app/widgets/observation_surface.dart';
+import 'package:some_camera_with_llm/core/constants/environment_constants.dart';
+import 'package:some_camera_with_llm/features/camera/application/ports/observation_controller.dart';
+import 'package:some_camera_with_llm/features/camera/data/adapters/recorded_observation_adapter.dart';
 import 'package:some_camera_with_llm/features/camera/data/datasources/permission_handler_camera_permission_gateway.dart';
+import 'package:some_camera_with_llm/features/camera/data/datasources/recorded_frame_inference.dart';
+import 'package:some_camera_with_llm/features/camera/data/debug/recorded_bus_fixture.dart';
 import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_failure_mapper.dart';
 import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_result_mapper.dart';
+import 'package:some_camera_with_llm/features/camera/data/repositories/recorded_frame_detector_impl.dart';
 import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_bloc.dart';
+import 'package:some_camera_with_llm/features/camera/presentation/widgets/recorded_observation_surface.dart';
 
 final GetIt appDependencies = GetIt.instance;
 
-AppRuntime configureDependencies() {
+AppRuntime configureDependencies({ObservationSource? observationSource}) {
+  final source = observationSource ?? ObservationSource.parse(kObservationSource);
+  final (ObservationController controller, Widget surface) = switch (source) {
+    ObservationSource.camera => _cameraObservationComposition(),
+    ObservationSource.recorded => _recordedObservationComposition(),
+  };
+  final runtime = AppRuntime(
+    cameraBloc: CameraBloc(controller),
+    observationSurface: surface,
+  );
+
+  appDependencies.registerSingleton<AppRuntime>(runtime);
+  return runtime;
+}
+
+(ObservationController, Widget) _cameraObservationComposition() {
   final observationAdapter = YoloObservationAdapter(
     cameraPermissionGateway: const PermissionHandlerCameraPermissionGateway(
       YoloFailureMapper(),
@@ -16,11 +40,27 @@ AppRuntime configureDependencies() {
     resultMapper: const YoloResultMapper(),
     failureMapper: const YoloFailureMapper(),
   );
-  final runtime = AppRuntime(
-    cameraBloc: CameraBloc(observationAdapter),
-    observationSurface: ObservationSurface(adapter: observationAdapter),
+  return (
+    observationAdapter,
+    ObservationSurface(adapter: observationAdapter),
   );
+}
 
-  appDependencies.registerSingleton<AppRuntime>(runtime);
-  return runtime;
+(ObservationController, Widget) _recordedObservationComposition() {
+  final fixture = recordedBusFixture();
+  final detector = RecordedFrameDetectorImpl(
+    UltralyticsRecordedFrameInference(),
+    const YoloResultMapper(),
+    const YoloFailureMapper(),
+  );
+  final observationAdapter = RecordedObservationAdapter(
+    detector: detector,
+    frames: fixture.frames,
+    frameWidth: fixture.frameWidth,
+    frameHeight: fixture.frameHeight,
+  );
+  return (
+    observationAdapter,
+    RecordedObservationSurface(frameSource: observationAdapter),
+  );
 }
