@@ -15,19 +15,20 @@ abstract interface class RecordedFrameInference {
 final class UltralyticsRecordedFrameInference implements RecordedFrameInference {
   UltralyticsRecordedFrameInference({
     this.configuration = ObservationConfiguration.milestoneOne,
-  }) : _yolo = YOLO(
-         modelPath: configuration.modelPath,
-         task: YOLOTask.detect,
-         useGpu: configuration.useGpu,
-         useMultiInstance: true,
-       );
+  });
 
   final ObservationConfiguration configuration;
-  final YOLO _yolo;
+  YOLO? _yolo;
 
   @override
   Future<void> load() async {
-    final loaded = await _yolo.loadModel();
+    final yolo = _yolo ??= YOLO(
+      modelPath: configuration.modelPath,
+      task: YOLOTask.detect,
+      useGpu: configuration.useGpu,
+      useMultiInstance: true,
+    );
+    final loaded = await yolo.loadModel();
     if (!loaded) {
       throw ModelLoadingException(
         'The ${configuration.modelPath} model did not report a successful load.',
@@ -37,7 +38,11 @@ final class UltralyticsRecordedFrameInference implements RecordedFrameInference 
 
   @override
   Future<Map<String, dynamic>> predict(Uint8List encodedImage) {
-    return _yolo.predict(
+    final yolo = _yolo;
+    if (yolo == null) {
+      throw StateError('The recorded-frame YOLO runtime has not been loaded.');
+    }
+    return yolo.predict(
       encodedImage,
       confidenceThreshold: configuration.confidenceThreshold,
       iouThreshold: configuration.iouThreshold,
@@ -45,5 +50,9 @@ final class UltralyticsRecordedFrameInference implements RecordedFrameInference 
   }
 
   @override
-  Future<void> close() => _yolo.dispose();
+  Future<void> close() async {
+    final yolo = _yolo;
+    _yolo = null;
+    await yolo?.dispose();
+  }
 }

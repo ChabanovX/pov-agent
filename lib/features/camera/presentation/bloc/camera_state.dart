@@ -37,6 +37,7 @@ final class CameraState {
     this.diagnostics,
     this.cameraFailure,
     this.modelFailure,
+    this.observationFailure,
   }) : availableLenses = List.unmodifiable(availableLenses),
        detections = List.unmodifiable(detections);
 
@@ -52,10 +53,11 @@ final class CameraState {
   final ObservationDiagnostics? diagnostics;
   final AppFailure? cameraFailure;
   final AppFailure? modelFailure;
+  final AppFailure? observationFailure;
 
   bool get canToggleLens => availableLenses.length > 1;
 
-  AppFailure? get failure => modelFailure ?? cameraFailure;
+  AppFailure? get failure => observationFailure ?? modelFailure ?? cameraFailure;
 
   CameraState copyWith({
     CameraStatus? status,
@@ -70,6 +72,7 @@ final class CameraState {
     ObservationDiagnostics? Function()? diagnostics,
     AppFailure? Function()? cameraFailure,
     AppFailure? Function()? modelFailure,
+    AppFailure? Function()? observationFailure,
   }) {
     return CameraState(
       status: status ?? this.status,
@@ -84,6 +87,7 @@ final class CameraState {
       diagnostics: diagnostics == null ? this.diagnostics : diagnostics(),
       cameraFailure: cameraFailure == null ? this.cameraFailure : cameraFailure(),
       modelFailure: modelFailure == null ? this.modelFailure : modelFailure(),
+      observationFailure: observationFailure == null ? this.observationFailure : observationFailure(),
     );
   }
 }

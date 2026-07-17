@@ -70,6 +70,16 @@ final class CameraPage extends StatelessWidget {
 
   Widget? _overlayFor(BuildContext context, CameraState state) {
     final localizations = AppLocalizations.of(context);
+    if (state.observationFailure != null) {
+      return _CameraMessage(
+        icon: CupertinoIcons.exclamationmark_triangle,
+        message: localizations.cameraObservationFailureMessage,
+        actionLabel: localizations.retryAction,
+        onAction: () {
+          context.read<CameraBloc>().add(const CameraRetryRequested());
+        },
+      );
+    }
     if (state.modelFailure != null) {
       final message = state.modelFailure is NetworkFailure
           ? localizations.cameraModelNetworkFailureMessage

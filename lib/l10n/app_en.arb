@@ -73,6 +73,10 @@
   "@cameraModelNetworkFailureMessage": {
     "description": "Message shown when the first YOLO model download fails because of connectivity."
   },
+  "cameraObservationFailureMessage": "The frame could not be analyzed.",
+  "@cameraObservationFailureMessage": {
+    "description": "Message shown when a loaded YOLO model cannot analyze an observation frame."
+  },
   "cameraFpsLabel": "FPS {fps}",
   "@cameraFpsLabel": {
     "description": "Compact live inference frame-rate diagnostic.",

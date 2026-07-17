@@ -193,6 +193,12 @@ abstract class AppLocalizations {
   /// **'The YOLO model could not be downloaded. Check your connection and retry.'**
   String get cameraModelNetworkFailureMessage;
 
+  /// Message shown when a loaded YOLO model cannot analyze an observation frame.
+  ///
+  /// In en, this message translates to:
+  /// **'The frame could not be analyzed.'**
+  String get cameraObservationFailureMessage;
+
   /// Compact live inference frame-rate diagnostic.
   ///
   /// In en, this message translates to:

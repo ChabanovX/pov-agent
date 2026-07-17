@@ -63,6 +63,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'The YOLO model could not be downloaded. Check your connection and retry.';
 
   @override
+  String get cameraObservationFailureMessage => 'The frame could not be analyzed.';
+
+  @override
   String cameraFpsLabel(String fps) {
     return 'FPS $fps';
   }

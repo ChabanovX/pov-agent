@@ -249,6 +249,160 @@ void main() {
     await bloc.close();
   });
 
+  test('separates inference failure and retries observation only', () async {
+    final controller = FakeCameraController();
+    final bloc = CameraBloc(controller)..add(const CameraStarted());
+    await _waitForState(
+      bloc,
+      (state) => state.status == CameraStatus.enabled,
+    );
+
+    controller.emit(
+      const ObservationInferenceFailed(
+        DeviceUnavailableFailure(code: 'inference_failed'),
+      ),
+    );
+    await _waitForState(
+      bloc,
+      (state) => state.observationFailure != null,
+    );
+
+    expect(bloc.state.modelStatus, ObservationModelStatus.ready);
+    expect(bloc.state.modelFailure, isNull);
+    expect(bloc.state.detections, isEmpty);
+    expect(bloc.state.diagnostics, isNull);
+
+    bloc.add(const CameraRetryRequested());
+    await _waitForState(
+      bloc,
+      (state) => state.observationFailure == null,
+    );
+    await pumpEventQueue();
+
+    expect(controller.retryObservationCalls, 1);
+    expect(controller.retryModelCalls, 0);
+    expect(controller.initCalls, 1);
+
+    await bloc.close();
+  });
+
+  test('coalesces repeated inference retries until a new result', () async {
+    final retryStarted = Completer<void>();
+    final retryGate = Completer<void>();
+    var retryNumber = 0;
+    final controller = FakeCameraController(
+      onRetryObservation: () async {
+        retryNumber += 1;
+        if (retryNumber == 1) {
+          retryStarted.complete();
+          await retryGate.future;
+        }
+      },
+    );
+    final bloc = CameraBloc(controller)..add(const CameraStarted());
+    await _waitForState(
+      bloc,
+      (state) => state.status == CameraStatus.enabled,
+    );
+    controller.emit(
+      const ObservationInferenceFailed(
+        DeviceUnavailableFailure(code: 'inference_failed'),
+      ),
+    );
+    await _waitForState(
+      bloc,
+      (state) => state.observationFailure != null,
+    );
+
+    bloc
+      ..add(const CameraRetryRequested())
+      ..add(const CameraRetryRequested());
+    await retryStarted.future;
+    await pumpEventQueue();
+
+    expect(controller.retryObservationCalls, 1);
+    expect(controller.retryModelCalls, 0);
+    expect(controller.initCalls, 1);
+
+    retryGate.complete();
+    await pumpEventQueue();
+    expect(controller.retryObservationCalls, 1);
+    expect(controller.retryModelCalls, 0);
+    expect(controller.initCalls, 1);
+
+    final resultApplied = bloc.stream.first;
+    controller.emit(
+      ObservationDetectionsUpdated(
+        detections: const [],
+        observedAt: DateTime.utc(2026, 7, 17),
+      ),
+    );
+    await resultApplied;
+
+    // With no failure left, this intent must follow the generic retry path.
+    // If the empty result did not release observation coalescing, it would be
+    // incorrectly swallowed as another observation retry.
+    bloc.add(const CameraRetryRequested());
+    await pumpEventQueue();
+    expect(controller.retryObservationCalls, 1);
+    expect(controller.retryModelCalls, 1);
+    expect(controller.initCalls, 2);
+
+    controller.emit(
+      const ObservationInferenceFailed(
+        DeviceUnavailableFailure(code: 'inference_failed_again'),
+      ),
+    );
+    await _waitForState(
+      bloc,
+      (state) => state.observationFailure?.code == 'inference_failed_again',
+    );
+
+    bloc.add(const CameraRetryRequested());
+    await pumpEventQueue();
+    expect(controller.retryObservationCalls, 2);
+    expect(controller.retryModelCalls, 1);
+    expect(controller.initCalls, 2);
+
+    await bloc.close();
+  });
+
+  test('keeps an exact observation failure when retry fails', () async {
+    const retryFailure = DeviceUnavailableFailure(
+      code: 'observation_retry_failed',
+    );
+    final controller = FakeCameraController(
+      retryObservationFailure: retryFailure,
+    );
+    final bloc = CameraBloc(controller)..add(const CameraStarted());
+    await _waitForState(
+      bloc,
+      (state) => state.status == CameraStatus.enabled,
+    );
+    controller.emit(
+      const ObservationInferenceFailed(
+        DeviceUnavailableFailure(code: 'inference_failed'),
+      ),
+    );
+    await _waitForState(
+      bloc,
+      (state) => state.observationFailure != null,
+    );
+
+    bloc.add(const CameraRetryRequested());
+    await _waitForState(
+      bloc,
+      (state) => state.observationFailure?.code == retryFailure.code,
+    );
+
+    expect(bloc.state.observationFailure, same(retryFailure));
+    expect(bloc.state.modelStatus, ObservationModelStatus.ready);
+    expect(controller.retryObservationCalls, 1);
+    expect(controller.retryModelCalls, 0);
+
+    await bloc.close();
+  });
+
   test('close seals event admission before controller teardown', () async {
     final closeStarted = Completer<void>();
     final closeGate = Completer<void>();

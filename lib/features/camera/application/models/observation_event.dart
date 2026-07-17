@@ -42,3 +42,10 @@ final class ObservationFailed extends ObservationEvent {
 
   final AppFailure failure;
 }
+
+/// Reports frame inference failure after the model has loaded successfully.
+final class ObservationInferenceFailed extends ObservationEvent {
+  const ObservationInferenceFailed(this.failure);
+
+  final AppFailure failure;
+}
