@@ -30,11 +30,13 @@ final class FakeCameraController implements ObservationController {
     this.enableFailure,
     this.disableFailure,
     this.retryModelFailure,
+    this.retryObservationFailure,
     this.emitModelReadyOnInit = true,
     this.onInit,
     this.onEnable,
     this.onDisable,
     this.onRetryModel,
+    this.onRetryObservation,
     this.onClose,
   }) : capabilities =
            capabilities ??
@@ -50,16 +52,19 @@ final class FakeCameraController implements ObservationController {
   AppFailure? enableFailure;
   AppFailure? disableFailure;
   AppFailure? retryModelFailure;
+  AppFailure? retryObservationFailure;
   bool emitModelReadyOnInit;
   Future<void> Function()? onInit;
   Future<void> Function(CameraLens lens)? onEnable;
   Future<void> Function()? onDisable;
   Future<void> Function()? onRetryModel;
+  Future<void> Function()? onRetryObservation;
   Future<void> Function()? onClose;
 
   int initCalls = 0;
   int disableCalls = 0;
   int retryModelCalls = 0;
+  int retryObservationCalls = 0;
   int closeCalls = 0;
   final List<CameraLens> enableCalls = [];
 
@@ -103,6 +108,14 @@ final class FakeCameraController implements ObservationController {
     if (failure != null) return AppError<void>(failure);
     emit(const ObservationModelReady());
     return const AppSuccess<void>(null);
+  }
+
+  @override
+  Future<AppResult<void>> retryObservation() async {
+    retryObservationCalls += 1;
+    await onRetryObservation?.call();
+    final failure = retryObservationFailure;
+    return failure == null ? const AppSuccess<void>(null) : AppError<void>(failure);
   }
 
   @override

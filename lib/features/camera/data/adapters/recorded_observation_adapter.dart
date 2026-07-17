@@ -165,6 +165,7 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
     return const AppSuccess<void>(null);
   }
 
+  @override
   Future<AppResult<void>> retryObservation() async {
     if (_closed) return _closedResult();
     _stopReplay();
@@ -202,7 +203,7 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
         _startReplayIfReady();
       case AppError<void>(:final failure):
         _modelReady = false;
-        _eventsController.add(ObservationFailed(failure));
+        _eventsController.add(ObservationInferenceFailed(failure));
     }
   }
 

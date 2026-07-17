@@ -3,7 +3,7 @@ import 'package:some_camera_with_llm/features/camera/domain/entities/camera_capa
 import 'package:some_camera_with_llm/features/camera/domain/entities/camera_lens.dart';
 import 'package:some_camera_with_llm/shared/domain/app_result.dart';
 
-/// Controls one live YOLO observation session without exposing plugin types.
+/// Controls one YOLO observation session without exposing plugin types.
 abstract interface class ObservationController {
   Stream<ObservationEvent> get events;
 
@@ -14,6 +14,8 @@ abstract interface class ObservationController {
   Future<AppResult<void>> disable();
 
   Future<AppResult<void>> retryModel();
+
+  Future<AppResult<void>> retryObservation();
 
   Future<void> close();
 }

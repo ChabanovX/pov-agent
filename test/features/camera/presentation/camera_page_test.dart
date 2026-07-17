@@ -16,6 +16,7 @@ void main() {
   testWidgets('renders preview and controls, then powers the camera off', (
     tester,
   ) async {
+    final semantics = tester.ensureSemantics();
     final controller = FakeCameraController();
     final bloc = CameraBloc(controller)..add(const CameraStarted());
     await _waitForState(
@@ -26,6 +27,10 @@ void main() {
     await tester.pumpWidget(_TestCameraApp(bloc: bloc));
 
     expect(find.byKey(testObservationSurfaceKey), findsOneWidget);
+    expect(
+      find.semantics.byLabel('Test observation surface'),
+      findsOne,
+    );
     expect(find.bySemanticsLabel('Disable camera'), findsOneWidget);
     expect(find.bySemanticsLabel('Switch camera'), findsOneWidget);
 
@@ -50,7 +55,19 @@ void main() {
     expect(find.text('Enable camera'), findsOneWidget);
     expect(find.byKey(testObservationSurfaceKey), findsOneWidget);
     expect(find.text('FPS 18.0 · Inference 24.0 ms'), findsNothing);
+    expect(
+      find.semantics.byLabel('Test observation surface'),
+      findsNothing,
+    );
 
+    await tester.tap(find.text('Enable camera'));
+    await tester.pumpAndSettle();
+    expect(
+      find.semantics.byLabel('Test observation surface'),
+      findsOne,
+    );
+
+    semantics.dispose();
     await tester.runAsync(bloc.close);
   });
 
@@ -110,6 +127,73 @@ void main() {
     await tester.pump();
 
     expect(find.bySemanticsLabel('Disable camera'), findsOneWidget);
+
+    await tester.runAsync(bloc.close);
+  });
+
+  testWidgets('shows inference failure copy and retries observation', (
+    tester,
+  ) async {
+    final controller = FakeCameraController();
+    final bloc = CameraBloc(controller)..add(const CameraStarted());
+    await _waitForState(
+      bloc,
+      (state) => state.status == CameraStatus.enabled,
+    );
+
+    await tester.pumpWidget(_TestCameraApp(bloc: bloc));
+    controller.emit(
+      const ObservationInferenceFailed(
+        DeviceUnavailableFailure(code: 'inference_failed'),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('The frame could not be analyzed.'), findsOneWidget);
+    expect(find.text('The YOLO model could not be prepared.'), findsNothing);
+    expect(find.bySemanticsLabel('Disable camera'), findsNothing);
+
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+
+    expect(controller.retryObservationCalls, 1);
+    expect(find.text('The frame could not be analyzed.'), findsNothing);
+    expect(find.bySemanticsLabel('Disable camera'), findsOneWidget);
+
+    await tester.runAsync(bloc.close);
+  });
+
+  testWidgets('keeps inference failure retryable when retry fails', (
+    tester,
+  ) async {
+    final controller = FakeCameraController(
+      retryObservationFailure: const DeviceUnavailableFailure(
+        code: 'observation_retry_failed',
+      ),
+    );
+    final bloc = CameraBloc(controller)..add(const CameraStarted());
+    await _waitForState(
+      bloc,
+      (state) => state.status == CameraStatus.enabled,
+    );
+
+    await tester.pumpWidget(_TestCameraApp(bloc: bloc));
+    controller.emit(
+      const ObservationInferenceFailed(
+        DeviceUnavailableFailure(code: 'inference_failed'),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(find.text('The frame could not be analyzed.'), findsOneWidget);
+    expect(find.bySemanticsLabel('Disable camera'), findsNothing);
+
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(controller.retryObservationCalls, 2);
+    expect(find.text('The frame could not be analyzed.'), findsOneWidget);
 
     await tester.runAsync(bloc.close);
   });

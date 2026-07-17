@@ -135,6 +135,9 @@ final class YoloObservationAdapter implements ObservationController {
     return const AppSuccess<void>(null);
   }
 
+  @override
+  Future<AppResult<void>> retryObservation() => retryModel();
+
   void handleModelLoaded({
     required int revision,
     required CameraLens attachedLens,

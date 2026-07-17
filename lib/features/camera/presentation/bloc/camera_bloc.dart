@@ -88,6 +88,9 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
   int _completedDiscoveryRequest = 0;
   int _modelRetryRequest = 0;
   int _completedModelRetryRequest = 0;
+  int _observationRetryRequest = 0;
+  int _completedObservationRetryRequest = 0;
+  bool _observationRetryInProgress = false;
   bool _nativeEnabled = false;
   CameraLens? _nativeLens;
 
@@ -97,6 +100,10 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
 
   bool get _hasPendingModelRetry {
     return _completedModelRetryRequest < _modelRetryRequest;
+  }
+
+  bool get _hasPendingObservationRetry {
+    return _completedObservationRetryRequest < _observationRetryRequest;
   }
 
   bool get _shouldEnable {
@@ -118,13 +125,22 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
             modelStatus: ObservationModelStatus.preparing,
             cameraFailure: () => null,
             modelFailure: () => null,
+            observationFailure: () => null,
           ),
         );
       case CameraRetryRequested():
+        final retryObservation = state.observationFailure != null || _observationRetryInProgress;
         final retryModel = state.modelFailure != null || state.modelStatus == ObservationModelStatus.failure;
         final retryCamera = state.cameraFailure != null || state.status == CameraStatus.failure;
-        if (retryModel || !retryCamera) _requestModelRetry();
-        if (retryCamera || !retryModel) _requestDiscovery();
+        if (retryObservation) {
+          if (!_observationRetryInProgress) {
+            _observationRetryInProgress = true;
+            _requestObservationRetry();
+          }
+        } else {
+          if (retryModel || !retryCamera) _requestModelRetry();
+          if (retryCamera || !retryModel) _requestDiscovery();
+        }
         emit(
           state.copyWith(
             status: retryCamera ? CameraStatus.initializing : state.status,
@@ -132,6 +148,7 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
             modelDownloadProgress: retryModel ? () => null : null,
             cameraFailure: retryCamera ? () => null : null,
             modelFailure: retryModel ? () => null : null,
+            observationFailure: retryObservation ? () => null : null,
           ),
         );
       case CameraEnableRequested():
@@ -148,6 +165,7 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
                 : state.status,
             requestedEnabled: true,
             cameraFailure: () => null,
+            observationFailure: () => null,
           ),
         );
       case CameraDisableRequested():
@@ -191,6 +209,7 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
   ) {
     switch (event.event) {
       case ObservationModelPreparing():
+        _observationRetryInProgress = false;
         emit(
           state.copyWith(
             modelStatus: ObservationModelStatus.preparing,
@@ -198,6 +217,7 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
             detections: const [],
             diagnostics: () => null,
             modelFailure: () => null,
+            observationFailure: () => null,
           ),
         );
       case ObservationModelDownloadProgressed(:final progress):
@@ -206,6 +226,7 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
             modelStatus: ObservationModelStatus.downloading,
             modelDownloadProgress: () => progress.clamp(0, 1).toDouble(),
             modelFailure: () => null,
+            observationFailure: () => null,
           ),
         );
       case ObservationModelReady():
@@ -214,13 +235,21 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
             modelStatus: ObservationModelStatus.ready,
             modelDownloadProgress: () => null,
             modelFailure: () => null,
+            observationFailure: () => null,
           ),
         );
       case ObservationDetectionsUpdated(:final detections):
-        emit(state.copyWith(detections: detections));
+        _observationRetryInProgress = false;
+        emit(
+          state.copyWith(
+            detections: detections,
+            observationFailure: () => null,
+          ),
+        );
       case ObservationDiagnosticsUpdated(:final diagnostics):
         emit(state.copyWith(diagnostics: () => diagnostics));
       case ObservationFailed(:final failure):
+        _observationRetryInProgress = false;
         emit(
           state.copyWith(
             modelStatus: ObservationModelStatus.failure,
@@ -228,6 +257,16 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
             detections: const [],
             diagnostics: () => null,
             modelFailure: () => failure,
+            observationFailure: () => null,
+          ),
+        );
+      case ObservationInferenceFailed(:final failure):
+        _observationRetryInProgress = false;
+        emit(
+          state.copyWith(
+            detections: const [],
+            diagnostics: () => null,
+            observationFailure: () => failure,
           ),
         );
     }
@@ -241,6 +280,10 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
     _modelRetryRequest += 1;
   }
 
+  void _requestObservationRetry() {
+    _observationRetryRequest += 1;
+  }
+
   void _scheduleReconciliation() {
     if (isClosed) return;
     add(const _CameraReconciliationRequested());
@@ -250,9 +293,14 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
     _CameraReconciliationRequested event,
     Emitter<CameraState> emit,
   ) async {
-    // Concurrency policy: model retries and native camera operations are
+    // Concurrency policy: model, observation, and native camera operations are
     // serialized here while newer intent may update desired state immediately.
     while (!emit.isDone) {
+      if (_hasPendingObservationRetry) {
+        final canContinue = await _retryObservation(emit);
+        if (!canContinue) return;
+        continue;
+      }
       if (_hasPendingModelRetry) {
         final canContinue = await _retryModel(emit);
         if (!canContinue) return;
@@ -284,6 +332,27 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
           state.copyWith(
             modelStatus: ObservationModelStatus.failure,
             modelFailure: () => failure,
+          ),
+        );
+        return false;
+    }
+  }
+
+  Future<bool> _retryObservation(Emitter<CameraState> emit) async {
+    final request = _observationRetryRequest;
+    final result = await _controller.retryObservation();
+    if (emit.isDone) return false;
+    if (request != _observationRetryRequest) return true;
+    _completedObservationRetryRequest = request;
+
+    switch (result) {
+      case AppSuccess<void>():
+        return true;
+      case AppError<void>(:final failure):
+        _observationRetryInProgress = false;
+        emit(
+          state.copyWith(
+            observationFailure: () => failure,
           ),
         );
         return false;

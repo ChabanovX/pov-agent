@@ -90,7 +90,7 @@ final class CameraWidget extends StatelessWidget {
                 ),
               ),
             ),
-          ?overlay,
+          if (overlay case final overlay?) BlockSemantics(child: overlay),
         ],
       ),
     );
