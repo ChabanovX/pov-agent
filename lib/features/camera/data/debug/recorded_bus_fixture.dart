@@ -1,9 +1,13 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:meta/meta.dart';
+
 /// Bundled recorded input and the dimensions required to render it correctly.
+@visibleForTesting
 final class RecordedObservationFixture {
   /// Creates an immutable sequence of encoded frames with source dimensions.
+  @visibleForTesting
   RecordedObservationFixture({
     required List<Uint8List> frames,
     required this.frameWidth,
@@ -15,12 +19,15 @@ final class RecordedObservationFixture {
        );
 
   /// The immutable encoded frames in replay order.
+  @visibleForTesting
   final List<Uint8List> frames;
 
   /// The source frame width in pixels.
+  @visibleForTesting
   final int frameWidth;
 
   /// The source frame height in pixels.
+  @visibleForTesting
   final int frameHeight;
 }
 
@@ -28,6 +35,7 @@ final class RecordedObservationFixture {
 ///
 /// The frame bytes are bundled with the app, while the official model may
 /// still be downloaded on its first load and reused from cache afterward.
+@visibleForTesting
 RecordedObservationFixture recordedBusFixture({int frameCount = 3}) {
   final frame = base64Decode(
     _recordedBusFrameBase64.replaceAll(RegExp(r'\s'), ''),
