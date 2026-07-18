@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:meta/meta.dart';
 import 'package:some_camera_with_llm/features/camera/application/models/observation_configuration.dart';
 import 'package:some_camera_with_llm/features/camera/application/models/observation_event.dart';
 import 'package:some_camera_with_llm/features/camera/application/models/recorded_observation_frame.dart';
@@ -19,6 +20,7 @@ import 'package:ultralytics_yolo/core/yolo_model_manager.dart';
 const _recordedObservationFrameInterval = Duration(milliseconds: 200);
 
 /// A factory for periodic replay timers used by [RecordedObservationAdapter].
+@visibleForTesting
 typedef RecordedReplayTimerFactory =
     Timer Function(
       Duration interval,
@@ -52,6 +54,7 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
   ///
   /// The injected factory makes scheduling deterministic in tests without
   /// changing the adapter's drop-while-busy concurrency policy.
+  @visibleForTesting
   RecordedObservationAdapter.withTimerFactory(
     this._detector,
     this._frameSource,

@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:meta/meta.dart';
 import 'package:some_camera_with_llm/features/camera/application/ports/recorded_frame_detector.dart';
 import 'package:some_camera_with_llm/features/camera/data/datasources/recorded_frame_inference.dart';
 import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_failure_mapper.dart';
@@ -8,6 +9,7 @@ import 'package:some_camera_with_llm/features/camera/domain/entities/observation
 import 'package:some_camera_with_llm/shared/domain/app_result.dart';
 
 /// A function that returns the current UTC time.
+@visibleForTesting
 typedef UtcNow = DateTime Function();
 
 /// A detector that maps raw recorded-frame inference at the data boundary.
@@ -15,7 +17,7 @@ final class RecordedFrameDetectorImpl implements RecordedFrameDetector {
   /// Creates a detector backed by [inference].
   RecordedFrameDetectorImpl(
     RecordedFrameInference inference, {
-    UtcNow? utcNow,
+    @visibleForTesting UtcNow? utcNow,
   }) : _inference = inference,
        _utcNow = utcNow ?? _defaultUtcNow;
 

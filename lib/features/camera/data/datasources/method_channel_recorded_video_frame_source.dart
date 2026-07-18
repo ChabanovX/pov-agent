@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:meta/meta.dart';
 import 'package:some_camera_with_llm/features/camera/application/models/recorded_video_frame.dart';
 import 'package:some_camera_with_llm/features/camera/application/ports/recorded_video_frame_source.dart';
 import 'package:some_camera_with_llm/features/camera/data/mappers/recorded_video_failure_mapper.dart';
@@ -21,6 +22,7 @@ final class MethodChannelRecordedVideoFrameSource implements RecordedVideoFrameS
   /// Creates a source with an injectable platform [channel].
   ///
   /// This constructor supports deterministic platform-boundary tests.
+  @visibleForTesting
   MethodChannelRecordedVideoFrameSource.withChannel(
     MethodChannel channel, {
     required this.assetPath,
