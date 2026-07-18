@@ -1,8 +1,10 @@
 import 'package:some_camera_with_llm/features/camera/application/models/recorded_observation_frame.dart';
 
-/// Publishes the recorded frame synchronized with each inference result.
+/// A source of recorded frames synchronized with inference results.
 abstract interface class RecordedObservationFrameSource {
+  /// The latest synchronized frame, or `null` before the first result.
   RecordedObservationFrame? get currentFrame;
 
+  /// Synchronized recorded frames published after successful inference.
   Stream<RecordedObservationFrame> get frames;
 }

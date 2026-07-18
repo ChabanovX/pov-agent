@@ -4,9 +4,12 @@ import 'package:some_camera_with_llm/features/camera/domain/entities/normalized_
 import 'package:some_camera_with_llm/features/camera/domain/entities/observation_diagnostics.dart';
 import 'package:some_camera_with_llm/features/camera/domain/entities/observation_snapshot.dart';
 
+/// A mapper from YOLO plugin payloads to owned domain values.
 final class YoloResultMapper {
+  /// Creates a YOLO result mapper.
   const YoloResultMapper();
 
+  /// Valid detections mapped from [raw], excluding malformed entries.
   List<Detection> detectionsFromRaw(Iterable<Map<dynamic, dynamic>> raw) {
     return raw
         .map(YoloDetectionDto.tryFromMap)
@@ -15,6 +18,10 @@ final class YoloResultMapper {
         .toList(growable: false);
   }
 
+  /// A normalized diagnostics sample mapped from [raw].
+  ///
+  /// Missing, negative, or non-finite metrics become zero. Total processing
+  /// time is used when the native inference duration is unavailable.
   ObservationDiagnostics diagnosticsFromRaw(
     Map<String, dynamic> raw, {
     required DateTime sampledAt,
@@ -30,6 +37,7 @@ final class YoloResultMapper {
     );
   }
 
+  /// An owned inference snapshot mapped from [raw] at [observedAt].
   ObservationSnapshot snapshotFromRaw(
     Map<String, dynamic> raw, {
     required DateTime observedAt,

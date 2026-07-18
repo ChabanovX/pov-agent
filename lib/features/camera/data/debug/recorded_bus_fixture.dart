@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 /// Bundled recorded input and the dimensions required to render it correctly.
 final class RecordedObservationFixture {
+  /// Creates an immutable sequence of encoded frames with source dimensions.
   RecordedObservationFixture({
     required List<Uint8List> frames,
     required this.frameWidth,
@@ -13,12 +14,17 @@ final class RecordedObservationFixture {
          ),
        );
 
+  /// The immutable encoded frames in replay order.
   final List<Uint8List> frames;
+
+  /// The source frame width in pixels.
   final int frameWidth;
+
+  /// The source frame height in pixels.
   final int frameHeight;
 }
 
-/// Returns a local sequence derived from Ultralytics' public bus.jpg sample.
+/// A local sequence derived from Ultralytics' public bus.jpg sample.
 ///
 /// The frame bytes are bundled with the app, while the official model may
 /// still be downloaded on its first load and reused from cache afterward.

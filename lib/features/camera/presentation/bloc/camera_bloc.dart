@@ -11,37 +11,54 @@ import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_st
 import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
 import 'package:some_camera_with_llm/shared/domain/app_result.dart';
 
+/// An input accepted by [CameraBloc].
 sealed class CameraEvent {
+  /// Creates a camera event.
   const CameraEvent();
 }
 
+/// A user or lifecycle intent reconciled with the native observation session.
 sealed class CameraIntentEvent extends CameraEvent {
+  /// Creates a camera intent event.
   const CameraIntentEvent();
 }
 
+/// An intent to initialize the observation session.
 final class CameraStarted extends CameraIntentEvent {
+  /// Creates a camera-start intent.
   const CameraStarted();
 }
 
+/// An intent to retry the currently failed camera operation.
 final class CameraRetryRequested extends CameraIntentEvent {
+  /// Creates a retry intent.
   const CameraRetryRequested();
 }
 
+/// An intent to enable observation with the selected lens.
 final class CameraEnableRequested extends CameraIntentEvent {
+  /// Creates a camera-enable intent.
   const CameraEnableRequested();
 }
 
+/// An intent to keep observation disabled until the user enables it.
 final class CameraDisableRequested extends CameraIntentEvent {
+  /// Creates a camera-disable intent.
   const CameraDisableRequested();
 }
 
+/// An intent to switch to the next available camera lens.
 final class CameraLensToggleRequested extends CameraIntentEvent {
+  /// Creates a lens-toggle intent.
   const CameraLensToggleRequested();
 }
 
+/// An intent indicating whether the observation surface can use resources.
 final class CameraSurfaceActivityChanged extends CameraIntentEvent {
+  /// Creates a surface-activity intent with the supplied [active] state.
   const CameraSurfaceActivityChanged({required this.active});
 
+  /// Whether the surface is visible while the app is foregrounded.
   final bool active;
 }
 
@@ -55,12 +72,17 @@ final class _ObservationRuntimeEventReceived extends CameraEvent {
   final ObservationEvent event;
 }
 
-/// Reconciles user intent with one serialized native YOLO camera session.
+/// A state machine that reconciles intent with one observation session.
 ///
 /// Intent remains responsive while camera and model retries execute in one
 /// sequential reconciliation bucket. Native callbacks are normalized by the
 /// observation adapter before this Bloc receives them.
 final class CameraBloc extends Bloc<CameraEvent, CameraState> {
+  /// Creates a camera state machine backed by [_controller].
+  ///
+  /// Intent and runtime events are handled sequentially. Native operations are
+  /// serialized through reconciliation while newer intent updates desired
+  /// state immediately.
   CameraBloc(
     this._controller, {
     bool initiallySurfaceActive = true,

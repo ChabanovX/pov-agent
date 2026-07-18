@@ -18,20 +18,21 @@ import 'package:ultralytics_yolo/core/yolo_model_manager.dart';
 
 const _recordedObservationFrameInterval = Duration(milliseconds: 200);
 
-/// Creates the periodic replay timer used by [RecordedObservationAdapter].
+/// A factory for periodic replay timers used by [RecordedObservationAdapter].
 typedef RecordedReplayTimerFactory =
     Timer Function(
       Duration interval,
       void Function() onTick,
     );
 
-/// Pulls runtime-decoded video frames through single-image YOLO inference.
+/// An adapter that runs decoded video frames through single-image inference.
 ///
 /// Concurrency policy: drop timer ticks while frame decoding or inference is
 /// active. Disable, retry, and close revise the replay so stale work cannot
 /// publish. The adapter joins decoder/model work before disposing either
 /// native runtime.
 final class RecordedObservationAdapter implements ObservationController, RecordedObservationFrameSource {
+  /// Creates an adapter using periodic replay timers.
   factory RecordedObservationAdapter({
     required RecordedFrameDetector detector,
     required RecordedVideoFrameSource frameSource,
@@ -47,6 +48,10 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
     );
   }
 
+  /// Creates an adapter with an injectable [RecordedReplayTimerFactory].
+  ///
+  /// The injected factory makes scheduling deterministic in tests without
+  /// changing the adapter's drop-while-busy concurrency policy.
   RecordedObservationAdapter.withTimerFactory(
     this._detector,
     this._frameSource,
@@ -55,7 +60,10 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
     this.frameInterval = _recordedObservationFrameInterval,
   });
 
+  /// The model and inference configuration used by this adapter.
   final ObservationConfiguration configuration;
+
+  /// The interval between recorded frame requests.
   final Duration frameInterval;
   final RecordedFrameDetector _detector;
   final RecordedVideoFrameSource _frameSource;

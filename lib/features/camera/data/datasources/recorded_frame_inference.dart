@@ -3,20 +3,26 @@ import 'dart:typed_data';
 import 'package:some_camera_with_llm/features/camera/application/models/observation_configuration.dart';
 import 'package:ultralytics_yolo/ultralytics_yolo.dart';
 
+/// The raw native inference boundary for encoded recorded frames.
 abstract interface class RecordedFrameInference {
+  /// Loads the configured native model.
   Future<void> load();
 
+  /// Runs native inference over [encodedImage].
   Future<Map<String, dynamic>> predict(Uint8List encodedImage);
 
+  /// Releases the native inference runtime.
   Future<void> close();
 }
 
 /// Native single-image YOLO runtime used by deterministic recorded-frame tests.
 final class UltralyticsRecordedFrameInference implements RecordedFrameInference {
+  /// Creates an Ultralytics runtime with [configuration].
   UltralyticsRecordedFrameInference({
     this.configuration = ObservationConfiguration.milestoneOne,
   });
 
+  /// The model and inference configuration used by this runtime.
   final ObservationConfiguration configuration;
   YOLO? _yolo;
 

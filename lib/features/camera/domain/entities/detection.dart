@@ -2,6 +2,7 @@ import 'package:some_camera_with_llm/features/camera/domain/entities/normalized_
 
 /// One model-owned object detection without plugin or wire-format types.
 final class Detection {
+  /// Creates a detection with normalized [confidence] and [box] values.
   const Detection({
     required this.classId,
     required this.label,
@@ -12,8 +13,15 @@ final class Detection {
          'Detection confidence must be normalized.',
        );
 
+  /// The model's numeric class identifier.
   final int classId;
+
+  /// The model's human-readable class label.
   final String label;
+
+  /// The normalized model confidence from zero to one.
   final double confidence;
+
+  /// The normalized bounds of the detected object.
   final NormalizedBox box;
 }

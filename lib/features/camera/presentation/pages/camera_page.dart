@@ -7,12 +7,15 @@ import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_st
 import 'package:some_camera_with_llm/features/camera/presentation/widgets/camera_widget.dart';
 import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
 
+/// The camera tab that projects [CameraBloc] state into observation UI.
 final class CameraPage extends StatelessWidget {
+  /// Creates a camera page with an app-composed [surfaceBuilder].
   const CameraPage({
     required this.surfaceBuilder,
     super.key,
   });
 
+  /// Builds the platform-specific observation surface.
   final WidgetBuilder surfaceBuilder;
 
   @override

@@ -1,4 +1,6 @@
+/// A validated detection parsed from a YOLO plugin payload.
 final class YoloDetectionDto {
+  /// Creates a validated detection transport object.
   const YoloDetectionDto({
     required this.classId,
     required this.label,
@@ -9,14 +11,31 @@ final class YoloDetectionDto {
     required this.bottom,
   });
 
+  /// The native model class identifier.
   final int classId;
+
+  /// The native model class label.
   final String label;
+
+  /// The normalized detection confidence.
   final double confidence;
+
+  /// The normalized left edge.
   final double left;
+
+  /// The normalized top edge.
   final double top;
+
+  /// The normalized right edge.
   final double right;
+
+  /// The normalized bottom edge.
   final double bottom;
 
+  /// A validated detection parsed from [map], or `null` if malformed.
+  ///
+  /// Finite confidence and coordinate values are clamped to the normalized
+  /// range; invalid identifiers, labels, or inverted bounds are rejected.
   static YoloDetectionDto? tryFromMap(Map<dynamic, dynamic> map) {
     final classId = map['classIndex'];
     final label = map['className'];

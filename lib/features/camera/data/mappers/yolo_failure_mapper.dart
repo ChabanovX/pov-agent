@@ -6,7 +6,9 @@ import 'package:some_camera_with_llm/core/errors/failure_mapper.dart';
 import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
 import 'package:ultralytics_yolo/ultralytics_yolo.dart';
 
+/// A mapper for YOLO transport, model, and inference failures.
 final class YoloFailureMapper implements FailureMapper {
+  /// Creates a YOLO failure mapper.
   const YoloFailureMapper();
 
   @override

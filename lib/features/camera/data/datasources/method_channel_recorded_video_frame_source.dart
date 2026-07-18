@@ -7,8 +7,9 @@ import 'package:some_camera_with_llm/shared/domain/app_result.dart';
 
 const _recordedVideoChannelName = 'some_camera_with_llm/recorded_video';
 
-/// Decodes bundled video frames through the app-owned iOS platform channel.
+/// A bundled-video decoder backed by the app-owned iOS platform channel.
 final class MethodChannelRecordedVideoFrameSource implements RecordedVideoFrameSource {
+  /// Creates a source using the production recorded-video platform channel.
   factory MethodChannelRecordedVideoFrameSource({
     required String assetPath,
   }) {
@@ -19,12 +20,16 @@ final class MethodChannelRecordedVideoFrameSource implements RecordedVideoFrameS
     );
   }
 
+  /// Creates a source with an injectable channel and failure mapper.
+  ///
+  /// This constructor supports deterministic platform-boundary tests.
   MethodChannelRecordedVideoFrameSource.withChannel(
     this._channel,
     this._failureMapper, {
     required this.assetPath,
   });
 
+  /// The bundled Flutter asset decoded by the native video reader.
   final String assetPath;
   final MethodChannel _channel;
   final FailureMapper _failureMapper;

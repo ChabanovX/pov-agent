@@ -7,9 +7,12 @@ import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_result_ma
 import 'package:some_camera_with_llm/features/camera/domain/entities/observation_snapshot.dart';
 import 'package:some_camera_with_llm/shared/domain/app_result.dart';
 
+/// A function that returns the current UTC time.
 typedef UtcNow = DateTime Function();
 
+/// A detector that maps raw recorded-frame inference at the data boundary.
 final class RecordedFrameDetectorImpl implements RecordedFrameDetector {
+  /// Creates a detector from its native inference and mapping dependencies.
   RecordedFrameDetectorImpl(
     this._inference,
     this._resultMapper,
