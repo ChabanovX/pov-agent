@@ -1,9 +1,8 @@
 import 'package:flutter/widgets.dart';
 import 'package:get_it/get_it.dart';
 import 'package:some_camera_with_llm/app/bootstrap/app_runtime.dart';
-import 'package:some_camera_with_llm/app/di/observation_source.dart';
 import 'package:some_camera_with_llm/app/widgets/observation_surface.dart';
-import 'package:some_camera_with_llm/core/constants/environment_constants.dart';
+import 'package:some_camera_with_llm/core/constants/compilation_constants.dart';
 import 'package:some_camera_with_llm/features/camera/application/ports/observation_controller.dart';
 import 'package:some_camera_with_llm/features/camera/data/adapters/recorded_observation_adapter.dart';
 import 'package:some_camera_with_llm/features/camera/data/datasources/method_channel_recorded_video_frame_source.dart';
@@ -20,16 +19,14 @@ final GetIt appDependencies = GetIt.instance;
 
 const _recordedVideoAssetPath = 'assets/video/pedestrians.mp4';
 
-/// Composes and registers the runtime for [observationSource].
-///
-/// When omitted, the source is read from the compile-time
-/// `OBSERVATION_SOURCE` setting.
-AppRuntime configureDependencies({ObservationSource? observationSource}) {
-  final source = observationSource ?? ObservationSource.parse(kObservationSource);
-  final (ObservationController controller, Widget surface) = switch (source) {
-    ObservationSource.camera => _cameraObservationComposition(),
-    ObservationSource.recorded => _recordedObservationComposition(),
-  };
+/// Composes and registers the runtime selected by [CompilationConstants].
+AppRuntime configureDependencies() {
+  final (
+    ObservationController controller,
+    Widget surface,
+  ) = CompilationConstants.usesRecordedVideo
+      ? _recordedObservationComposition()
+      : _cameraObservationComposition();
   final runtime = AppRuntime(
     cameraBloc: CameraBloc(controller),
     observationSurface: surface,
@@ -47,10 +44,7 @@ AppRuntime configureDependencies({ObservationSource? observationSource}) {
     resultMapper: const YoloResultMapper(),
     failureMapper: const YoloFailureMapper(),
   );
-  return (
-    observationAdapter,
-    ObservationSurface(adapter: observationAdapter),
-  );
+  return (observationAdapter, ObservationSurface(adapter: observationAdapter));
 }
 
 (ObservationController, Widget) _recordedObservationComposition() {

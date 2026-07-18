@@ -16,4 +16,4 @@ if [ "$simulator_udid" != "$device_id" ]; then
 fi
 
 flutter test integration_test/recorded_video_decoder_test.dart -d "$device_id"
-flutter test integration_test/recorded_app_flow_test.dart -d "$device_id"
+flutter test integration_test/recorded_app_flow_test.dart -d "$device_id" --dart-define=USE_RECORDED_VIDEO=true
