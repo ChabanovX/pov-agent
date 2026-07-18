@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:some_camera_with_llm/app/app.dart';
 import 'package:some_camera_with_llm/app/di/app_di.dart';
-import 'package:some_camera_with_llm/app/di/observation_source.dart';
 import 'package:some_camera_with_llm/core/design_system/tokens/tokens.dart';
 import 'package:some_camera_with_llm/features/camera/presentation/widgets/recorded_observation_surface.dart';
 
@@ -14,21 +13,13 @@ void main() {
   testWidgets(
     'normal app renders recorded YOLO without camera hardware',
     (tester) async {
-      final runtime = configureDependencies(
-        observationSource: ObservationSource.recorded,
-      );
+      final runtime = configureDependencies();
       final semantics = tester.ensureSemantics();
       await runtime.start();
       try {
         await tester.pumpWidget(const SomeCameraWithLlmApp());
-        await _pumpUntilFound(
-          tester,
-          find.byType(RecordedObservationSurface),
-        );
-        await _pumpUntilFound(
-          tester,
-          find.bySemanticsLabel('Disable camera'),
-        );
+        await _pumpUntilFound(tester, find.byType(RecordedObservationSurface));
+        await _pumpUntilFound(tester, find.bySemanticsLabel('Disable camera'));
         final personDetection = find.semantics.byLabel(
           RegExp(r'^person \d+%$'),
         );
@@ -73,10 +64,7 @@ void main() {
         expect(find.text('Assistant placeholder'), findsOneWidget);
 
         await tester.tap(find.text('Camera'));
-        await _pumpUntilFound(
-          tester,
-          find.bySemanticsLabel('Disable camera'),
-        );
+        await _pumpUntilFound(tester, find.bySemanticsLabel('Disable camera'));
       } finally {
         semantics.dispose();
         await runtime.close();

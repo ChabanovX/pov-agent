@@ -16,7 +16,9 @@ flutter run -d <device-id>
 The recorded mode runs on the iOS Simulator without camera hardware:
 
 ```sh
-flutter run -d <simulator-id> --dart-define=OBSERVATION_SOURCE=recorded
+cp .env.example .env
+# Set USE_RECORDED_VIDEO=true in .env.
+flutter run -d <simulator-id> --dart-define-from-file=.env
 ```
 
 The ordinary app decodes a bundled MP4 at runtime through `AVAssetReader`,
@@ -27,7 +29,7 @@ building an unbounded frame queue.
 
 The iOS build bundles the pinned official `yolo26n` Core ML archive, so the
 recorded mode and its acceptance lane do not depend on a first-run download.
-Omit the define, or set `OBSERVATION_SOURCE=camera`, to restore camera input.
+Omit the define, or set `USE_RECORDED_VIDEO=false`, to restore camera input.
 
 ## Verification
 
