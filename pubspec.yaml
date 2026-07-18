@@ -63,6 +63,7 @@ flutter:
   assets:
     - assets/models/yolo26n.mlpackage.zip
     - assets/video/pedestrians.mp4
+    - assets/video/boxing.mp4
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
