@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import 'package:some_camera_with_llm/core/constants/ui_constants.dart';
 
+/// Semantic colors used by application surfaces and content.
 @immutable
 final class AppColors extends ThemeExtension<AppColors> {
+  /// Creates a semantic application color palette.
   const AppColors({
     required this.primary,
     required this.onPrimary,
@@ -14,14 +16,28 @@ final class AppColors extends ThemeExtension<AppColors> {
     required this.danger,
   });
 
+  /// The primary accent color.
   final Color primary;
+
+  /// The content color displayed over [primary].
   final Color onPrimary;
+
+  /// The application canvas color.
   final Color background;
+
+  /// The color for raised or grouped surfaces.
   final Color surface;
+
+  /// The primary content color displayed over [surface].
   final Color onSurface;
+
+  /// The color for secondary or de-emphasized content.
   final Color muted;
+
+  /// The color for destructive actions and failure states.
   final Color danger;
 
+  /// The light application color palette.
   static const light = AppColors(
     primary: Color(kColorPrimaryLightValue),
     onPrimary: Color(kColorOnPrimaryLightValue),

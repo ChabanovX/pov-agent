@@ -4,3 +4,7 @@ include:
 analyzer:
   exclude:
     - tool/flutter_agentic_harness/**
+
+linter:
+  rules:
+    public_member_api_docs: true

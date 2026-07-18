@@ -5,13 +5,15 @@ import 'package:some_camera_with_llm/features/camera/application/models/recorded
 import 'package:some_camera_with_llm/features/camera/application/ports/recorded_observation_frame_source.dart';
 import 'package:some_camera_with_llm/features/camera/domain/entities/detection.dart';
 
-/// Displays recorded frames with Flutter-rendered YOLO detections.
+/// A surface for recorded frames with Flutter-rendered YOLO detections.
 final class RecordedObservationSurface extends StatelessWidget {
+  /// Creates a surface that renders frames from [frameSource].
   const RecordedObservationSurface({
     required this.frameSource,
     super.key,
   });
 
+  /// The source of synchronized recorded frames and detections.
   final RecordedObservationFrameSource frameSource;
 
   @override

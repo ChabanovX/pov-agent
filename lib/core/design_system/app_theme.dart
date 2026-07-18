@@ -2,7 +2,9 @@ import 'package:flutter/cupertino.dart';
 
 import 'package:some_camera_with_llm/core/design_system/tokens/tokens.dart';
 
+/// Application-wide Cupertino theme factories.
 abstract final class AppTheme {
+  /// The light Cupertino application theme.
   static CupertinoThemeData light() {
     const colors = AppColors.light;
     const typography = AppTypography.regular;

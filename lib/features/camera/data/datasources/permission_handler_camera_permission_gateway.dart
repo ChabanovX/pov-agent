@@ -4,7 +4,9 @@ import 'package:some_camera_with_llm/features/camera/application/ports/camera_pe
 import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
 import 'package:some_camera_with_llm/shared/domain/app_result.dart';
 
+/// A camera permission gateway backed by `permission_handler`.
 final class PermissionHandlerCameraPermissionGateway implements CameraPermissionGateway {
+  /// Creates a gateway that normalizes plugin errors with [_failureMapper].
   const PermissionHandlerCameraPermissionGateway(this._failureMapper);
 
   final FailureMapper _failureMapper;

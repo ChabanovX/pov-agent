@@ -2,7 +2,9 @@ import 'package:flutter/services.dart';
 import 'package:some_camera_with_llm/core/errors/failure_mapper.dart';
 import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
 
+/// A mapper for recorded-video channel failures at the data boundary.
 final class RecordedVideoFailureMapper implements FailureMapper {
+  /// Creates a recorded-video failure mapper.
   const RecordedVideoFailureMapper();
 
   @override

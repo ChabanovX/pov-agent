@@ -2,14 +2,18 @@ import 'package:flutter/material.dart';
 
 import 'package:some_camera_with_llm/core/constants/ui_constants.dart';
 
+/// Semantic shadows used to express application elevation.
 @immutable
 final class AppShadows extends ThemeExtension<AppShadows> {
+  /// Creates shadow tokens from the supplied elevation levels.
   const AppShadows({
     required this.level1,
   });
 
+  /// The shadow for the first elevation level.
   final List<BoxShadow> level1;
 
+  /// The standard application shadows.
   static const regular = AppShadows(
     level1: [
       BoxShadow(

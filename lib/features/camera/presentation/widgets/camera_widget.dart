@@ -3,8 +3,9 @@ import 'package:some_camera_with_llm/core/design_system/tokens/tokens.dart';
 import 'package:some_camera_with_llm/core/l10n/app_localizations.dart';
 import 'package:some_camera_with_llm/features/camera/domain/entities/observation_diagnostics.dart';
 
-/// Displays the native YOLO surface, diagnostics, and camera controls.
+/// A layout for the observation surface, diagnostics, and camera controls.
 final class CameraWidget extends StatelessWidget {
+  /// Creates a camera layout around an app-composed observation surface.
   const CameraWidget({
     required this.surfaceBuilder,
     required this.onDisableCamera,
@@ -16,12 +17,25 @@ final class CameraWidget extends StatelessWidget {
     super.key,
   });
 
+  /// Builds the native or recorded observation surface.
   final WidgetBuilder surfaceBuilder;
+
+  /// Called when the user requests that observation be disabled.
   final VoidCallback onDisableCamera;
+
+  /// Called when the user requests the next available lens.
   final VoidCallback onToggleCamera;
+
+  /// Whether the lens-toggle control is available.
   final bool canToggleCamera;
+
+  /// Whether observation controls are visible.
   final bool controlsVisible;
+
+  /// The optional inference diagnostics displayed over the surface.
   final ObservationDiagnostics? diagnostics;
+
+  /// The optional state overlay displayed above the surface and controls.
   final Widget? overlay;
 
   @override

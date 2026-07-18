@@ -2,18 +2,26 @@ import 'package:flutter/material.dart';
 
 import 'package:some_camera_with_llm/core/constants/ui_constants.dart';
 
+/// Semantic animation durations used throughout the application.
 @immutable
 final class AppAnimations extends ThemeExtension<AppAnimations> {
+  /// Creates animation tokens from the supplied semantic durations.
   const AppAnimations({
     required this.fast,
     required this.normal,
     required this.slow,
   });
 
+  /// The duration for immediate transitions.
   final Duration fast;
+
+  /// The duration for standard transitions.
   final Duration normal;
+
+  /// The duration for emphasized transitions.
   final Duration slow;
 
+  /// The standard application animation tokens.
   static const regular = AppAnimations(
     fast: kAnimationFast,
     normal: kAnimationNormal,

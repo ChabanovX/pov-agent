@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import 'package:some_camera_with_llm/core/constants/ui_constants.dart';
 
+/// Semantic component dimensions used throughout the application.
 @immutable
 final class AppSizes extends ThemeExtension<AppSizes> {
+  /// Creates component-size tokens from the supplied dimensions.
   const AppSizes({
     required this.icon,
     required this.controlHeight,
@@ -11,11 +13,19 @@ final class AppSizes extends ThemeExtension<AppSizes> {
     required this.maxContentWidth,
   });
 
+  /// The standard icon size in logical pixels.
   final double icon;
+
+  /// The standard interactive-control height in logical pixels.
   final double controlHeight;
+
+  /// The model-download progress track width in logical pixels.
   final double progressTrackWidth;
+
+  /// The maximum readable content width in logical pixels.
   final double maxContentWidth;
 
+  /// The standard application component dimensions.
   static const regular = AppSizes(
     icon: kIconSize,
     controlHeight: kControlHeight,
