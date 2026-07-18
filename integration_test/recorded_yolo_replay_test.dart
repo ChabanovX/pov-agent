@@ -3,8 +3,6 @@ import 'package:integration_test/integration_test.dart';
 import 'package:some_camera_with_llm/core/logging/app_logger.dart';
 import 'package:some_camera_with_llm/features/camera/data/datasources/recorded_frame_inference.dart';
 import 'package:some_camera_with_llm/features/camera/data/debug/recorded_bus_fixture.dart';
-import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_failure_mapper.dart';
-import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_result_mapper.dart';
 import 'package:some_camera_with_llm/features/camera/data/repositories/recorded_frame_detector_impl.dart';
 import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
 import 'package:some_camera_with_llm/shared/domain/app_result.dart';
@@ -80,8 +78,6 @@ void main() {
 RecordedFrameDetectorImpl _createDetector() {
   return RecordedFrameDetectorImpl(
     UltralyticsRecordedFrameInference(),
-    const YoloResultMapper(),
-    const YoloFailureMapper(),
   );
 }
 

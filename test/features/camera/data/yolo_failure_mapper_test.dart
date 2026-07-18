@@ -7,10 +7,8 @@ import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
 import 'package:ultralytics_yolo/ultralytics_yolo.dart';
 
 void main() {
-  const mapper = YoloFailureMapper();
-
   test('maps transport connectivity errors to network failures', () {
-    final failure = mapper.map(
+    final failure = YoloFailureMapper.map(
       const SocketException('offline'),
       StackTrace.empty,
     );
@@ -19,7 +17,7 @@ void main() {
   });
 
   test('maps native camera permission errors to permission failures', () {
-    final failure = mapper.map(
+    final failure = YoloFailureMapper.map(
       PlatformException(
         code: 'CameraAccessDenied',
         message: 'Permission denied.',
@@ -31,11 +29,11 @@ void main() {
   });
 
   test('distinguishes model-download failures from local load failures', () {
-    final downloadFailure = mapper.map(
+    final downloadFailure = YoloFailureMapper.map(
       ModelLoadingException('Failed to download model.'),
       StackTrace.empty,
     );
-    final localFailure = mapper.map(
+    final localFailure = YoloFailureMapper.map(
       ModelLoadingException('Model metadata is invalid.'),
       StackTrace.empty,
     );

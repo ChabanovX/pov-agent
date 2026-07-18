@@ -2,7 +2,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:some_camera_with_llm/features/camera/application/models/recorded_video_frame.dart';
 import 'package:some_camera_with_llm/features/camera/data/datasources/method_channel_recorded_video_frame_source.dart';
-import 'package:some_camera_with_llm/features/camera/data/mappers/recorded_video_failure_mapper.dart';
 import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
 import 'package:some_camera_with_llm/shared/domain/app_result.dart';
 
@@ -17,7 +16,6 @@ void main() {
     calls = [];
     source = MethodChannelRecordedVideoFrameSource.withChannel(
       channel,
-      const RecordedVideoFailureMapper(),
       assetPath: 'assets/video/pedestrians.mp4',
     );
   });

@@ -1,5 +1,4 @@
 import 'package:flutter/services.dart';
-import 'package:some_camera_with_llm/core/errors/failure_mapper.dart';
 import 'package:some_camera_with_llm/features/camera/application/models/recorded_video_frame.dart';
 import 'package:some_camera_with_llm/features/camera/application/ports/recorded_video_frame_source.dart';
 import 'package:some_camera_with_llm/features/camera/data/mappers/recorded_video_failure_mapper.dart';
@@ -15,24 +14,21 @@ final class MethodChannelRecordedVideoFrameSource implements RecordedVideoFrameS
   }) {
     return MethodChannelRecordedVideoFrameSource.withChannel(
       const MethodChannel(_recordedVideoChannelName),
-      const RecordedVideoFailureMapper(),
       assetPath: assetPath,
     );
   }
 
-  /// Creates a source with an injectable channel and failure mapper.
+  /// Creates a source with an injectable platform [channel].
   ///
   /// This constructor supports deterministic platform-boundary tests.
   MethodChannelRecordedVideoFrameSource.withChannel(
-    this._channel,
-    this._failureMapper, {
+    MethodChannel channel, {
     required this.assetPath,
-  });
+  }) : _channel = channel;
 
   /// The bundled Flutter asset decoded by the native video reader.
   final String assetPath;
   final MethodChannel _channel;
-  final FailureMapper _failureMapper;
 
   @override
   Future<AppResult<RecordedVideoMetadata>> open() {
@@ -91,7 +87,7 @@ final class MethodChannelRecordedVideoFrameSource implements RecordedVideoFrameS
       return AppSuccess(await operation());
     } catch (error, stackTrace) {
       if (error is Error) rethrow;
-      return AppError(_failureMapper.map(error, stackTrace));
+      return AppError(RecordedVideoFailureMapper.map(error, stackTrace));
     }
   }
 }

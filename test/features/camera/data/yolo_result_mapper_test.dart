@@ -2,10 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_result_mapper.dart';
 
 void main() {
-  const mapper = YoloResultMapper();
-
   test('maps valid native detections into owned normalized domain values', () {
-    final detections = mapper.detectionsFromRaw([
+    final detections = YoloResultMapper.detectionsFromRaw([
       {
         'classIndex': 5,
         'className': 'bus',
@@ -28,7 +26,7 @@ void main() {
   });
 
   test('clamps finite native values and ignores malformed detections', () {
-    final detections = mapper.detectionsFromRaw([
+    final detections = YoloResultMapper.detectionsFromRaw([
       {
         'classIndex': 0,
         'className': 'person',
@@ -84,7 +82,7 @@ void main() {
   test('uses total processing time when native inference time is absent', () {
     final sampledAt = DateTime.utc(2026, 7, 16, 12);
 
-    final diagnostics = mapper.diagnosticsFromRaw(
+    final diagnostics = YoloResultMapper.diagnosticsFromRaw(
       {
         'fps': 18.5,
         'processingTimeMs': 42.0,
@@ -101,7 +99,7 @@ void main() {
   });
 
   test('normalizes non-finite native diagnostics instead of throwing', () {
-    final diagnostics = mapper.diagnosticsFromRaw(
+    final diagnostics = YoloResultMapper.diagnosticsFromRaw(
       {
         'fps': double.nan,
         'processingTimeMs': double.infinity,

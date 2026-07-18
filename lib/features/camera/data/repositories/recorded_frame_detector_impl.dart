@@ -1,8 +1,8 @@
 import 'dart:typed_data';
 
-import 'package:some_camera_with_llm/core/errors/failure_mapper.dart';
 import 'package:some_camera_with_llm/features/camera/application/ports/recorded_frame_detector.dart';
 import 'package:some_camera_with_llm/features/camera/data/datasources/recorded_frame_inference.dart';
+import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_failure_mapper.dart';
 import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_result_mapper.dart';
 import 'package:some_camera_with_llm/features/camera/domain/entities/observation_snapshot.dart';
 import 'package:some_camera_with_llm/shared/domain/app_result.dart';
@@ -12,17 +12,14 @@ typedef UtcNow = DateTime Function();
 
 /// A detector that maps raw recorded-frame inference at the data boundary.
 final class RecordedFrameDetectorImpl implements RecordedFrameDetector {
-  /// Creates a detector from its native inference and mapping dependencies.
+  /// Creates a detector backed by [inference].
   RecordedFrameDetectorImpl(
-    this._inference,
-    this._resultMapper,
-    this._failureMapper, {
+    RecordedFrameInference inference, {
     UtcNow? utcNow,
-  }) : _utcNow = utcNow ?? _defaultUtcNow;
+  }) : _inference = inference,
+       _utcNow = utcNow ?? _defaultUtcNow;
 
   final RecordedFrameInference _inference;
-  final YoloResultMapper _resultMapper;
-  final FailureMapper _failureMapper;
   final UtcNow _utcNow;
 
   @override
@@ -32,7 +29,7 @@ final class RecordedFrameDetectorImpl implements RecordedFrameDetector {
       return const AppSuccess<void>(null);
     } catch (error, stackTrace) {
       if (error is Error) rethrow;
-      return AppError(_failureMapper.map(error, stackTrace));
+      return AppError(YoloFailureMapper.map(error, stackTrace));
     }
   }
 
@@ -41,11 +38,11 @@ final class RecordedFrameDetectorImpl implements RecordedFrameDetector {
     try {
       final raw = await _inference.predict(encodedImage);
       return AppSuccess(
-        _resultMapper.snapshotFromRaw(raw, observedAt: _utcNow()),
+        YoloResultMapper.snapshotFromRaw(raw, observedAt: _utcNow()),
       );
     } catch (error, stackTrace) {
       if (error is Error) rethrow;
-      return AppError(_failureMapper.map(error, stackTrace));
+      return AppError(YoloFailureMapper.map(error, stackTrace));
     }
   }
 

@@ -8,8 +8,6 @@ import 'package:some_camera_with_llm/features/camera/data/adapters/recorded_obse
 import 'package:some_camera_with_llm/features/camera/data/datasources/method_channel_recorded_video_frame_source.dart';
 import 'package:some_camera_with_llm/features/camera/data/datasources/permission_handler_camera_permission_gateway.dart';
 import 'package:some_camera_with_llm/features/camera/data/datasources/recorded_frame_inference.dart';
-import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_failure_mapper.dart';
-import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_result_mapper.dart';
 import 'package:some_camera_with_llm/features/camera/data/repositories/recorded_frame_detector_impl.dart';
 import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_bloc.dart';
 import 'package:some_camera_with_llm/features/camera/presentation/widgets/recorded_observation_surface.dart';
@@ -38,11 +36,7 @@ AppRuntime configureDependencies() {
 
 (ObservationController, Widget) _cameraObservationComposition() {
   final observationAdapter = YoloObservationAdapter(
-    cameraPermissionGateway: const PermissionHandlerCameraPermissionGateway(
-      YoloFailureMapper(),
-    ),
-    resultMapper: const YoloResultMapper(),
-    failureMapper: const YoloFailureMapper(),
+    cameraPermissionGateway: const PermissionHandlerCameraPermissionGateway(),
   );
   return (observationAdapter, ObservationSurface(adapter: observationAdapter));
 }
@@ -50,8 +44,6 @@ AppRuntime configureDependencies() {
 (ObservationController, Widget) _recordedObservationComposition() {
   final detector = RecordedFrameDetectorImpl(
     UltralyticsRecordedFrameInference(),
-    const YoloResultMapper(),
-    const YoloFailureMapper(),
   );
   final observationAdapter = RecordedObservationAdapter(
     detector: detector,

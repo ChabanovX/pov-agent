@@ -1,14 +1,10 @@
 import 'package:flutter/services.dart';
-import 'package:some_camera_with_llm/core/errors/failure_mapper.dart';
 import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
 
 /// A mapper for recorded-video channel failures at the data boundary.
-final class RecordedVideoFailureMapper implements FailureMapper {
-  /// Creates a recorded-video failure mapper.
-  const RecordedVideoFailureMapper();
-
-  @override
-  AppFailure map(Object error, StackTrace stackTrace) {
+abstract final class RecordedVideoFailureMapper {
+  /// The normalized failure for [error] and its [stackTrace].
+  static AppFailure map(Object error, StackTrace stackTrace) {
     if (error is MissingPluginException) {
       return DeviceUnavailableFailure(
         code: 'recorded_video_decoder_unavailable',
