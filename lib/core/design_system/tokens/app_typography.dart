@@ -2,18 +2,26 @@ import 'package:flutter/material.dart';
 
 import 'package:some_camera_with_llm/core/constants/ui_constants.dart';
 
+/// Semantic text styles used throughout the application.
 @immutable
 final class AppTypography extends ThemeExtension<AppTypography> {
+  /// Creates typography tokens from the supplied semantic styles.
   const AppTypography({
     required this.title,
     required this.body,
     required this.label,
   });
 
+  /// The style for page and section titles.
   final TextStyle title;
+
+  /// The style for primary body content.
   final TextStyle body;
+
+  /// The style for controls and compact labels.
   final TextStyle label;
 
+  /// The standard application typography.
   static const regular = AppTypography(
     title: TextStyle(
       fontSize: kFontSizeTitle,

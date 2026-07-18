@@ -16,8 +16,9 @@ import 'package:some_camera_with_llm/shared/domain/app_result.dart';
 import 'package:ultralytics_yolo/core/yolo_model_manager.dart';
 import 'package:ultralytics_yolo/ultralytics_yolo.dart';
 
-/// Owns the live native YOLO surface and maps all plugin values at its boundary.
+/// An adapter that owns the live YOLO surface and maps its plugin values.
 final class YoloObservationAdapter implements ObservationController {
+  /// Creates an adapter around the live YOLO platform surface.
   YoloObservationAdapter({
     required this._cameraPermissionGateway,
     required this._resultMapper,
@@ -25,6 +26,7 @@ final class YoloObservationAdapter implements ObservationController {
     this.configuration = ObservationConfiguration.milestoneOne,
   });
 
+  /// The model and inference configuration used by this adapter.
   final ObservationConfiguration configuration;
   final CameraPermissionGateway _cameraPermissionGateway;
   final YoloResultMapper _resultMapper;
@@ -43,10 +45,13 @@ final class YoloObservationAdapter implements ObservationController {
   @override
   Stream<ObservationEvent> get events => _eventsController.stream;
 
+  /// A revision that changes whenever the native surface must be recreated.
   ValueListenable<int> get surfaceRevision => _surfaceRevision;
 
+  /// The lens that the next native surface should attach.
   CameraLens get desiredLens => _desiredLens;
 
+  /// The controller bound to the current native YOLO surface.
   YOLOViewController get viewController => _viewController;
 
   @override
@@ -138,6 +143,9 @@ final class YoloObservationAdapter implements ObservationController {
   @override
   Future<AppResult<void>> retryObservation() => retryModel();
 
+  /// Accepts a successful model callback from the current surface [revision].
+  ///
+  /// Callbacks from stale surfaces or a different [modelPath] are ignored.
   void handleModelLoaded({
     required int revision,
     required CameraLens attachedLens,
@@ -151,6 +159,7 @@ final class YoloObservationAdapter implements ObservationController {
     unawaited(_reconcileAfterPlatformAttachment(revision));
   }
 
+  /// Converts a native model [error] into an observation failure event.
   void handleModelError(Object error, StackTrace stackTrace) {
     if (_closed) return;
     _eventsController.add(
@@ -158,6 +167,7 @@ final class YoloObservationAdapter implements ObservationController {
     );
   }
 
+  /// Publishes domain detections mapped from native [results].
   void handleResults(List<YOLOResult> results) {
     if (_closed) return;
     final detections = _resultMapper.detectionsFromRaw(
@@ -171,6 +181,7 @@ final class YoloObservationAdapter implements ObservationController {
     );
   }
 
+  /// Publishes domain diagnostics mapped from native [metrics].
   void handlePerformance(YOLOPerformanceMetrics metrics) {
     if (_closed) return;
     _eventsController.add(
@@ -240,11 +251,13 @@ const _platformAttachmentAttempts = 42;
 
 /// Application-level platform surface over the native [YOLOView].
 final class ObservationSurface extends StatelessWidget {
+  /// Creates a native observation surface backed by [adapter].
   const ObservationSurface({
     required this.adapter,
     super.key,
   });
 
+  /// The adapter that owns this surface's native controller and callbacks.
   final YoloObservationAdapter adapter;
 
   @override

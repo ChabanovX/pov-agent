@@ -2,18 +2,26 @@ import 'package:flutter/material.dart';
 
 import 'package:some_camera_with_llm/core/constants/ui_constants.dart';
 
+/// Semantic corner radii used by application components.
 @immutable
 final class AppRadius extends ThemeExtension<AppRadius> {
+  /// Creates corner-radius tokens from the supplied values.
   const AppRadius({
     required this.sm,
     required this.md,
     required this.lg,
   });
 
+  /// The small component corner radius.
   final BorderRadius sm;
+
+  /// The medium component corner radius.
   final BorderRadius md;
+
+  /// The large component corner radius.
   final BorderRadius lg;
 
+  /// The standard application corner radii.
   static const regular = AppRadius(
     sm: BorderRadius.all(Radius.circular(kRadiusSm)),
     md: BorderRadius.all(Radius.circular(kRadiusMd)),

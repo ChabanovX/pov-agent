@@ -10,7 +10,9 @@ import 'package:some_camera_with_llm/features/camera/presentation/pages/camera_p
 
 enum _AppTab { camera, assistant }
 
+/// The tab router that coordinates observation-surface activity.
 final class AppRouter extends StatefulWidget {
+  /// Creates the application router.
   const AppRouter({super.key});
 
   @override

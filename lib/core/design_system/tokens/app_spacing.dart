@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import 'package:some_camera_with_llm/core/constants/ui_constants.dart';
 
+/// Semantic spacing values and insets used by application layouts.
 @immutable
 final class AppSpacing extends ThemeExtension<AppSpacing> {
+  /// Creates spacing tokens from the supplied scale.
   const AppSpacing({
     required this.xs,
     required this.sm,
@@ -12,25 +14,40 @@ final class AppSpacing extends ThemeExtension<AppSpacing> {
     required this.xl,
   });
 
+  /// The extra-small spacing value in logical pixels.
   final double xs;
+
+  /// The small spacing value in logical pixels.
   final double sm;
+
+  /// The medium spacing value in logical pixels.
   final double md;
+
+  /// The large spacing value in logical pixels.
   final double lg;
+
+  /// The extra-large spacing value in logical pixels.
   final double xl;
 
+  /// Equal page insets derived from [lg].
   EdgeInsets get page => EdgeInsets.all(lg);
 
+  /// Equal small insets derived from [sm].
   EdgeInsets get insetSm => EdgeInsets.all(sm);
 
+  /// A top-only inset derived from [md].
   EdgeInsets get topMd => EdgeInsets.only(top: md);
 
+  /// A top-only inset derived from [lg].
   EdgeInsets get topLg => EdgeInsets.only(top: lg);
 
+  /// Section insets using [lg] horizontally and [md] vertically.
   EdgeInsets get section => EdgeInsets.symmetric(
     horizontal: lg,
     vertical: md,
   );
 
+  /// The standard application spacing scale.
   static const regular = AppSpacing(
     xs: kSpacingXs,
     sm: kSpacingSm,

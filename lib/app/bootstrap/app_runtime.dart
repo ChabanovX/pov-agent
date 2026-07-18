@@ -4,22 +4,29 @@ import 'package:flutter/widgets.dart';
 import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_bloc.dart';
 import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_state.dart';
 
-/// Owns process-level application resources and their lifecycle.
+/// The process-level owner of application resources and their lifecycle.
 ///
 /// Dependency registration constructs this object without side effects. [start]
 /// begins the camera session, while [close] is the single shutdown boundary.
 final class AppRuntime with WidgetsBindingObserver {
+  /// Creates a runtime for [cameraBloc] and its [observationSurface].
   AppRuntime({
     required this.cameraBloc,
     required this.observationSurface,
   });
 
+  /// The process-owned camera state machine.
   final CameraBloc cameraBloc;
+
+  /// The platform observation surface paired with [cameraBloc].
   final Widget observationSurface;
 
   Future<void>? _startFuture;
   Future<void>? _closeFuture;
 
+  /// Starts camera discovery and waits until the initial power state settles.
+  ///
+  /// Concurrent and subsequent calls share the first startup operation.
   Future<void> start() {
     return _startFuture ??= _start();
   }
@@ -37,6 +44,9 @@ final class AppRuntime with WidgetsBindingObserver {
     unawaited(close());
   }
 
+  /// Releases process-owned resources exactly once.
+  ///
+  /// Concurrent and subsequent calls share the first shutdown operation.
   Future<void> close() {
     return _closeFuture ??= _close();
   }

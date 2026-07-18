@@ -15,10 +15,15 @@ import 'package:some_camera_with_llm/features/camera/data/repositories/recorded_
 import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_bloc.dart';
 import 'package:some_camera_with_llm/features/camera/presentation/widgets/recorded_observation_surface.dart';
 
+/// The application composition container.
 final GetIt appDependencies = GetIt.instance;
 
 const _recordedVideoAssetPath = 'assets/video/pedestrians.mp4';
 
+/// Composes and registers the runtime for [observationSource].
+///
+/// When omitted, the source is read from the compile-time
+/// `OBSERVATION_SOURCE` setting.
 AppRuntime configureDependencies({ObservationSource? observationSource}) {
   final source = observationSource ?? ObservationSource.parse(kObservationSource);
   final (ObservationController controller, Widget surface) = switch (source) {
