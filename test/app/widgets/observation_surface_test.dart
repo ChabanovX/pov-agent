@@ -2,8 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:some_camera_with_llm/app/widgets/observation_surface.dart';
 import 'package:some_camera_with_llm/features/camera/application/models/observation_event.dart';
 import 'package:some_camera_with_llm/features/camera/application/ports/camera_permission_gateway.dart';
-import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_failure_mapper.dart';
-import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_result_mapper.dart';
 import 'package:some_camera_with_llm/features/camera/domain/entities/camera_capabilities.dart';
 import 'package:some_camera_with_llm/features/camera/domain/entities/camera_lens.dart';
 import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
@@ -16,8 +14,6 @@ void main() {
     const modelId = 'yolo26n';
     final adapter = YoloObservationAdapter(
       cameraPermissionGateway: const _FakeCameraPermissionGateway(),
-      resultMapper: const YoloResultMapper(),
-      failureMapper: const YoloFailureMapper(),
     );
     await adapter.init();
 
@@ -39,8 +35,6 @@ void main() {
     const modelId = 'yolo26n';
     final adapter = YoloObservationAdapter(
       cameraPermissionGateway: const _FakeCameraPermissionGateway(),
-      resultMapper: const YoloResultMapper(),
-      failureMapper: const YoloFailureMapper(),
     );
     await adapter.init();
 
@@ -74,8 +68,6 @@ void main() {
       cameraPermissionGateway: const _FakeCameraPermissionGateway(
         AppError<void>(PermissionDeniedFailure()),
       ),
-      resultMapper: const YoloResultMapper(),
-      failureMapper: const YoloFailureMapper(),
     );
 
     final result = await adapter.init();
@@ -95,8 +87,6 @@ void main() {
     ]);
     final adapter = YoloObservationAdapter(
       cameraPermissionGateway: permissionGateway,
-      resultMapper: const YoloResultMapper(),
-      failureMapper: const YoloFailureMapper(),
     );
     expect(await adapter.init(), isA<AppSuccess<CameraCapabilities>>());
 

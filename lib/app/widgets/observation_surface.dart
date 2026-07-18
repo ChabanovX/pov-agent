@@ -3,11 +3,11 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:some_camera_with_llm/core/design_system/tokens/tokens.dart';
-import 'package:some_camera_with_llm/core/errors/failure_mapper.dart';
 import 'package:some_camera_with_llm/features/camera/application/models/observation_configuration.dart';
 import 'package:some_camera_with_llm/features/camera/application/models/observation_event.dart';
 import 'package:some_camera_with_llm/features/camera/application/ports/camera_permission_gateway.dart';
 import 'package:some_camera_with_llm/features/camera/application/ports/observation_controller.dart';
+import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_failure_mapper.dart';
 import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_result_mapper.dart';
 import 'package:some_camera_with_llm/features/camera/domain/entities/camera_capabilities.dart';
 import 'package:some_camera_with_llm/features/camera/domain/entities/camera_lens.dart';
@@ -21,16 +21,12 @@ final class YoloObservationAdapter implements ObservationController {
   /// Creates an adapter around the live YOLO platform surface.
   YoloObservationAdapter({
     required this._cameraPermissionGateway,
-    required this._resultMapper,
-    required this._failureMapper,
     this.configuration = ObservationConfiguration.milestoneOne,
   });
 
   /// The model and inference configuration used by this adapter.
   final ObservationConfiguration configuration;
   final CameraPermissionGateway _cameraPermissionGateway;
-  final YoloResultMapper _resultMapper;
-  final FailureMapper _failureMapper;
   final YOLOViewController _viewController = YOLOViewController();
   final StreamController<ObservationEvent> _eventsController = StreamController<ObservationEvent>.broadcast();
   final ValueNotifier<int> _surfaceRevision = ValueNotifier(0);
@@ -163,14 +159,14 @@ final class YoloObservationAdapter implements ObservationController {
   void handleModelError(Object error, StackTrace stackTrace) {
     if (_closed) return;
     _eventsController.add(
-      ObservationFailed(_failureMapper.map(error, stackTrace)),
+      ObservationFailed(YoloFailureMapper.map(error, stackTrace)),
     );
   }
 
   /// Publishes domain detections mapped from native [results].
   void handleResults(List<YOLOResult> results) {
     if (_closed) return;
-    final detections = _resultMapper.detectionsFromRaw(
+    final detections = YoloResultMapper.detectionsFromRaw(
       results.map((result) => result.toMap()),
     );
     _eventsController.add(
@@ -186,7 +182,7 @@ final class YoloObservationAdapter implements ObservationController {
     if (_closed) return;
     _eventsController.add(
       ObservationDiagnosticsUpdated(
-        _resultMapper.diagnosticsFromRaw(
+        YoloResultMapper.diagnosticsFromRaw(
           metrics.toMap(),
           sampledAt: DateTime.now().toUtc(),
         ),

@@ -1,15 +1,13 @@
 import 'package:permission_handler/permission_handler.dart';
-import 'package:some_camera_with_llm/core/errors/failure_mapper.dart';
 import 'package:some_camera_with_llm/features/camera/application/ports/camera_permission_gateway.dart';
+import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_failure_mapper.dart';
 import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
 import 'package:some_camera_with_llm/shared/domain/app_result.dart';
 
 /// A camera permission gateway backed by `permission_handler`.
 final class PermissionHandlerCameraPermissionGateway implements CameraPermissionGateway {
-  /// Creates a gateway that normalizes plugin errors with [_failureMapper].
-  const PermissionHandlerCameraPermissionGateway(this._failureMapper);
-
-  final FailureMapper _failureMapper;
+  /// Creates a camera permission gateway.
+  const PermissionHandlerCameraPermissionGateway();
 
   @override
   Future<AppResult<void>> request() async {
@@ -23,7 +21,7 @@ final class PermissionHandlerCameraPermissionGateway implements CameraPermission
       );
     } catch (error, stackTrace) {
       if (error is Error) rethrow;
-      return AppError<void>(_failureMapper.map(error, stackTrace));
+      return AppError<void>(YoloFailureMapper.map(error, stackTrace));
     }
   }
 }

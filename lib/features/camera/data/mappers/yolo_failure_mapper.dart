@@ -2,17 +2,13 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
-import 'package:some_camera_with_llm/core/errors/failure_mapper.dart';
 import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
 import 'package:ultralytics_yolo/ultralytics_yolo.dart';
 
 /// A mapper for YOLO transport, model, and inference failures.
-final class YoloFailureMapper implements FailureMapper {
-  /// Creates a YOLO failure mapper.
-  const YoloFailureMapper();
-
-  @override
-  AppFailure map(Object error, StackTrace stackTrace) {
+abstract final class YoloFailureMapper {
+  /// The normalized failure for [error] and its [stackTrace].
+  static AppFailure map(Object error, StackTrace stackTrace) {
     if (error is SocketException || error is HttpException || error is TimeoutException) {
       return NetworkFailure(
         message: error.toString(),
