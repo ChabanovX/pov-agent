@@ -14,4 +14,11 @@ For each candidate:
 6. Recalculate severity and confidence from the common contract.
 7. Merge duplicates that describe the same invariant and consequence.
 
+For readability candidates, reject findings based only on size, counts,
+subjective style, or a generic request to split a class. Confirm that a cold-read
+ambiguity exists at named symbols, that it creates a credible future race, leak,
+invalid transition, or cleanup-order failure, and that the suggested direction
+preserves explicit state and resource ownership. An extraction that merely
+hides shared mutable state is not an acceptable direction.
+
 Return `accepted`, `rejected`, and `merged` lists. Give a concise evidence-based reason for every rejection or downgrade. Do not add unrelated speculative findings during verification.

@@ -1,6 +1,6 @@
 ---
 name: harness-review
-description: Review a Flutter branch or working tree against the installed Flutter Agentic Harness contract with specialized read-only subagents for boundaries, async state, UI and navigation, tests, composition, comments, and finding verification. Use only when the caller explicitly invokes $harness-review.
+description: Review a Flutter branch or working tree against the installed Flutter Agentic Harness contract with specialized read-only subagents for boundaries, async state, UI and navigation, tests, composition, readability, comments, and finding verification. Use only when the caller explicitly invokes $harness-review.
 ---
 
 <!-- flutter-agentic-harness-managed -->
@@ -42,7 +42,12 @@ Use project-scoped custom agents when the runtime exposes them. Otherwise spawn 
 | `harness-ui-navigation` | [references/ui-navigation.md](references/ui-navigation.md) | Presentation, widget, page, router, design-system, asset, or localization code changed |
 | `harness-tests-behavior` | [references/tests-behavior.md](references/tests-behavior.md) | Product behavior or its tests changed |
 | `harness-composition` | [references/composition.md](references/composition.md) | DI, bootstrap, router composition, core/shared contracts, repository registration, or dependencies changed |
+| `harness-readability` | [references/readability.md](references/readability.md) | A changed production Dart class owns mutable state or lifecycle work and has at least 350 lines, 18 methods, 12 instance fields, or 3 owned async/lifecycle mechanisms; also select below those signals when the diff adds coupled startup, retry, invalidation, or shutdown orchestration |
 | `harness-comments-policy` | [references/comments-policy.md](references/comments-policy.md) | The diff changes comments, Dartdoc, TODOs, suppressions, or ARB metadata |
+
+Readability counts apply to the full changed class, not only added lines. They
+are reviewer-selection signals, never automatic findings. Exclude generated
+files.
 
 Select every applicable role, but keep at most three worker agents active at once. Use direct child agents only and forbid workers from spawning descendants. Run additional roles in later waves. When subagents are unavailable, perform the selected role passes sequentially in the main thread.
 
