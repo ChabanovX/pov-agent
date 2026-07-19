@@ -30,11 +30,11 @@ external Pointer<PovLlamaRuntime> _create(
   int errorBufferLength,
 );
 
-@Native<Void Function(Pointer<PovLlamaRuntime>)>(
+@Native<Int32 Function(Pointer<PovLlamaRuntime>)>(
   symbol: 'pov_llama_destroy',
   assetId: _assetId,
 )
-external void _destroy(Pointer<PovLlamaRuntime> runtime);
+external int _destroy(Pointer<PovLlamaRuntime> runtime);
 
 @Native<
   Int32 Function(
@@ -74,11 +74,11 @@ external int _nextToken(
   Pointer<Int32> outputLength,
 );
 
-@Native<Void Function(Pointer<PovLlamaRuntime>)>(
+@Native<Int32 Function(Pointer<PovLlamaRuntime>)>(
   symbol: 'pov_llama_cancel_generation',
   assetId: _assetId,
 )
-external void _cancelGeneration(Pointer<PovLlamaRuntime> runtime);
+external int _cancelGeneration(Pointer<PovLlamaRuntime> runtime);
 
 @Native<Int32 Function(Pointer<PovLlamaRuntime>, Pointer<Uint8>, Int32)>(
   symbol: 'pov_llama_copy_error',
@@ -120,7 +120,7 @@ abstract final class LlamaBridgeBindings {
   }
 
   /// Frees the native model, context, sampler, and backend resources.
-  static void destroy(Pointer<PovLlamaRuntime> runtime) => _destroy(runtime);
+  static int destroy(Pointer<PovLlamaRuntime> runtime) => _destroy(runtime);
 
   /// Tokenizes and decodes a prompt, then initializes its sampler.
   static int beginGeneration(
@@ -161,8 +161,8 @@ abstract final class LlamaBridgeBindings {
   }
 
   /// Ends the active generation and clears its native sampling state.
-  static void cancelGeneration(Pointer<PovLlamaRuntime> runtime) {
-    _cancelGeneration(runtime);
+  static int cancelGeneration(Pointer<PovLlamaRuntime> runtime) {
+    return _cancelGeneration(runtime);
   }
 
   /// Copies the latest native diagnostic into [errorBuffer].

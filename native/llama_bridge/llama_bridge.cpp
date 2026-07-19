@@ -127,14 +127,42 @@ void release_sampler(pov_llama_runtime* runtime) {
   runtime->max_tokens = 0;
 }
 
-void release_sampler_noexcept(pov_llama_runtime* runtime) noexcept {
+int32_t quiesce_generation(
+    pov_llama_runtime* runtime,
+    bool clear_memory) noexcept {
   if (runtime == nullptr) {
-    return;
+    return POV_LLAMA_OK;
   }
   try {
+    if (runtime->context != nullptr) {
+      // llama_decode may return before Metal completes its command buffer. The
+      // Dart generation contract cannot report completion or cancellation
+      // until that final native step is safe to release or reuse.
+      llama_synchronize(runtime->context);
+    }
     release_sampler(runtime);
+    if (clear_memory && runtime->context != nullptr) {
+      llama_memory_clear(llama_get_memory(runtime->context), true);
+    }
+    return POV_LLAMA_OK;
+  } catch (const std::exception& error) {
+    set_unexpected_error(runtime, error.what());
   } catch (...) {
+    set_unexpected_error(
+        runtime,
+        "Unexpected exception while quiescing native generation");
   }
+  return POV_LLAMA_UNEXPECTED;
+}
+
+int32_t quiesce_then_return(
+    pov_llama_runtime* runtime,
+    bool clear_memory,
+    int32_t status_after_success) noexcept {
+  const int32_t cleanup_status = quiesce_generation(runtime, clear_memory);
+  return cleanup_status == POV_LLAMA_OK
+      ? status_after_success
+      : cleanup_status;
 }
 
 bool add_sampler(pov_llama_runtime* runtime, llama_sampler* sampler) {
@@ -277,7 +305,7 @@ pov_llama_runtime* pov_llama_create_impl(
     return nullptr;
   } catch (...) {
     if (runtime != nullptr) {
-      release_sampler(runtime);
+      (void) quiesce_generation(runtime, false);
       release_loaded_model(runtime);
       delete runtime;
     }
@@ -288,14 +316,18 @@ pov_llama_runtime* pov_llama_create_impl(
   }
 }
 
-void pov_llama_destroy_impl(pov_llama_runtime* runtime) {
+int32_t pov_llama_destroy_impl(pov_llama_runtime* runtime) {
   if (runtime == nullptr) {
-    return;
+    return POV_LLAMA_OK;
   }
-  release_sampler(runtime);
+  const int32_t cleanup_status = quiesce_generation(runtime, false);
+  if (cleanup_status != POV_LLAMA_OK) {
+    return cleanup_status;
+  }
   release_loaded_model(runtime);
-  delete runtime;
   llama_backend_free();
+  delete runtime;
+  return POV_LLAMA_OK;
 }
 
 int32_t pov_llama_begin_generation_impl(
@@ -318,8 +350,10 @@ int32_t pov_llama_begin_generation_impl(
     return POV_LLAMA_NOT_READY;
   }
 
-  release_sampler(runtime);
-  llama_memory_clear(llama_get_memory(runtime->context), true);
+  const int32_t previous_generation_status = quiesce_generation(runtime, true);
+  if (previous_generation_status != POV_LLAMA_OK) {
+    return previous_generation_status;
+  }
 
   std::vector<llama_token> prompt_tokens;
   const int32_t tokenize_status = tokenize_prompt(runtime, prompt, &prompt_tokens);
@@ -334,7 +368,7 @@ int32_t pov_llama_begin_generation_impl(
 
   const int32_t decode_status = decode_prompt(runtime, prompt_tokens);
   if (decode_status != POV_LLAMA_OK) {
-    return decode_status;
+    return quiesce_then_return(runtime, true, decode_status);
   }
 
   auto sampler_parameters = llama_sampler_chain_default_params();
@@ -342,15 +376,20 @@ int32_t pov_llama_begin_generation_impl(
   runtime->sampler = llama_sampler_chain_init(sampler_parameters);
   if (runtime->sampler == nullptr) {
     set_error(runtime, "Could not allocate the llama.cpp sampler");
-    return POV_LLAMA_SAMPLER_CREATE_FAILED;
+    return quiesce_then_return(
+        runtime,
+        true,
+        POV_LLAMA_SAMPLER_CREATE_FAILED);
   }
   if (!add_sampler(runtime, llama_sampler_init_top_k(top_k)) ||
       !add_sampler(runtime, llama_sampler_init_top_p(top_p, 1)) ||
       !add_sampler(runtime, llama_sampler_init_min_p(min_p, 1)) ||
       !add_sampler(runtime, llama_sampler_init_temp(temperature)) ||
       !add_sampler(runtime, llama_sampler_init_dist(seed))) {
-    release_sampler(runtime);
-    return POV_LLAMA_SAMPLER_CREATE_FAILED;
+    return quiesce_then_return(
+        runtime,
+        true,
+        POV_LLAMA_SAMPLER_CREATE_FAILED);
   }
 
   runtime->max_tokens = max_tokens;
@@ -376,8 +415,7 @@ int32_t pov_llama_next_token_impl(
     return POV_LLAMA_NOT_READY;
   }
   if (runtime->generated_tokens >= runtime->max_tokens) {
-    release_sampler(runtime);
-    return POV_LLAMA_COMPLETE;
+    return quiesce_then_return(runtime, false, POV_LLAMA_COMPLETE);
   }
 
   const llama_token token = llama_sampler_sample(
@@ -385,8 +423,7 @@ int32_t pov_llama_next_token_impl(
       runtime->context,
       -1);
   if (llama_vocab_is_eog(runtime->vocabulary, token)) {
-    release_sampler(runtime);
-    return POV_LLAMA_COMPLETE;
+    return quiesce_then_return(runtime, false, POV_LLAMA_COMPLETE);
   }
 
   const bool render_special_tokens = false;
@@ -399,16 +436,17 @@ int32_t pov_llama_next_token_impl(
       render_special_tokens);
   if (piece_length < 0 || piece_length > output_buffer_length) {
     set_error(runtime, "The token piece exceeded the bridge buffer");
-    release_sampler(runtime);
-    return POV_LLAMA_BUFFER_TOO_SMALL;
+    return quiesce_then_return(
+        runtime,
+        false,
+        POV_LLAMA_BUFFER_TOO_SMALL);
   }
 
   llama_token decoded_token = token;
   const llama_batch batch = llama_batch_get_one(&decoded_token, 1);
   if (llama_decode(runtime->context, batch) != 0) {
     set_error(runtime, "llama.cpp failed while decoding a generated token");
-    release_sampler(runtime);
-    return POV_LLAMA_DECODE_FAILED;
+    return quiesce_then_return(runtime, false, POV_LLAMA_DECODE_FAILED);
   }
 
   runtime->generated_tokens += 1;
@@ -416,14 +454,11 @@ int32_t pov_llama_next_token_impl(
   return POV_LLAMA_OK;
 }
 
-void pov_llama_cancel_generation_impl(pov_llama_runtime* runtime) {
+int32_t pov_llama_cancel_generation_impl(pov_llama_runtime* runtime) {
   if (runtime == nullptr) {
-    return;
+    return POV_LLAMA_OK;
   }
-  release_sampler(runtime);
-  if (runtime->context != nullptr) {
-    llama_memory_clear(llama_get_memory(runtime->context), true);
-  }
+  return quiesce_generation(runtime, true);
 }
 
 int32_t pov_llama_copy_error_impl(
@@ -469,12 +504,17 @@ pov_llama_runtime* pov_llama_create(
   return nullptr;
 }
 
-void pov_llama_destroy(pov_llama_runtime* runtime) {
+int32_t pov_llama_destroy(pov_llama_runtime* runtime) {
   try {
-    pov_llama_destroy_impl(runtime);
+    return pov_llama_destroy_impl(runtime);
+  } catch (const std::exception& error) {
+    set_unexpected_error(runtime, error.what());
   } catch (...) {
-    // Destruction is terminal and the exported C ABI cannot report failures.
+    set_unexpected_error(
+        runtime,
+        "Unexpected exception while destroying the llama.cpp runtime");
   }
+  return POV_LLAMA_UNEXPECTED;
 }
 
 int32_t pov_llama_begin_generation(
@@ -497,10 +537,10 @@ int32_t pov_llama_begin_generation(
         min_p,
         seed);
   } catch (const std::exception& error) {
-    release_sampler_noexcept(runtime);
+    (void) quiesce_generation(runtime, true);
     set_unexpected_error(runtime, error.what());
   } catch (...) {
-    release_sampler_noexcept(runtime);
+    (void) quiesce_generation(runtime, true);
     set_unexpected_error(runtime, "Unexpected exception while starting generation");
   }
   return POV_LLAMA_UNEXPECTED;
@@ -518,10 +558,10 @@ int32_t pov_llama_next_token(
         output_buffer_length,
         output_length);
   } catch (const std::exception& error) {
-    release_sampler_noexcept(runtime);
+    (void) quiesce_generation(runtime, true);
     set_unexpected_error(runtime, error.what());
   } catch (...) {
-    release_sampler_noexcept(runtime);
+    (void) quiesce_generation(runtime, true);
     set_unexpected_error(runtime, "Unexpected exception while decoding a token");
   }
   if (output_length != nullptr) {
@@ -530,14 +570,15 @@ int32_t pov_llama_next_token(
   return POV_LLAMA_UNEXPECTED;
 }
 
-void pov_llama_cancel_generation(pov_llama_runtime* runtime) {
+int32_t pov_llama_cancel_generation(pov_llama_runtime* runtime) {
   try {
-    pov_llama_cancel_generation_impl(runtime);
+    return pov_llama_cancel_generation_impl(runtime);
   } catch (const std::exception& error) {
     set_unexpected_error(runtime, error.what());
   } catch (...) {
     set_unexpected_error(runtime, "Unexpected exception while cancelling generation");
   }
+  return POV_LLAMA_UNEXPECTED;
 }
 
 int32_t pov_llama_copy_error(

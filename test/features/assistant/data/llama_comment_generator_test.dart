@@ -62,6 +62,33 @@ void main() {
     expect(worker.runtimeConfiguration, same(runtimeConfiguration));
   });
 
+  test('reports the loaded native backend until the model unloads', () async {
+    worker.usesGpu = true;
+
+    expect(generator.loadedModelUsesGpu, isNull);
+    expect(generator.lastUnloadSucceeded, isNull);
+    expect(await generator.loadModel(artifact), isA<AppSuccess<void>>());
+    expect(generator.loadedModelUsesGpu, isTrue);
+
+    await generator.unload();
+
+    expect(generator.loadedModelUsesGpu, isNull);
+    expect(generator.lastUnloadSucceeded, isTrue);
+  });
+
+  test('records a propagated native cleanup failure for diagnostics', () async {
+    expect(await generator.loadModel(artifact), isA<AppSuccess<void>>());
+    worker.unloadError = const LlamaWorkerException(
+      status: -10,
+      message: 'native quiescence failed',
+    );
+
+    await generator.unload();
+
+    expect(generator.loadedModelUsesGpu, isNull);
+    expect(generator.lastUnloadSucceeded, isFalse);
+  });
+
   test('normalizes native model load failures', () async {
     worker.loadError = const LlamaWorkerException(
       status: -2,
@@ -82,6 +109,7 @@ void main() {
         ),
       ),
     );
+    expect(generator.loadedModelUsesGpu, isNull);
   });
 
   test('recreates the worker after its initial spawn fails', () async {
@@ -108,32 +136,35 @@ void main() {
     expect(worker.loadCalls, 1);
   });
 
-  test('retires a failed model runtime before retrying on a new worker', () async {
-    await generator.close();
-    final failedWorker = _FakeLlamaWorker()
-      ..loadError = const LlamaWorkerException(
-        status: -2,
-        message: 'model load failed',
+  test(
+    'retires a failed model runtime before retrying on a new worker',
+    () async {
+      await generator.close();
+      final failedWorker = _FakeLlamaWorker()
+        ..loadError = const LlamaWorkerException(
+          status: -2,
+          message: 'model load failed',
+        );
+      final recoveredWorker = _FakeLlamaWorker();
+      var spawnAttempts = 0;
+      generator = LlamaCommentGenerator(
+        createWorker: () async {
+          spawnAttempts += 1;
+          return spawnAttempts == 1 ? failedWorker : recoveredWorker;
+        },
+        runtimeConfiguration: runtimeConfiguration,
+        randomSeed: 42,
       );
-    final recoveredWorker = _FakeLlamaWorker();
-    var spawnAttempts = 0;
-    generator = LlamaCommentGenerator(
-      createWorker: () async {
-        spawnAttempts += 1;
-        return spawnAttempts == 1 ? failedWorker : recoveredWorker;
-      },
-      runtimeConfiguration: runtimeConfiguration,
-      randomSeed: 42,
-    );
 
-    final first = await generator.loadModel(artifact);
-    final retry = await generator.loadModel(artifact);
+      final first = await generator.loadModel(artifact);
+      final retry = await generator.loadModel(artifact);
 
-    expect(first, isA<AppError<void>>());
-    expect(retry, isA<AppSuccess<void>>());
-    expect(failedWorker.closeCalls, 1);
-    expect(recoveredWorker.loadCalls, 1);
-  });
+      expect(first, isA<AppError<void>>());
+      expect(retry, isA<AppSuccess<void>>());
+      expect(failedWorker.closeCalls, 1);
+      expect(recoveredWorker.loadCalls, 1);
+    },
+  );
 
   test('persistent worker close is idempotent and terminal', () async {
     final nativeWorker = await NativeLlamaInferenceWorker.spawn();
@@ -159,6 +190,20 @@ void main() {
 
     closeGate.complete();
     await Future.wait([first, second]);
+  });
+
+  test('retries a worker close that retained native ownership', () async {
+    await generator.loadModel(artifact);
+    final closeFailure = Exception('native destroy failed');
+    worker.closeErrors.add(closeFailure);
+
+    await expectLater(generator.close(), throwsA(same(closeFailure)));
+    expect(worker.closeCalls, 1);
+
+    await generator.close();
+    await generator.close();
+
+    expect(worker.closeCalls, 2);
   });
 
   test(
@@ -238,37 +283,43 @@ void main() {
     await cancelTask;
     await chunksDone;
     expect(cancelSettled, isTrue);
-    expect((await handle.completion as AppSuccess<String>).value, 'Visible prefix');
-  });
-
-  test('keeps chunk stream clean and reports generation failure once', () async {
-    await generator.loadModel(artifact);
-    final nativeGeneration = _FakeWorkerGeneration();
-    worker.nextGeneration = nativeGeneration;
-    final handle = _successHandle(
-      await generator.generate(
-        CommentGenerationRequest(
-          prompt: 'prompt',
-          options: _testGenerationOptions,
-        ),
-      ),
-    );
-
-    final chunksExpectation = expectLater(handle.chunks, emitsDone);
-    await nativeGeneration.fail(
-      const LlamaWorkerException(status: -9, message: 'decode failed'),
-    );
-
-    await chunksExpectation;
     expect(
-      await handle.completion,
-      isA<AppError<String>>().having(
-        (result) => result.failure.code,
-        'code',
-        'assistant_generation',
-      ),
+      (await handle.completion as AppSuccess<String>).value,
+      'Visible prefix',
     );
   });
+
+  test(
+    'keeps chunk stream clean and reports generation failure once',
+    () async {
+      await generator.loadModel(artifact);
+      final nativeGeneration = _FakeWorkerGeneration();
+      worker.nextGeneration = nativeGeneration;
+      final handle = _successHandle(
+        await generator.generate(
+          CommentGenerationRequest(
+            prompt: 'prompt',
+            options: _testGenerationOptions,
+          ),
+        ),
+      );
+
+      final chunksExpectation = expectLater(handle.chunks, emitsDone);
+      await nativeGeneration.fail(
+        const LlamaWorkerException(status: -9, message: 'decode failed'),
+      );
+
+      await chunksExpectation;
+      expect(
+        await handle.completion,
+        isA<AppError<String>>().having(
+          (result) => result.failure.code,
+          'code',
+          'assistant_generation',
+        ),
+      );
+    },
+  );
 }
 
 GenerationHandle _successHandle(AppResult<GenerationHandle> result) {
@@ -286,10 +337,13 @@ final class _FakeLlamaWorker implements LlamaInferenceWorker {
   String? loadedPath;
   LlamaRuntimeConfiguration? runtimeConfiguration;
   Exception? loadError;
+  Exception? unloadError;
   Completer<void>? closeGate;
+  final List<Exception> closeErrors = [];
   _FakeWorkerGeneration? nextGeneration;
   String? generatedPrompt;
   LlamaSamplingConfiguration? sampling;
+  bool usesGpu = false;
 
   @override
   Future<LlamaWorkerLoadResult> load(
@@ -301,7 +355,7 @@ final class _FakeLlamaWorker implements LlamaInferenceWorker {
     runtimeConfiguration = configuration;
     final error = loadError;
     if (error != null) throw error;
-    return const LlamaWorkerLoadResult(usesGpu: false);
+    return LlamaWorkerLoadResult(usesGpu: usesGpu);
   }
 
   @override
@@ -315,11 +369,15 @@ final class _FakeLlamaWorker implements LlamaInferenceWorker {
   }
 
   @override
-  Future<void> unload() async {}
+  Future<void> unload() async {
+    final error = unloadError;
+    if (error != null) throw error;
+  }
 
   @override
   Future<void> close() async {
     closeCalls += 1;
+    if (closeErrors.isNotEmpty) throw closeErrors.removeAt(0);
     await closeGate?.future;
   }
 }
