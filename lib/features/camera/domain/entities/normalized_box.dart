@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 /// Resolution-independent detection bounds in the observed image.
 final class NormalizedBox {
   /// Creates normalized bounds with ordered horizontal and vertical edges.
@@ -42,4 +44,31 @@ final class NormalizedBox {
 
   /// The box height as a fraction of image height.
   double get height => bottom - top;
+
+  /// The horizontal center as a fraction of image width.
+  double get centerX => left + width / 2;
+
+  /// The vertical center as a fraction of image height.
+  double get centerY => top + height / 2;
+
+  /// The normalized area occupied by the box.
+  double get area => width * height;
+
+  /// Returns the intersection-over-union overlap with [other].
+  double intersectionOverUnion(NormalizedBox other) {
+    final intersectionWidth = math.max(
+      0,
+      math.min(right, other.right) - math.max(left, other.left),
+    );
+    final intersectionHeight = math.max(
+      0,
+      math.min(bottom, other.bottom) - math.max(top, other.top),
+    );
+    final intersectionArea = intersectionWidth * intersectionHeight;
+    final unionArea = area + other.area - intersectionArea;
+    if (unionArea == 0) {
+      return 0;
+    }
+    return intersectionArea / unionArea;
+  }
 }
