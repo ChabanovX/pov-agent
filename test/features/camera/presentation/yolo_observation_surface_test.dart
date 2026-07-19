@@ -22,8 +22,8 @@ void main() {
     addTearDown(viewController.dispose);
 
     var desiredLens = CameraLens.front;
-    List<YOLOResult>? receivedResults;
-    YOLOPerformanceMetrics? receivedPerformance;
+    (int, List<YOLOResult>)? receivedResults;
+    (int, YOLOPerformanceMetrics)? receivedPerformance;
     (int, CameraLens, String)? receivedModelLoad;
     Object? receivedModelError;
     StackTrace? receivedModelErrorStackTrace;
@@ -32,8 +32,12 @@ void main() {
       surfaceRevision: surfaceRevision,
       desiredLens: () => desiredLens,
       viewController: viewController,
-      onResults: (results) => receivedResults = results,
-      onPerformance: (performance) => receivedPerformance = performance,
+      onResults: ({required revision, required results}) {
+        receivedResults = (revision, results);
+      },
+      onPerformance: ({required revision, required performance}) {
+        receivedPerformance = (revision, performance);
+      },
       onModelLoaded:
           ({
             required revision,
@@ -42,10 +46,16 @@ void main() {
           }) {
             receivedModelLoad = (revision, attachedLens, modelPath);
           },
-      onModelError: (error, stackTrace) {
-        receivedModelError = error;
-        receivedModelErrorStackTrace = stackTrace;
-      },
+      onModelError:
+          ({
+            required revision,
+            required error,
+            required stackTrace,
+          }) {
+            expect(revision, 4);
+            receivedModelError = error;
+            receivedModelErrorStackTrace = stackTrace;
+          },
     );
 
     late BuildContext buildContext;
@@ -93,8 +103,10 @@ void main() {
     yoloView.onModelLoad!('test-model', YOLOTask.detect);
     yoloView.onModelError!(modelError, 'test-model', YOLOTask.detect);
 
-    expect(receivedResults, same(results));
-    expect(receivedPerformance, same(performance));
+    expect(receivedResults?.$1, 4);
+    expect(receivedResults?.$2, same(results));
+    expect(receivedPerformance?.$1, 4);
+    expect(receivedPerformance?.$2, same(performance));
     expect(receivedModelLoad, (4, CameraLens.front, 'test-model'));
     expect(receivedModelError, same(modelError));
     expect(receivedModelErrorStackTrace, isNotNull);

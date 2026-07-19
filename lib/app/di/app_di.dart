@@ -3,13 +3,16 @@ import 'package:pov_agent/app/bootstrap/app_runtime.dart';
 import 'package:pov_agent/core/constants/compilation_constants.dart';
 import 'package:pov_agent/features/camera/application/ports/observation_controller.dart';
 import 'package:pov_agent/features/camera/application/ports/recorded_observation_frame_source.dart';
+import 'package:pov_agent/features/camera/application/services/observation_scene_session.dart';
 import 'package:pov_agent/features/camera/data/adapters/recorded_observation_adapter.dart';
 import 'package:pov_agent/features/camera/data/adapters/yolo_observation_adapter.dart';
 import 'package:pov_agent/features/camera/data/datasources/method_channel_recorded_video_frame_source.dart';
 import 'package:pov_agent/features/camera/data/datasources/permission_handler_camera_permission_gateway.dart';
 import 'package:pov_agent/features/camera/data/datasources/recorded_frame_inference.dart';
 import 'package:pov_agent/features/camera/data/repositories/recorded_frame_detector_impl.dart';
+import 'package:pov_agent/features/camera/domain/services/scene_stabilizer.dart';
 import 'package:pov_agent/features/camera/presentation/bloc/camera_bloc.dart';
+import 'package:pov_agent/shared/domain/scene_source.dart';
 
 /// The application composition container.
 final GetIt appDependencies = GetIt.instance;
@@ -21,12 +24,18 @@ AppRuntime configureDependencies() {
   final controller = CompilationConstants.usesRecordedVideo
       ? _registerRecordedObservation()
       : _registerCameraObservation();
+  final sceneSession = ObservationSceneSession(
+    controller: controller,
+    stabilizer: SceneStabilizer(),
+  );
   final runtime = AppRuntime(
     cameraBloc: CameraBloc(controller),
+    sceneSession: sceneSession,
   );
 
   appDependencies
     ..registerSingleton<ObservationController>(controller)
+    ..registerSingleton<SceneSource>(sceneSession)
     ..registerSingleton<AppRuntime>(runtime);
   return runtime;
 }

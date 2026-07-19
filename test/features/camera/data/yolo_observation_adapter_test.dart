@@ -45,8 +45,9 @@ void main() {
     await downloadEvent;
 
     adapter.handleModelError(
-      ModelLoadingException('Model download failed.'),
-      StackTrace.empty,
+      revision: adapter.surfaceRevision.value,
+      error: ModelLoadingException('Model download failed.'),
+      stackTrace: StackTrace.empty,
     );
     await adapter.close();
 
@@ -71,6 +72,7 @@ void main() {
     final subscription = adapter.events.listen(events.add);
 
     await adapter.init();
+    await adapter.enable(CameraLens.back);
     final staleRevision = adapter.surfaceRevision.value;
     await adapter.retryModel();
 
@@ -89,6 +91,162 @@ void main() {
     );
     await pumpEventQueue();
     expect(events.whereType<ObservationModelReady>(), hasLength(1));
+
+    await subscription.cancel();
+    await adapter.close();
+  });
+
+  test('rejects observation callbacks from a superseded retry revision', () async {
+    final adapter = YoloObservationAdapter(
+      cameraPermissionGateway: const _FakeCameraPermissionGateway(),
+    );
+    final events = <ObservationEvent>[];
+    final subscription = adapter.events.listen(events.add);
+
+    await adapter.init();
+    await adapter.enable(CameraLens.back);
+    final staleRevision = adapter.surfaceRevision.value;
+    adapter.handleModelLoaded(
+      revision: staleRevision,
+      attachedLens: CameraLens.back,
+      modelPath: adapter.configuration.modelPath,
+    );
+    await pumpEventQueue();
+    events.clear();
+
+    await adapter.retryModel();
+    adapter
+      ..handleResults(
+        revision: staleRevision,
+        results: const <YOLOResult>[],
+      )
+      ..handlePerformance(
+        revision: staleRevision,
+        performance: YOLOPerformanceMetrics(
+          fps: 24,
+          processingTimeMs: 41,
+          frameNumber: 8,
+          timestamp: DateTime.utc(2026, 7, 19),
+        ),
+      )
+      ..handleModelError(
+        revision: staleRevision,
+        error: StateError('stale model error'),
+        stackTrace: StackTrace.empty,
+      );
+    await pumpEventQueue();
+
+    expect(events.whereType<ObservationModelPreparing>(), hasLength(1));
+    expect(events.whereType<ObservationDetectionsUpdated>(), isEmpty);
+    expect(events.whereType<ObservationDiagnosticsUpdated>(), isEmpty);
+    expect(events.whereType<ObservationFailed>(), isEmpty);
+
+    final currentRevision = adapter.surfaceRevision.value;
+    adapter
+      ..handleModelLoaded(
+        revision: currentRevision,
+        attachedLens: CameraLens.back,
+        modelPath: adapter.configuration.modelPath,
+      )
+      ..handleResults(
+        revision: currentRevision,
+        results: const <YOLOResult>[],
+      );
+    await pumpEventQueue();
+    expect(events.whereType<ObservationModelReady>(), hasLength(1));
+    expect(events.whereType<ObservationDetectionsUpdated>(), hasLength(1));
+
+    await subscription.cancel();
+    await adapter.close();
+  });
+
+  test('suppresses callbacks while disabled and resumes the current revision', () async {
+    final adapter = YoloObservationAdapter(
+      cameraPermissionGateway: const _FakeCameraPermissionGateway(),
+    );
+    final events = <ObservationEvent>[];
+    final subscription = adapter.events.listen(events.add);
+
+    await adapter.init();
+    final revision = adapter.surfaceRevision.value;
+    adapter.handleModelLoaded(
+      revision: revision,
+      attachedLens: CameraLens.back,
+      modelPath: adapter.configuration.modelPath,
+    );
+    await pumpEventQueue();
+    events.clear();
+
+    adapter.handleResults(
+      revision: revision,
+      results: const <YOLOResult>[],
+    );
+    await pumpEventQueue();
+    expect(events.whereType<ObservationDetectionsUpdated>(), isEmpty);
+
+    await adapter.enable(CameraLens.back);
+    adapter.handleResults(
+      revision: revision,
+      results: const <YOLOResult>[],
+    );
+    await pumpEventQueue();
+    expect(events.whereType<ObservationDetectionsUpdated>(), hasLength(1));
+
+    await adapter.disable();
+    adapter.handleResults(
+      revision: revision,
+      results: const <YOLOResult>[],
+    );
+    await pumpEventQueue();
+    expect(events.whereType<ObservationDetectionsUpdated>(), hasLength(1));
+
+    await subscription.cancel();
+    await adapter.close();
+  });
+
+  test('invalidates scene continuity when the desired lens changes', () async {
+    final adapter = YoloObservationAdapter(
+      cameraPermissionGateway: const _FakeCameraPermissionGateway(),
+    );
+    final events = <ObservationEvent>[];
+    final subscription = adapter.events.listen(events.add);
+
+    await adapter.init();
+    final backRevision = adapter.surfaceRevision.value;
+    adapter.handleModelLoaded(
+      revision: backRevision,
+      attachedLens: CameraLens.back,
+      modelPath: adapter.configuration.modelPath,
+    );
+    await pumpEventQueue();
+    events.clear();
+
+    await adapter.enable(CameraLens.front);
+    await pumpEventQueue();
+
+    expect(adapter.surfaceRevision.value, greaterThan(backRevision));
+    expect(events.whereType<ObservationSourceDiscontinuity>(), hasLength(1));
+
+    adapter.handleResults(
+      revision: backRevision,
+      results: const <YOLOResult>[],
+    );
+    await pumpEventQueue();
+    expect(events.whereType<ObservationDetectionsUpdated>(), isEmpty);
+
+    final frontRevision = adapter.surfaceRevision.value;
+    adapter
+      ..handleModelLoaded(
+        revision: frontRevision,
+        attachedLens: CameraLens.front,
+        modelPath: adapter.configuration.modelPath,
+      )
+      ..handleResults(
+        revision: frontRevision,
+        results: const <YOLOResult>[],
+      );
+    await pumpEventQueue();
+    expect(events.whereType<ObservationDetectionsUpdated>(), hasLength(1));
 
     await subscription.cancel();
     await adapter.close();

@@ -5,7 +5,13 @@ import 'package:pov_agent/shared/domain/app_result.dart';
 
 /// A controller for one observation session without exposed plugin types.
 abstract interface class ObservationController {
-  /// Runtime events for model state, detections, diagnostics, and failures.
+  /// Broadcast runtime events for model state, detections, diagnostics, and
+  /// failures.
+  ///
+  /// Multiple application consumers observe the same session, so
+  /// implementations must return a stream whose [Stream.isBroadcast] is true.
+  /// Events must also belong to the current observation epoch: callbacks from
+  /// superseded surfaces, retries, or sources are discarded before emission.
   Stream<ObservationEvent> get events;
 
   /// Initializes observation resources and reports available camera lenses.

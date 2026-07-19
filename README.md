@@ -5,8 +5,9 @@ through the camera, listens for a question, and answers using the current scene
 as context.
 
 > **Project status:** early prototype. Live and recorded camera input with
-> on-device YOLO detection works today. Scene understanding, the local language
-> model, speech recognition, and spoken responses are still on the roadmap.
+> on-device YOLO detection and stable scene tracking work today. The local
+> language model, speech recognition, and spoken responses are still on the
+> roadmap.
 
 <p align="center">
   <img
@@ -39,6 +40,8 @@ be persisted between launches.
 - Recoverable permission, model-loading, and inference failure states.
 - Deterministic recorded-video input for testing the real iOS decoder and YOLO
   boundary without camera hardware.
+- Session-scoped object tracking that suppresses isolated YOLO misses and emits
+  only stable object appearance, movement, and disappearance.
 - Unit, widget, and repository-boundary tests enforced by the checked-in
   Flutter Agentic Harness, plus explicit device integration lanes.
 
@@ -50,7 +53,7 @@ capture microphone audio, run a language model, or synthesize speech.
 ```mermaid
 flowchart LR
     Camera --> YOLO["On-device YOLO<br/>working"]
-    YOLO -.-> Scene["Stable scene model<br/>planned"]
+    YOLO --> Scene["Stable scene model<br/>working"]
     Microphone -.-> ASR["Wake phrase and local ASR<br/>planned"]
     Scene -.-> LLM["Local Qwen language model<br/>planned"]
     ASR -.-> LLM
@@ -64,7 +67,7 @@ planned local agent loop.
 ## Roadmap
 
 - [x] Live YOLO camera observation.
-- [ ] Stable scene state derived from noisy detections.
+- [x] Stable scene state derived from noisy detections.
 - [ ] Local Qwen language model and manual text conversation.
 - [ ] Periodic scene-aware observations.
 - [ ] System text-to-speech, followed by local Piper speech.

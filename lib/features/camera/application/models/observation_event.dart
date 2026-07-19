@@ -29,6 +29,15 @@ final class ObservationModelReady extends ObservationEvent {
   const ObservationModelReady();
 }
 
+/// An event invalidating identity continuity with earlier detection frames.
+///
+/// Controllers emit this before accepting callbacks from a replacement lens
+/// or another observation source within the same runtime session.
+final class ObservationSourceDiscontinuity extends ObservationEvent {
+  /// Creates an observation-source discontinuity event.
+  const ObservationSourceDiscontinuity();
+}
+
 /// An event containing the detections for one observed frame.
 final class ObservationDetectionsUpdated extends ObservationEvent {
   /// Creates an immutable detection update observed at [observedAt].
