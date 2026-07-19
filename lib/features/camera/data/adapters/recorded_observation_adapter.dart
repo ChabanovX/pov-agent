@@ -29,6 +29,14 @@ typedef RecordedReplayTimerFactory =
 
 /// An adapter that runs decoded video frames through single-image inference.
 ///
+/// Lifecycle:
+/// - [init] prepares the detector and recorded-video source in parallel.
+/// - [enable] records playback demand; replay starts only when both are ready.
+/// - Each replay iteration pulls one frame, runs detection, and publishes the
+///   image together with its synchronized detections and diagnostics.
+/// - [disable], retries, and [close] stop replay and invalidate results from
+///   the affected generation before they can publish into the next phase.
+///
 /// Concurrency policy: drop timer ticks while frame decoding or inference is
 /// active. Disable, retry, and close revise the replay so stale work cannot
 /// publish. The adapter joins decoder/model work before disposing either
@@ -76,16 +84,22 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
       StreamController<RecordedObservationFrame>.broadcast();
 
   StreamSubscription<DownloadProgress>? _downloadSubscription;
-  Future<void>? _loadFuture;
-  Future<void>? _frameSourceOpenFuture;
-  Future<void>? _activeInference;
+
+  // Task slots are identity-tracked so an older completion cannot clear a
+  // newer task installed by retry or decoder reopening.
+  Future<void>? _modelLoadTask;
+  Future<void>? _frameSourceOpenTask;
+  Future<void>? _activeReplayTask;
   Timer? _replayTimer;
   RecordedObservationFrame? _currentFrame;
   RecordedVideoMetadata? _videoMetadata;
   AppFailure? _frameSourceFailure;
   DateTime? _lastObservationAt;
   var _frameNumber = 0;
-  var _loadRevision = 0;
+
+  // Generation tokens reject completions from superseded model, source, or
+  // replay work before those completions can mutate or publish current state.
+  var _modelLoadRevision = 0;
   var _frameSourceOpenRevision = 0;
   var _replayRevision = 0;
   var _initialized = false;
@@ -112,8 +126,11 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
         _handleDownloadProgress,
       );
       _eventsController.add(const ObservationModelPreparing());
-      _startFrameSourceOpen();
-      _startModelLoad();
+
+      // Model and decoder preparation are independent. Warm both in parallel;
+      // replay remains gated by enable and both readiness flags.
+      _openFrameSourceIfNeeded();
+      _ensureModelLoading();
     }
 
     // A virtual back lens preserves the existing power contract while the
@@ -130,7 +147,7 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
   Future<AppResult<void>> enable(CameraLens lens) async {
     if (_closed) return _closedResult();
     _requestedEnabled = true;
-    if (!_frameSourceReady) _startFrameSourceOpen();
+    if (!_frameSourceReady) _openFrameSourceIfNeeded();
     _startReplayIfReady();
     return const AppSuccess<void>(null);
   }
@@ -147,16 +164,16 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
   Future<AppResult<void>> retryModel() async {
     if (_closed) return _closedResult();
     _modelReady = false;
-    _loadRevision += 1;
+    _modelLoadRevision += 1;
     _stopReplay();
     _clearDetections();
     _eventsController.add(const ObservationModelPreparing());
-    await _activeInference;
-    final activeLoad = _loadFuture;
+    await _activeReplayTask;
+    final activeLoad = _modelLoadTask;
     await activeLoad;
     if (_closed) return _closedResult();
-    if (identical(_loadFuture, activeLoad)) _loadFuture = null;
-    _startModelLoad();
+    if (identical(_modelLoadTask, activeLoad)) _modelLoadTask = null;
+    _ensureModelLoading();
     return const AppSuccess<void>(null);
   }
 
@@ -164,8 +181,8 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
   Future<AppResult<void>> retryObservation() async {
     if (_closed) return _closedResult();
     _stopReplay();
-    await _activeInference;
-    await _frameSourceOpenFuture;
+    await _activeReplayTask;
+    await _frameSourceOpenTask;
     if (_closed) return _closedResult();
     _clearDetections();
 
@@ -175,29 +192,39 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
     }
 
     _frameSourceFailure = null;
-    _startFrameSourceOpen();
+    _openFrameSourceIfNeeded();
     return const AppSuccess<void>(null);
   }
 
-  void _startModelLoad() {
-    if (_closed || _loadFuture != null) return;
-    final revision = ++_loadRevision;
-    final loadFuture = _loadModel(revision);
-    _loadFuture = loadFuture;
-    unawaited(_releaseLoadFuture(loadFuture));
+  AppResult<T> _closedResult<T>() {
+    return AppError<T>(
+      const DeviceUnavailableFailure(code: 'observation_closed'),
+    );
   }
 
-  Future<void> _releaseLoadFuture(Future<void> loadFuture) async {
+  // ── Model preparation ──────────────────────────────────────────────
+
+  void _ensureModelLoading() {
+    if (_closed || _modelLoadTask != null) return;
+    final revision = ++_modelLoadRevision;
+    final modelLoadTask = _runModelLoad(revision);
+    _modelLoadTask = modelLoadTask;
+    unawaited(_clearModelLoadTaskOnCompletion(modelLoadTask));
+  }
+
+  Future<void> _clearModelLoadTaskOnCompletion(
+    Future<void> modelLoadTask,
+  ) async {
     try {
-      await loadFuture;
+      await modelLoadTask;
     } finally {
-      if (identical(_loadFuture, loadFuture)) _loadFuture = null;
+      if (identical(_modelLoadTask, modelLoadTask)) _modelLoadTask = null;
     }
   }
 
-  Future<void> _loadModel(int revision) async {
+  Future<void> _runModelLoad(int revision) async {
     final result = await _detector.load();
-    if (_closed || revision != _loadRevision) return;
+    if (_closed || revision != _modelLoadRevision) return;
 
     switch (result) {
       case AppSuccess<void>():
@@ -217,33 +244,50 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
     }
   }
 
-  void _startFrameSourceOpen() {
-    if (_closed || _frameSourceReady || _frameSourceOpenFuture != null) return;
-    final activeInference = _activeInference;
-    if (activeInference != null) {
+  void _handleDownloadProgress(DownloadProgress progress) {
+    if (_closed || progress.modelId != configuration.modelPath) return;
+    _eventsController.add(
+      ObservationModelDownloadProgressed(progress.fraction),
+    );
+  }
+
+  // ── Recorded-video source lifecycle ────────────────────────────────
+
+  void _openFrameSourceIfNeeded() {
+    if (_closed || _frameSourceReady || _frameSourceOpenTask != null) return;
+    final activeReplayTask = _activeReplayTask;
+    if (activeReplayTask != null) {
       // A failed frame pull closes the decoder inside the active replay task.
       // Join that task before reopening so close/open cannot overlap at the
       // application port when the user quickly disables and re-enables.
-      unawaited(_startFrameSourceOpenAfter(activeInference));
+      unawaited(
+        _waitForReplayThenOpenFrameSource(activeReplayTask),
+      );
       return;
     }
     final revision = ++_frameSourceOpenRevision;
-    final openFuture = _openFrameSource(revision);
-    _frameSourceOpenFuture = openFuture;
-    unawaited(_releaseFrameSourceOpenFuture(openFuture));
+    final frameSourceOpenTask = _openFrameSource(revision);
+    _frameSourceOpenTask = frameSourceOpenTask;
+    unawaited(
+      _clearFrameSourceOpenTaskOnCompletion(frameSourceOpenTask),
+    );
   }
 
-  Future<void> _startFrameSourceOpenAfter(Future<void> activeInference) async {
-    await activeInference;
-    _startFrameSourceOpen();
+  Future<void> _waitForReplayThenOpenFrameSource(
+    Future<void> activeReplayTask,
+  ) async {
+    await activeReplayTask;
+    _openFrameSourceIfNeeded();
   }
 
-  Future<void> _releaseFrameSourceOpenFuture(Future<void> openFuture) async {
+  Future<void> _clearFrameSourceOpenTaskOnCompletion(
+    Future<void> frameSourceOpenTask,
+  ) async {
     try {
-      await openFuture;
+      await frameSourceOpenTask;
     } finally {
-      if (identical(_frameSourceOpenFuture, openFuture)) {
-        _frameSourceOpenFuture = null;
+      if (identical(_frameSourceOpenTask, frameSourceOpenTask)) {
+        _frameSourceOpenTask = null;
       }
     }
   }
@@ -272,16 +316,20 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
     }
   }
 
+  // ── Replay and inference loop ──────────────────────────────────────
+
   void _startReplayIfReady() {
+    // Replay is a three-way barrier between user demand, model readiness, and
+    // decoder readiness; no individual completion may bypass the other two.
     if (_closed || !_requestedEnabled || !_modelReady || !_frameSourceReady || _replayTimer != null) {
       return;
     }
     _replayRevision += 1;
     _replayTimer = _timerFactory(
       frameInterval,
-      _scheduleNextFrame,
+      _startNextFrameIfIdle,
     );
-    _scheduleNextFrame();
+    _startNextFrameIfIdle();
   }
 
   void _stopReplay() {
@@ -291,26 +339,30 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
     _lastObservationAt = null;
   }
 
-  void _scheduleNextFrame() {
-    if (_closed || !_requestedEnabled || !_modelReady || !_frameSourceReady || _activeInference != null) {
+  void _startNextFrameIfIdle() {
+    // Busy ticks are deliberately dropped instead of queued so slow decoding
+    // or inference cannot build an unbounded frame backlog.
+    if (_closed || !_requestedEnabled || !_modelReady || !_frameSourceReady || _activeReplayTask != null) {
       return;
     }
-    final inference = _processNextFrame(_replayRevision);
-    _activeInference = inference;
-    unawaited(_releaseInferenceFuture(inference));
+    final replayTask = _decodeAndDetectNextFrame(_replayRevision);
+    _activeReplayTask = replayTask;
+    unawaited(_clearActiveReplayTaskOnCompletion(replayTask));
   }
 
-  Future<void> _releaseInferenceFuture(Future<void> inference) async {
+  Future<void> _clearActiveReplayTaskOnCompletion(
+    Future<void> replayTask,
+  ) async {
     try {
-      await inference;
+      await replayTask;
     } finally {
-      if (identical(_activeInference, inference)) _activeInference = null;
+      if (identical(_activeReplayTask, replayTask)) _activeReplayTask = null;
     }
   }
 
-  Future<void> _processNextFrame(int revision) async {
+  Future<void> _decodeAndDetectNextFrame(int revision) async {
     final frameResult = await _frameSource.nextFrame();
-    if (!_canPublishReplay(revision)) return;
+    if (!_canPublishReplayResult(revision)) return;
 
     switch (frameResult) {
       case AppError(:final failure):
@@ -326,8 +378,8 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
           return;
         }
         final result = await _detector.detect(decodedFrame.encodedImage);
-        if (!_canPublishReplay(revision)) return;
-        _handleDetectionResult(
+        if (!_canPublishReplayResult(revision)) return;
+        _publishInferenceResult(
           result,
           decodedFrame,
           metadata,
@@ -335,7 +387,7 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
     }
   }
 
-  bool _canPublishReplay(int revision) {
+  bool _canPublishReplayResult(int revision) {
     return !_closed && revision == _replayRevision && _requestedEnabled && _modelReady && _frameSourceReady;
   }
 
@@ -347,10 +399,14 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
     if (_requestedEnabled) {
       _eventsController.add(ObservationInferenceFailed(failure));
     }
+    // A frame transport failure invalidates the decoder session. Close it
+    // before a later enable or retry is allowed to reopen the source.
     await _frameSource.close();
   }
 
-  void _handleDetectionResult(
+  // ── Frame and event publication ────────────────────────────────────
+
+  void _publishInferenceResult(
     AppResult<ObservationSnapshot> result,
     RecordedVideoFrame decodedFrame,
     RecordedVideoMetadata metadata,
@@ -403,6 +459,8 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
   void _clearDetections() {
     final frame = _currentFrame;
     if (frame == null) return;
+    // Keep the last decoded image mounted while removing stale boxes
+    // immediately after inference or frame transport fails.
     _publishFrame(
       RecordedObservationFrame(
         encodedImage: frame.encodedImage,
@@ -419,33 +477,22 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
     if (!_framesController.isClosed) _framesController.add(frame);
   }
 
-  void _handleDownloadProgress(DownloadProgress progress) {
-    if (_closed || progress.modelId != configuration.modelPath) return;
-    _eventsController.add(
-      ObservationModelDownloadProgressed(progress.fraction),
-    );
-  }
-
-  AppResult<T> _closedResult<T>() {
-    return AppError<T>(
-      const DeviceUnavailableFailure(code: 'observation_closed'),
-    );
-  }
+  // ── Shutdown ───────────────────────────────────────────────────────
 
   @override
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
     _requestedEnabled = false;
-    _loadRevision += 1;
+    _modelLoadRevision += 1;
     _frameSourceOpenRevision += 1;
     _stopReplay();
     YOLOModelManager.cancelDownload(configuration.modelPath);
     await _downloadSubscription?.cancel();
     try {
-      await _loadFuture;
-      await _frameSourceOpenFuture;
-      await _activeInference;
+      await _modelLoadTask;
+      await _frameSourceOpenTask;
+      await _activeReplayTask;
     } finally {
       // Keep the pre-registration marker until model resolution settles, then
       // clear it so a later app runtime cannot inherit stale cancellation.
