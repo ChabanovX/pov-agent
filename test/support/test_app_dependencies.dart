@@ -1,4 +1,3 @@
-import 'package:flutter/widgets.dart';
 import 'package:pov_agent/app/bootstrap/app_runtime.dart';
 import 'package:pov_agent/app/di/app_di.dart';
 import 'package:pov_agent/features/camera/presentation/bloc/camera_bloc.dart';
@@ -10,9 +9,6 @@ Future<AppRuntime> startTestAppRuntime(
 ) async {
   final runtime = AppRuntime(
     cameraBloc: CameraBloc(controller),
-    observationSurface: const Builder(
-      builder: buildTestObservationSurface,
-    ),
   );
   appDependencies.registerSingleton<AppRuntime>(runtime);
   await runtime.start();

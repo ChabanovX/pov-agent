@@ -15,7 +15,11 @@ void main() {
     final controller = FakeCameraController();
     final runtime = await startTestAppRuntime(controller);
     try {
-      await tester.pumpWidget(const PovAgentApp());
+      await tester.pumpWidget(
+        const PovAgentApp(
+          observationSurfaceBuilder: buildTestObservationSurface,
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(find.byKey(testObservationSurfaceKey), findsOneWidget);
