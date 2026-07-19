@@ -26,6 +26,7 @@ Widget buildTestObservationSurface(BuildContext _) {
 final class FakeCameraController implements ObservationController {
   FakeCameraController({
     CameraCapabilities? capabilities,
+    bool broadcastEvents = true,
     this.initFailure,
     this.enableFailure,
     this.disableFailure,
@@ -38,14 +39,17 @@ final class FakeCameraController implements ObservationController {
     this.onRetryModel,
     this.onRetryObservation,
     this.onClose,
-  }) : capabilities =
+  }) : _events = broadcastEvents
+           ? StreamController<ObservationEvent>.broadcast(sync: true)
+           : StreamController<ObservationEvent>(sync: true),
+       capabilities =
            capabilities ??
            CameraCapabilities(
              availableLenses: const [CameraLens.back, CameraLens.front],
              preferredLens: CameraLens.back,
            );
 
-  final StreamController<ObservationEvent> _events = StreamController<ObservationEvent>.broadcast(sync: true);
+  final StreamController<ObservationEvent> _events;
 
   CameraCapabilities capabilities;
   AppFailure? initFailure;

@@ -5,6 +5,7 @@ import 'package:pov_agent/features/camera/application/ports/observation_controll
 import 'package:pov_agent/features/camera/application/ports/recorded_observation_frame_source.dart';
 import 'package:pov_agent/features/camera/data/adapters/recorded_observation_adapter.dart';
 import 'package:pov_agent/features/camera/data/adapters/yolo_observation_adapter.dart';
+import 'package:pov_agent/shared/domain/scene_source.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +18,10 @@ void main() {
     final runtime = configureDependencies();
     try {
       final controller = appDependencies<ObservationController>();
+      expect(
+        appDependencies<SceneSource>(),
+        same(runtime.sceneSession),
+      );
 
       if (CompilationConstants.usesRecordedVideo) {
         final adapter = appDependencies<RecordedObservationAdapter>();

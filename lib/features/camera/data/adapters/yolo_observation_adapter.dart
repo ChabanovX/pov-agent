@@ -32,8 +32,9 @@ import 'package:ultralytics_yolo/ultralytics_yolo.dart';
 ///   native and Dart resource.
 ///
 /// The application coordinator serializes lifecycle commands. Native model
-/// attachment is revision-gated, and close invalidates pending reconciliation
-/// polls before their next controller access.
+/// attachment, results, diagnostics, and failures are revision-gated. Close
+/// invalidates pending reconciliation polls before their next controller
+/// access.
 final class YoloObservationAdapter implements ObservationController {
   /// Creates an adapter around the live YOLO platform surface.
   YoloObservationAdapter({
@@ -54,6 +55,9 @@ final class YoloObservationAdapter implements ObservationController {
   bool _requestedEnabled = false;
   bool _initialized = false;
   bool _closed = false;
+  int _observationRevision = 0;
+  int? _activeObservationRevision;
+  int? _lensSwitchRevision;
 
   @override
   Stream<ObservationEvent> get events => _eventsController.stream;
@@ -113,21 +117,26 @@ final class YoloObservationAdapter implements ObservationController {
       return AppError<void>(failure);
     }
 
-    final lensChangedBeforeAttachment = _desiredLens != lens && !_viewController.isInitialized;
+    final lensChanged = _desiredLens != lens;
     _desiredLens = lens;
     _requestedEnabled = true;
 
-    if (lensChangedBeforeAttachment) {
-      _surfaceRevision.value += 1;
-    }
+    final revision = lensChanged ? _invalidateObservationSource() : _observationRevision;
 
     if (_viewController.isInitialized) {
       if (_attachedLens != lens) {
-        await _viewController.switchCamera();
-        _attachedLens = lens;
+        if (!await _switchAttachedLens(revision, lens)) {
+          return _closedResult();
+        }
       }
       await _viewController.resume();
     }
+    if (_closed || revision != _observationRevision) {
+      return _closedResult();
+    }
+    // Rebuild only after native switching/resume settles. The old surface is
+    // already callback-invalidated, so it cannot publish frames in the gap.
+    _publishSurfaceRevision(revision);
     return const AppSuccess<void>(null);
   }
 
@@ -145,11 +154,18 @@ final class YoloObservationAdapter implements ObservationController {
   Future<AppResult<void>> retryModel() async {
     if (_closed) return _closedResult();
     _eventsController.add(const ObservationModelPreparing());
+    _attachedLens = null;
+    // Invalidate callbacks before awaiting native stop, but delay rebuilding
+    // the surface so a replacement view cannot attach to the controller that
+    // is still being stopped.
+    final revision = _invalidateObservationCallbacks();
     if (_viewController.isInitialized) {
       await _viewController.stop();
     }
-    _attachedLens = null;
-    _surfaceRevision.value += 1;
+    if (_closed || revision != _observationRevision) {
+      return _closedResult();
+    }
+    _publishSurfaceRevision(revision);
     return const AppSuccess<void>(null);
   }
 
@@ -164,25 +180,36 @@ final class YoloObservationAdapter implements ObservationController {
     required CameraLens attachedLens,
     required String modelPath,
   }) {
-    if (_closed || revision != _surfaceRevision.value || modelPath != configuration.modelPath) {
+    if (_closed || revision != _observationRevision || modelPath != configuration.modelPath) {
       return;
     }
     _attachedLens = attachedLens;
+    if (_lensSwitchRevision != revision) {
+      _activeObservationRevision = revision;
+    }
     _eventsController.add(const ObservationModelReady());
     unawaited(_reconcileAfterPlatformAttachment(revision));
   }
 
   /// Converts a native model [error] into an observation failure event.
-  void handleModelError(Object error, StackTrace stackTrace) {
-    if (_closed) return;
+  void handleModelError({
+    required int revision,
+    required Object error,
+    required StackTrace stackTrace,
+  }) {
+    if (_closed || revision != _observationRevision) return;
+    _activeObservationRevision = null;
     _eventsController.add(
       ObservationFailed(YoloFailureMapper.map(error, stackTrace)),
     );
   }
 
-  /// Publishes domain detections mapped from native [results].
-  void handleResults(List<YOLOResult> results) {
-    if (_closed) return;
+  /// Publishes domain detections mapped from current-surface [results].
+  void handleResults({
+    required int revision,
+    required List<YOLOResult> results,
+  }) {
+    if (!_canPublishObservationCallback(revision)) return;
     final detections = YoloResultMapper.detectionsFromRaw(
       results.map((result) => result.toMap()),
     );
@@ -194,17 +221,59 @@ final class YoloObservationAdapter implements ObservationController {
     );
   }
 
-  /// Publishes domain diagnostics mapped from native [metrics].
-  void handlePerformance(YOLOPerformanceMetrics metrics) {
-    if (_closed) return;
+  /// Publishes domain diagnostics mapped from current-surface [performance].
+  void handlePerformance({
+    required int revision,
+    required YOLOPerformanceMetrics performance,
+  }) {
+    if (!_canPublishObservationCallback(revision)) return;
     _eventsController.add(
       ObservationDiagnosticsUpdated(
         YoloResultMapper.diagnosticsFromRaw(
-          metrics.toMap(),
+          performance.toMap(),
           sampledAt: DateTime.now().toUtc(),
         ),
       ),
     );
+  }
+
+  int _invalidateObservationSource() {
+    _eventsController.add(const ObservationSourceDiscontinuity());
+    return _invalidateObservationCallbacks();
+  }
+
+  int _invalidateObservationCallbacks() {
+    _activeObservationRevision = null;
+    return _observationRevision += 1;
+  }
+
+  void _publishSurfaceRevision(int revision) {
+    if (_surfaceRevision.value != revision) {
+      _surfaceRevision.value = revision;
+    }
+  }
+
+  bool _canPublishObservationCallback(int revision) {
+    return !_closed && _requestedEnabled && revision == _observationRevision && revision == _activeObservationRevision;
+  }
+
+  Future<bool> _switchAttachedLens(
+    int revision,
+    CameraLens lens,
+  ) async {
+    _activeObservationRevision = null;
+    _lensSwitchRevision = revision;
+    try {
+      await _viewController.switchCamera();
+      if (_closed || revision != _observationRevision) return false;
+      _attachedLens = lens;
+      _activeObservationRevision = revision;
+      return true;
+    } finally {
+      if (_lensSwitchRevision == revision) {
+        _lensSwitchRevision = null;
+      }
+    }
   }
 
   void _handleDownloadProgress(DownloadProgress progress) {
@@ -219,13 +288,12 @@ final class YoloObservationAdapter implements ObservationController {
     // Poll briefly so a tab/background pause requested during download cannot
     // let the newly-created native camera session run while the surface is hidden.
     for (var attempt = 0; attempt < _platformAttachmentAttempts; attempt += 1) {
-      if (_closed || revision != _surfaceRevision.value) return;
+      if (_closed || revision != _observationRevision) return;
       if (_viewController.isInitialized) {
         if (!_requestedEnabled) {
           await _viewController.pause();
         } else if (_attachedLens != _desiredLens) {
-          await _viewController.switchCamera();
-          _attachedLens = _desiredLens;
+          if (!await _switchAttachedLens(revision, _desiredLens)) return;
         } else {
           await _viewController.resume();
         }

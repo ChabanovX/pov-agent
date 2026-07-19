@@ -227,6 +227,13 @@ void main() {
     expect(bloc.state.modelDownloadProgress, 0.42);
     expect(bloc.state.detections.single.label, 'person');
 
+    controller.emit(const ObservationSourceDiscontinuity());
+    await _waitForState(
+      bloc,
+      (state) => state.detections.isEmpty && state.diagnostics == null,
+    );
+    expect(bloc.state.modelStatus, ObservationModelStatus.downloading);
+
     controller.emit(
       const ObservationFailed(NetworkFailure(code: 'model_download')),
     );

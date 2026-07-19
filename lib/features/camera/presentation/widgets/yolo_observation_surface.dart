@@ -35,11 +35,19 @@ final class YoloObservationSurface extends StatelessWidget {
   /// Controls the native view after it attaches.
   final YOLOViewController viewController;
 
-  /// Receives native detection results.
-  final ValueChanged<List<YOLOResult>> onResults;
+  /// Receives native detection results tagged with their surface revision.
+  final void Function({
+    required int revision,
+    required List<YOLOResult> results,
+  })
+  onResults;
 
-  /// Receives native performance samples.
-  final ValueChanged<YOLOPerformanceMetrics> onPerformance;
+  /// Receives native performance samples tagged with their surface revision.
+  final void Function({
+    required int revision,
+    required YOLOPerformanceMetrics performance,
+  })
+  onPerformance;
 
   /// Receives successful model attachment callbacks.
   final void Function({
@@ -49,8 +57,13 @@ final class YoloObservationSurface extends StatelessWidget {
   })
   onModelLoaded;
 
-  /// Receives native model failures with their current stack trace.
-  final void Function(Object error, StackTrace stackTrace) onModelError;
+  /// Receives native model failures tagged with their surface revision.
+  final void Function({
+    required int revision,
+    required Object error,
+    required StackTrace stackTrace,
+  })
+  onModelError;
 
   @override
   Widget build(BuildContext context) {
@@ -71,8 +84,15 @@ final class YoloObservationSurface extends StatelessWidget {
             CameraLens.back => LensFacing.back,
             CameraLens.front => LensFacing.front,
           },
-          onResult: onResults,
-          onPerformanceMetrics: onPerformance,
+          onResult: (results) {
+            onResults(revision: revision, results: results);
+          },
+          onPerformanceMetrics: (performance) {
+            onPerformance(
+              revision: revision,
+              performance: performance,
+            );
+          },
           onModelLoad: (modelPath, _) {
             onModelLoaded(
               revision: revision,
@@ -81,7 +101,11 @@ final class YoloObservationSurface extends StatelessWidget {
             );
           },
           onModelError: (error, _, _) {
-            onModelError(error, StackTrace.current);
+            onModelError(
+              revision: revision,
+              error: error,
+              stackTrace: StackTrace.current,
+            );
           },
         );
       },

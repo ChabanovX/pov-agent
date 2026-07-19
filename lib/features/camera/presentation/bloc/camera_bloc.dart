@@ -282,6 +282,14 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
             observationFailure: () => null,
           ),
         );
+      case ObservationSourceDiscontinuity():
+        emit(
+          state.copyWith(
+            detections: const [],
+            diagnostics: () => null,
+            observationFailure: () => null,
+          ),
+        );
       case ObservationDetectionsUpdated(:final detections):
         _observationRetryInProgress = false;
         emit(
