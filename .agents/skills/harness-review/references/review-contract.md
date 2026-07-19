@@ -53,3 +53,6 @@ questions: []
 ```
 
 Use repository-relative Markdown links in human-facing prose. Never append line numbers to link targets; mention the line separately. Return `findings: []` explicitly when no defect is proven. Do not edit files or create commits.
+
+A role reference may require an additional top-level section for its evidence.
+Return that section without removing or renaming any common field above.
