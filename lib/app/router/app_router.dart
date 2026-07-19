@@ -2,15 +2,16 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pov_agent/app/bootstrap/app_runtime.dart';
 import 'package:pov_agent/app/di/app_di.dart';
-import 'package:pov_agent/app/widgets/observation_surface.dart';
 import 'package:pov_agent/core/constants/compilation_constants.dart';
 import 'package:pov_agent/core/design_system/tokens/tokens.dart';
 import 'package:pov_agent/core/l10n/app_localizations.dart';
 import 'package:pov_agent/features/assistant/presentation/pages/assistant_page.dart';
 import 'package:pov_agent/features/camera/application/ports/recorded_observation_frame_source.dart';
+import 'package:pov_agent/features/camera/data/adapters/yolo_observation_adapter.dart';
 import 'package:pov_agent/features/camera/presentation/bloc/camera_bloc.dart';
 import 'package:pov_agent/features/camera/presentation/pages/camera_page.dart';
 import 'package:pov_agent/features/camera/presentation/widgets/recorded_observation_surface.dart';
+import 'package:pov_agent/features/camera/presentation/widgets/yolo_observation_surface.dart';
 
 enum _AppTab { camera, assistant }
 
@@ -139,6 +140,15 @@ final class _AppRouterState extends State<AppRouter> with WidgetsBindingObserver
     }
 
     final observationAdapter = appDependencies<YoloObservationAdapter>();
-    return (_) => ObservationSurface(adapter: observationAdapter);
+    return (_) => YoloObservationSurface(
+      configuration: observationAdapter.configuration,
+      surfaceRevision: observationAdapter.surfaceRevision,
+      desiredLens: () => observationAdapter.desiredLens,
+      viewController: observationAdapter.viewController,
+      onResults: observationAdapter.handleResults,
+      onPerformance: observationAdapter.handlePerformance,
+      onModelLoaded: observationAdapter.handleModelLoaded,
+      onModelError: observationAdapter.handleModelError,
+    );
   }
 }

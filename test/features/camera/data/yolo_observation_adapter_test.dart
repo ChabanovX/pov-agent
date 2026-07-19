@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pov_agent/app/widgets/observation_surface.dart';
 import 'package:pov_agent/features/camera/application/models/observation_event.dart';
 import 'package:pov_agent/features/camera/application/ports/camera_permission_gateway.dart';
+import 'package:pov_agent/features/camera/data/adapters/yolo_observation_adapter.dart';
 import 'package:pov_agent/features/camera/domain/entities/camera_capabilities.dart';
 import 'package:pov_agent/features/camera/domain/entities/camera_lens.dart';
 import 'package:pov_agent/shared/domain/app_failure.dart';
@@ -61,6 +61,37 @@ void main() {
       YOLOModelManager.finishDownload(modelId, token);
       YOLOModelManager.clearDownloadCancellation(modelId);
     }
+  });
+
+  test('accepts model load only from the current surface revision', () async {
+    final adapter = YoloObservationAdapter(
+      cameraPermissionGateway: const _FakeCameraPermissionGateway(),
+    );
+    final events = <ObservationEvent>[];
+    final subscription = adapter.events.listen(events.add);
+
+    await adapter.init();
+    final staleRevision = adapter.surfaceRevision.value;
+    await adapter.retryModel();
+
+    adapter.handleModelLoaded(
+      revision: staleRevision,
+      attachedLens: CameraLens.back,
+      modelPath: adapter.configuration.modelPath,
+    );
+    await pumpEventQueue();
+    expect(events.whereType<ObservationModelReady>(), isEmpty);
+
+    adapter.handleModelLoaded(
+      revision: adapter.surfaceRevision.value,
+      attachedLens: CameraLens.back,
+      modelPath: adapter.configuration.modelPath,
+    );
+    await pumpEventQueue();
+    expect(events.whereType<ObservationModelReady>(), hasLength(1));
+
+    await subscription.cancel();
+    await adapter.close();
   });
 
   test('denied camera permission prevents the native surface from starting', () async {

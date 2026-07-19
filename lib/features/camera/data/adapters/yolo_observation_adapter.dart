@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart';
 import 'package:pov_agent/core/design_system/tokens/tokens.dart';
 import 'package:pov_agent/features/camera/application/models/observation_configuration.dart';
 import 'package:pov_agent/features/camera/application/models/observation_event.dart';
@@ -16,7 +15,25 @@ import 'package:pov_agent/shared/domain/app_result.dart';
 import 'package:ultralytics_yolo/core/yolo_model_manager.dart';
 import 'package:ultralytics_yolo/ultralytics_yolo.dart';
 
-/// An adapter that owns the live YOLO surface and maps its plugin values.
+/// Adapts the live YOLO plugin to one [ObservationController] session.
+///
+/// Owns camera permission revalidation, the plugin view controller, model
+/// download progress, surface revision invalidation, and the observation event
+/// stream. App composition exposes its surface-facing state and callbacks to
+/// presentation; raw plugin values remain inside the data boundary.
+///
+/// Lifecycle:
+/// - [init] requests initial permission and starts model-progress observation.
+/// - [enable] revalidates permission, records lens and power demand, and
+///   reconciles an attached native view.
+/// - [disable] pauses the attached native view without unloading the model.
+/// - [retryModel] stops the controller and advances the surface revision.
+/// - [close] invalidates callbacks before cancelling and disposing every owned
+///   native and Dart resource.
+///
+/// The application coordinator serializes lifecycle commands. Native model
+/// attachment is revision-gated, and close invalidates pending reconciliation
+/// polls before their next controller access.
 final class YoloObservationAdapter implements ObservationController {
   /// Creates an adapter around the live YOLO platform surface.
   YoloObservationAdapter({
@@ -244,52 +261,3 @@ final class YoloObservationAdapter implements ObservationController {
 }
 
 const _platformAttachmentAttempts = 42;
-
-/// Application-level platform surface over the native [YOLOView].
-final class ObservationSurface extends StatelessWidget {
-  /// Creates a native observation surface backed by [adapter].
-  const ObservationSurface({
-    required this.adapter,
-    super.key,
-  });
-
-  /// The adapter that owns this surface's native controller and callbacks.
-  final YoloObservationAdapter adapter;
-
-  @override
-  Widget build(BuildContext context) {
-    return ValueListenableBuilder<int>(
-      valueListenable: adapter.surfaceRevision,
-      builder: (context, revision, _) {
-        final attachedLens = adapter.desiredLens;
-        final configuration = adapter.configuration;
-        return YOLOView(
-          key: ValueKey(('yolo-observation-surface', revision)),
-          modelPath: configuration.modelPath,
-          task: YOLOTask.detect,
-          controller: adapter.viewController,
-          cameraResolution: configuration.cameraResolution,
-          confidenceThreshold: configuration.confidenceThreshold,
-          iouThreshold: configuration.iouThreshold,
-          useGpu: configuration.useGpu,
-          lensFacing: switch (attachedLens) {
-            CameraLens.back => LensFacing.back,
-            CameraLens.front => LensFacing.front,
-          },
-          onResult: adapter.handleResults,
-          onPerformanceMetrics: adapter.handlePerformance,
-          onModelLoad: (modelPath, _) {
-            adapter.handleModelLoaded(
-              revision: revision,
-              attachedLens: attachedLens,
-              modelPath: modelPath,
-            );
-          },
-          onModelError: (error, _, _) {
-            adapter.handleModelError(error, StackTrace.current);
-          },
-        );
-      },
-    );
-  }
-}

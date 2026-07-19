@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pov_agent/app/di/app_di.dart';
-import 'package:pov_agent/app/widgets/observation_surface.dart';
 import 'package:pov_agent/core/constants/compilation_constants.dart';
 import 'package:pov_agent/features/camera/application/ports/observation_controller.dart';
 import 'package:pov_agent/features/camera/application/ports/recorded_observation_frame_source.dart';
 import 'package:pov_agent/features/camera/data/adapters/recorded_observation_adapter.dart';
+import 'package:pov_agent/features/camera/data/adapters/yolo_observation_adapter.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
