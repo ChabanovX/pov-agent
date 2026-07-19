@@ -4,10 +4,10 @@ POV Agent is a local-first Flutter experiment for an assistant that observes
 through the camera, listens for a question, and answers using the current scene
 as context.
 
-> **Project status:** early prototype. Live and recorded camera input with
-> on-device YOLO detection and stable scene tracking work today. The local
-> language model, speech recognition, and spoken responses are still on the
-> roadmap.
+> **Project status:** early prototype. Live and recorded camera input,
+> on-device YOLO detection, stable scene tracking, and manual conversation with
+> a local Qwen model work today. Speech recognition, automatic observation, and
+> spoken responses remain on the roadmap.
 
 <p align="center">
   <img
@@ -42,11 +42,15 @@ be persisted between launches.
   boundary without camera hardware.
 - Session-scoped object tracking that suppresses isolated YOLO misses and emits
   only stable object appearance, movement, and disappearance.
+- A manual Assistant conversation backed by Qwen3-0.6B Q4_K_M through the
+  repository's own llama.cpp FFI bridge and persistent inference isolate.
+- Verified model download, retry, offline cache reuse, streaming answers,
+  cancellation, and removal of model reasoning from visible/session history.
 - Unit, widget, and repository-boundary tests enforced by the checked-in
   Flutter Agentic Harness, plus explicit device integration lanes.
 
-The Assistant tab is currently a placeholder. The repository does not yet
-capture microphone audio, run a language model, or synthesize speech.
+The repository does not yet capture microphone audio, generate automatic scene
+comments, or synthesize speech.
 
 ## Target interaction
 
@@ -55,7 +59,8 @@ flowchart LR
     Camera --> YOLO["On-device YOLO<br/>working"]
     YOLO --> Scene["Stable scene model<br/>working"]
     Microphone -.-> ASR["Wake phrase and local ASR<br/>planned"]
-    Scene -.-> LLM["Local Qwen language model<br/>planned"]
+    Scene -.-> LLM["Automatic scene prompt<br/>planned"]
+    UserText --> LLM["Local Qwen language model<br/>working"]
     ASR -.-> LLM
     LLM -.-> TTS["On-device speech<br/>planned"]
     TTS -.-> Speaker
@@ -68,7 +73,7 @@ planned local agent loop.
 
 - [x] Live YOLO camera observation.
 - [x] Stable scene state derived from noisy detections.
-- [ ] Local Qwen language model and manual text conversation.
+- [x] Local Qwen language model and manual text conversation.
 - [ ] Periodic scene-aware observations.
 - [ ] System text-to-speech, followed by local Piper speech.
 - [ ] Wake phrase and local streaming speech recognition.
@@ -94,7 +99,31 @@ dependencies:
 
 ```sh
 flutter pub get
+git submodule update --init --recursive
+cp .env.example .env
 ```
+
+The first iOS build compiles the pinned llama.cpp submodule locally through the
+Dart build hook. It does not download native sources or binaries. CMake, Ninja,
+and an Xcode toolchain with the selected iOS SDK must be available.
+
+All Qwen artifact, context, sampling, and decoding policy is compile-time
+configuration. Run the app with the checked example values (or a reviewed
+copy):
+
+```sh
+flutter run -d <device-id> --dart-define-from-file=.env
+```
+
+Opening the Assistant tab starts preparation lazily. The default GGUF is about
+397 MB, so the first run requires network access and enough free space for the
+download plus the configured reserve. The app writes a staging file, verifies
+the exact byte length and SHA-256, and only then makes the cache loadable.
+Later launches can use the verified cache without network access.
+
+The iOS Simulator uses CPU inference intentionally. On iOS 15 and newer, a
+physical iPhone requests Metal offload and falls back to CPU if native
+model/context creation fails; iOS 13 and 14 use the CPU runtime directly.
 
 ### Live camera
 
@@ -102,7 +131,7 @@ List the available devices and run on physical hardware:
 
 ```sh
 flutter devices
-flutter run -d <device-id>
+flutter run -d <device-id> --dart-define-from-file=.env
 ```
 
 ### Recorded video
@@ -110,7 +139,6 @@ flutter run -d <device-id>
 Recorded mode replaces the camera with the bundled `pedestrians.mp4` fixture:
 
 ```sh
-cp .env.example .env
 # Set USE_RECORDED_VIDEO=true in .env.
 flutter run -d <simulator-id> --dart-define-from-file=.env
 ```
@@ -158,12 +186,30 @@ tool/verify_recorded_ios.sh <simulator-id>
 
 Live camera behavior must additionally be exercised on physical hardware.
 
+The opt-in Assistant lane uses production dependency composition, keeps the
+recorded camera and real YOLO inference active while it downloads or verifies
+the pinned 397 MB GGUF, generates through the bundled llama.cpp code asset, and
+checks visible streaming, cancellation, unload, and lifecycle reload. It then
+creates a fresh runtime graph with transport disabled and generates again from
+the verified Application Support cache:
+
+```sh
+tool/verify_assistant_ios.sh <simulator-id>
+```
+
+This lane is skipped by the normal test suite so routine verification never
+causes an unexpected model download. Simulator inference is CPU-only; physical
+device Metal, memory, and thermal acceptance remains a separate hardware gate.
+
 ## Privacy and offline behavior
 
 - Camera inference runs on the device.
+- Qwen inference runs inside the app through the bundled native bridge; there
+  is no cloud-LLM request or local HTTP server.
 - The application does not intentionally save camera frames, recorded audio,
   transcripts, or conversation history.
-- Camera and future audio runtimes are scoped to a foreground session.
+- Camera and model runtimes are scoped to foreground use. The verified GGUF is
+  cached, while prompts, generated answers, and reasoning remain session-only.
 - The current codebase contains no microphone or cloud-LLM transport.
 - The pinned YOLO model is bundled for the deterministic iOS path; the runtime
   may use its download-and-cache fallback when a required model is unavailable.
@@ -178,6 +224,8 @@ The bundled YOLO model and recorded fixture retain their upstream terms:
   Ultralytics under its applicable AGPL-3.0 terms.
 - [`pedestrians.mp4`](assets/video/README.md) is derived from an OpenCV fixture
   distributed under Apache-2.0.
+- Pinned llama.cpp and Qwen model provenance, checksums, build flags, and
+  license details are recorded in [THIRD_PARTY.md](THIRD_PARTY.md).
 
 ## License
 
