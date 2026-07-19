@@ -1,6 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:pov_agent/features/assistant/application/ports/comment_generator.dart';
+import 'package:pov_agent/features/assistant/application/ports/model_store.dart';
+import 'package:pov_agent/features/assistant/presentation/bloc/assistant_bloc.dart';
 import 'package:pov_agent/features/camera/application/services/observation_scene_session.dart';
 import 'package:pov_agent/features/camera/presentation/bloc/camera_bloc.dart';
 import 'package:pov_agent/features/camera/presentation/bloc/camera_state.dart';
@@ -16,6 +19,9 @@ final class AppRuntime with WidgetsBindingObserver {
   AppRuntime({
     required this.cameraBloc,
     required this.sceneSession,
+    required this.assistantBloc,
+    required this.modelStore,
+    required this.commentGenerator,
   });
 
   /// The process-owned camera state machine.
@@ -24,12 +30,22 @@ final class AppRuntime with WidgetsBindingObserver {
   /// The process-owned stable-scene publisher.
   final ObservationSceneSession sceneSession;
 
+  /// The process-owned manual assistant state machine.
+  final AssistantBloc assistantBloc;
+
+  /// The process-owned verified model lifecycle.
+  final ModelStore modelStore;
+
+  /// The process-owned native text-generation runtime.
+  final CommentGenerator commentGenerator;
+
   late final Future<void> _startFuture;
   Future<void>? _rejectedStartFuture;
   Future<void>? _closeFuture;
   final Completer<void> _closeRequested = Completer<void>();
   _AppRuntimePhase _phase = _AppRuntimePhase.idle;
   bool _bindingObserverRegistered = false;
+  bool _appForegrounded = true;
 
   /// Starts camera discovery and waits until the initial power state settles.
   ///
@@ -91,8 +107,23 @@ final class AppRuntime with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.detached) return;
-    unawaited(close());
+    switch (state) {
+      case AppLifecycleState.resumed:
+        if (_appForegrounded) return;
+        _appForegrounded = true;
+        if (!assistantBloc.isClosed) {
+          assistantBloc.add(const AssistantResumed());
+        }
+      case AppLifecycleState.inactive || AppLifecycleState.hidden || AppLifecycleState.paused:
+        if (!_appForegrounded) return;
+        _appForegrounded = false;
+        if (!assistantBloc.isClosed) {
+          assistantBloc.add(const AssistantSuspended());
+        }
+      case AppLifecycleState.detached:
+        _appForegrounded = false;
+        unawaited(close());
+    }
   }
 
   /// Releases process-owned resources exactly once.
@@ -128,10 +159,35 @@ final class AppRuntime with WidgetsBindingObserver {
         await Future.wait<void>([
           sceneSession.close(),
           cameraBloc.close(),
+          _closeAssistantResources(),
         ]);
       }
     } finally {
       _phase = _AppRuntimePhase.closed;
+    }
+  }
+
+  Future<void> _closeAssistantResources() async {
+    Object? firstError;
+    StackTrace? firstStackTrace;
+
+    Future<void> closeResource(Future<void> Function() close) async {
+      try {
+        await close();
+      } on Object catch (error, stackTrace) {
+        firstError ??= error;
+        firstStackTrace ??= stackTrace;
+      }
+    }
+
+    // The Bloc stops consuming first, then the store stops preparation and
+    // unloads, and finally the generator destroys its isolate/native handles.
+    await closeResource(assistantBloc.close);
+    await closeResource(modelStore.close);
+    await closeResource(commentGenerator.close);
+
+    if (firstError case final error?) {
+      Error.throwWithStackTrace(error, firstStackTrace!);
     }
   }
 }

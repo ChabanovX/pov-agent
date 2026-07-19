@@ -5,6 +5,7 @@ import 'package:pov_agent/app/di/app_di.dart';
 import 'package:pov_agent/core/constants/compilation_constants.dart';
 import 'package:pov_agent/core/design_system/tokens/tokens.dart';
 import 'package:pov_agent/core/l10n/app_localizations.dart';
+import 'package:pov_agent/features/assistant/presentation/bloc/assistant_bloc.dart';
 import 'package:pov_agent/features/assistant/presentation/pages/assistant_page.dart';
 import 'package:pov_agent/features/camera/application/ports/recorded_observation_frame_source.dart';
 import 'package:pov_agent/features/camera/data/adapters/yolo_observation_adapter.dart';
@@ -37,6 +38,7 @@ final class _AppRouterState extends State<AppRouter> with WidgetsBindingObserver
 
   _AppTab _selectedTab = _AppTab.camera;
   bool _appForegrounded = true;
+  bool _assistantStarted = false;
 
   @override
   void initState() {
@@ -93,7 +95,10 @@ final class _AppRouterState extends State<AppRouter> with WidgetsBindingObserver
                     surfaceBuilder: _observationSurfaceBuilder,
                   ),
                 ),
-                const AssistantPage(),
+                BlocProvider.value(
+                  value: _runtime.assistantBloc,
+                  child: const AssistantPage(),
+                ),
               ],
             ),
           ),
@@ -124,6 +129,13 @@ final class _AppRouterState extends State<AppRouter> with WidgetsBindingObserver
     if (selectedTab == _selectedTab) return;
 
     setState(() => _selectedTab = selectedTab);
+    if (selectedTab == _AppTab.assistant && !_assistantStarted) {
+      _assistantStarted = true;
+      final assistantBloc = _runtime.assistantBloc;
+      if (!assistantBloc.isClosed) {
+        assistantBloc.add(const AssistantStarted());
+      }
+    }
     final cameraBloc = _runtime.cameraBloc;
     if (cameraBloc.isClosed) return;
     cameraBloc.add(

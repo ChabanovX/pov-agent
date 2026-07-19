@@ -6,6 +6,7 @@ import 'package:pov_agent/features/camera/presentation/bloc/camera_bloc.dart';
 import 'package:pov_agent/shared/domain/scene_source.dart';
 
 import 'fake_camera_controller.dart';
+import 'test_assistant_resources.dart';
 
 Future<AppRuntime> startTestAppRuntime(
   FakeCameraController controller,
@@ -14,9 +15,13 @@ Future<AppRuntime> startTestAppRuntime(
     controller: controller,
     stabilizer: SceneStabilizer(),
   );
+  final assistant = TestAssistantResources();
   final runtime = AppRuntime(
     cameraBloc: CameraBloc(controller),
     sceneSession: sceneSession,
+    assistantBloc: assistant.assistantBloc,
+    modelStore: assistant.modelStore,
+    commentGenerator: assistant.commentGenerator,
   );
   appDependencies
     ..registerSingleton<SceneSource>(sceneSession)

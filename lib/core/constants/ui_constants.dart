@@ -4,6 +4,23 @@
 /// are only meaningful inside one file should stay private in that file.
 library;
 
+import 'package:flutter/foundation.dart';
+
+/// Stable key for the assistant prompt field.
+const assistantPromptFieldKey = Key('assistant-prompt-field');
+
+/// Stable key for the assistant send-or-stop control.
+const assistantSubmitControlKey = Key('assistant-submit-control');
+
+/// Stable key for the scrollable assistant transcript.
+const assistantConversationKey = Key('assistant-conversation');
+
+/// Stable key for retrying the latest failed assistant answer.
+const assistantAnswerRetryButtonKey = Key('assistant-answer-retry-button');
+
+/// Stable key for retrying local-model preparation.
+const assistantModelRetryButtonKey = Key('assistant-model-retry-button');
+
 /// The light theme's primary ARGB color value.
 const int kColorPrimaryLightValue = 0xFF1C6E5C;
 
@@ -60,6 +77,9 @@ const double kRadiusLg = 12;
 
 /// Standard icon size in logical pixels.
 const double kIconSize = 24;
+
+/// Hero icon size in logical pixels.
+const double kHeroIconSize = 40;
 
 /// Standard interactive-control height in logical pixels.
 const double kControlHeight = 48;

@@ -1,0 +1,360 @@
+import 'dart:async';
+
+import 'package:flutter/cupertino.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:pov_agent/core/constants/ui_constants.dart';
+import 'package:pov_agent/core/design_system/app_theme.dart';
+import 'package:pov_agent/core/design_system/tokens/tokens.dart';
+import 'package:pov_agent/core/l10n/app_localizations.dart';
+import 'package:pov_agent/features/assistant/application/models/generation_options.dart';
+import 'package:pov_agent/features/assistant/application/models/model_store_state.dart';
+import 'package:pov_agent/features/assistant/application/services/qwen_prompt_builder.dart';
+import 'package:pov_agent/features/assistant/presentation/bloc/assistant_bloc.dart';
+import 'package:pov_agent/features/assistant/presentation/bloc/assistant_state.dart';
+import 'package:pov_agent/features/assistant/presentation/pages/assistant_page.dart';
+import 'package:pov_agent/shared/domain/app_failure.dart';
+import 'package:pov_agent/shared/domain/app_result.dart';
+
+import '../../../support/fake_assistant_runtime.dart';
+
+const _testManualOptions = GenerationOptions(
+  maxTokens: 32,
+  temperature: 0.5,
+  topP: 0.9,
+  topK: 10,
+  minP: 0,
+);
+const _testShortCommentOptions = GenerationOptions(
+  maxTokens: 16,
+  temperature: 0.4,
+  topP: 0.8,
+  topK: 8,
+  minP: 0,
+);
+
+void main() {
+  testWidgets('renders loading, download, verification, and ready states', (
+    tester,
+  ) async {
+    final loadingGate = Completer<void>();
+    final downloadGate = Completer<void>();
+    final verificationGate = Completer<void>();
+    late final FakeAssistantModelStore store;
+    store = FakeAssistantModelStore(
+      onPrepare: () async {
+        store.emit(const ModelStoreState.loading());
+        await loadingGate.future;
+        store.emit(const ModelStoreState.downloading(0.37));
+        await downloadGate.future;
+        store.emit(const ModelStoreState.verifying());
+        await verificationGate.future;
+        store.emit(ModelStoreState.ready(testQwenArtifact));
+        return const AppSuccess(testQwenArtifact);
+      },
+    );
+    final bloc = _createBloc(store, FakeCommentGenerator())..add(const AssistantStarted());
+    await _pumpUntilState(
+      tester,
+      bloc,
+      (state) => state.modelStatus == AssistantModelStatus.loading,
+    );
+    await tester.pumpWidget(_TestAssistantApp(bloc: bloc));
+
+    expect(find.text('Preparing the local Qwen model…'), findsOneWidget);
+    expect(find.byKey(assistantPromptFieldKey), findsNothing);
+
+    loadingGate.complete();
+    await _pumpUntilState(
+      tester,
+      bloc,
+      (state) => state.modelStatus == AssistantModelStatus.downloading,
+    );
+    expect(find.text('Downloading the Qwen model: 37%'), findsOneWidget);
+
+    downloadGate.complete();
+    await _pumpUntilState(
+      tester,
+      bloc,
+      (state) => state.modelStatus == AssistantModelStatus.verifying,
+    );
+    expect(find.text('Verifying the local Qwen model…'), findsOneWidget);
+
+    verificationGate.complete();
+    await _pumpUntilState(
+      tester,
+      bloc,
+      (state) => state.modelStatus == AssistantModelStatus.ready,
+    );
+    expect(find.text('Your on-device assistant is ready'), findsOneWidget);
+    expect(find.byKey(assistantPromptFieldKey), findsOneWidget);
+
+    await _disposeFixture(tester, bloc, store);
+  });
+
+  testWidgets('shows actionable network failure and retries model preparation', (
+    tester,
+  ) async {
+    const failure = NetworkFailure(code: 'model_download');
+    late final FakeAssistantModelStore store;
+    store = FakeAssistantModelStore(
+      onPrepare: () async {
+        if (store.prepareCalls == 1) {
+          store.emit(ModelStoreState.failure(failure));
+          return const AppError(failure);
+        }
+        store.emit(ModelStoreState.ready(testQwenArtifact));
+        return const AppSuccess(testQwenArtifact);
+      },
+    );
+    final bloc = _createBloc(store, FakeCommentGenerator())..add(const AssistantStarted());
+    await _pumpUntilState(
+      tester,
+      bloc,
+      (state) => state.modelStatus == AssistantModelStatus.failure,
+    );
+    await tester.pumpWidget(_TestAssistantApp(bloc: bloc));
+
+    expect(
+      find.text(
+        'The Qwen model could not be downloaded. Check your connection and retry.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byKey(assistantModelRetryButtonKey), findsOneWidget);
+
+    await tester.tap(find.byKey(assistantModelRetryButtonKey));
+    await _pumpUntilState(
+      tester,
+      bloc,
+      (state) => state.modelStatus == AssistantModelStatus.ready,
+    );
+
+    expect(store.prepareCalls, 2);
+    expect(find.text('Your on-device assistant is ready'), findsOneWidget);
+
+    await _disposeFixture(tester, bloc, store);
+  });
+
+  testWidgets('streams and commits a manual answer on a narrow viewport', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(375, 667);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final semantics = tester.ensureSemantics();
+    final store = FakeAssistantModelStore();
+    final generator = FakeCommentGenerator();
+    final handle = FakeGenerationHandle();
+    generator.enqueueHandle(handle);
+    final bloc = _createBloc(store, generator)..add(const AssistantStarted());
+    await _pumpUntilState(
+      tester,
+      bloc,
+      (state) => state.modelStatus == AssistantModelStatus.ready,
+    );
+    await tester.pumpWidget(_TestAssistantApp(bloc: bloc));
+
+    expect(
+      find.bySemanticsLabel('Message to the local assistant'),
+      findsOneWidget,
+    );
+    await tester.enterText(
+      find.byKey(assistantPromptFieldKey),
+      'Explain the scene',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(assistantSubmitControlKey));
+    await _pumpUntil(tester, () => generator.requests.length == 1);
+
+    expect(find.text('Explain the scene'), findsOneWidget);
+    expect(find.text('Thinking…'), findsOneWidget);
+    expect(find.bySemanticsLabel('Stop'), findsWidgets);
+
+    await tester.runAsync(() async {
+      handle
+        ..emit('Streaming ')
+        ..emit('answer')
+        ..succeed('Streaming answer');
+      await Future<void>.delayed(Duration.zero);
+    });
+    await _pumpUntilState(tester, bloc, (state) => state.messages.length == 2);
+
+    expect(find.text('Streaming answer'), findsOneWidget);
+    expect(find.text('Send'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    semantics.dispose();
+    await _disposeFixture(tester, bloc, store);
+  });
+
+  testWidgets('Stop discards the visible draft and restores the empty state', (
+    tester,
+  ) async {
+    final store = FakeAssistantModelStore();
+    final generator = FakeCommentGenerator();
+    final handle = FakeGenerationHandle();
+    generator.enqueueHandle(handle);
+    final bloc = _createBloc(store, generator)..add(const AssistantStarted());
+    await _pumpUntilState(
+      tester,
+      bloc,
+      (state) => state.modelStatus == AssistantModelStatus.ready,
+    );
+    await tester.pumpWidget(_TestAssistantApp(bloc: bloc));
+
+    await tester.enterText(
+      find.byKey(assistantPromptFieldKey),
+      'Cancel this answer',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(assistantSubmitControlKey));
+    await _pumpUntil(tester, () => generator.requests.length == 1);
+    handle.emit('Uncommitted prefix');
+    await _pumpUntilState(
+      tester,
+      bloc,
+      (state) => state.draftResponse == 'Uncommitted prefix',
+    );
+
+    await tester.tap(find.byKey(assistantSubmitControlKey));
+    await tester.runAsync(() async {
+      await handle.cancel();
+      await Future<void>.delayed(Duration.zero);
+    });
+    await _pumpUntilState(
+      tester,
+      bloc,
+      (state) => state.generationStatus == AssistantGenerationStatus.idle,
+    );
+
+    expect(handle.cancelCalls, 1);
+    expect(find.text('Cancel this answer'), findsNothing);
+    expect(find.text('Uncommitted prefix'), findsNothing);
+    expect(find.text('Your on-device assistant is ready'), findsOneWidget);
+    expect(find.text('Send'), findsOneWidget);
+
+    await _disposeFixture(tester, bloc, store);
+  });
+
+  testWidgets('offers answer retry and resubmits the failed prompt', (
+    tester,
+  ) async {
+    final store = FakeAssistantModelStore();
+    final generator = FakeCommentGenerator();
+    final failedHandle = FakeGenerationHandle();
+    final retryHandle = FakeGenerationHandle();
+    generator
+      ..enqueueHandle(failedHandle)
+      ..enqueueHandle(retryHandle);
+    final bloc = _createBloc(store, generator)..add(const AssistantStarted());
+    await _pumpUntilState(
+      tester,
+      bloc,
+      (state) => state.modelStatus == AssistantModelStatus.ready,
+    );
+    await tester.pumpWidget(_TestAssistantApp(bloc: bloc));
+
+    await tester.enterText(
+      find.byKey(assistantPromptFieldKey),
+      'Retry this prompt',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(assistantSubmitControlKey));
+    await _pumpUntil(tester, () => generator.requests.length == 1);
+    await tester.runAsync(() async {
+      failedHandle.fail(
+        const DeviceUnavailableFailure(code: 'assistant_generation'),
+      );
+      await Future<void>.delayed(Duration.zero);
+    });
+    await _pumpUntilState(
+      tester,
+      bloc,
+      (state) => state.generationStatus == AssistantGenerationStatus.failure,
+    );
+
+    expect(
+      find.text('The local assistant could not finish this answer.'),
+      findsOneWidget,
+    );
+    expect(find.byKey(assistantAnswerRetryButtonKey), findsOneWidget);
+
+    await tester.tap(find.byKey(assistantAnswerRetryButtonKey));
+    await _pumpUntil(tester, () => generator.requests.length == 2);
+    await tester.runAsync(() async {
+      retryHandle.succeed('Recovered in the UI');
+      await Future<void>.delayed(Duration.zero);
+    });
+    await _pumpUntilState(tester, bloc, (state) => state.messages.length == 2);
+
+    expect(generator.requests[1].prompt, generator.requests[0].prompt);
+    expect(find.text('Recovered in the UI'), findsOneWidget);
+
+    await _disposeFixture(tester, bloc, store);
+  });
+}
+
+final class _TestAssistantApp extends StatelessWidget {
+  const _TestAssistantApp({required this.bloc});
+
+  final AssistantBloc bloc;
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      theme: AppTheme.light(),
+      home: BlocProvider.value(
+        value: bloc,
+        child: const AssistantPage(),
+      ),
+    );
+  }
+}
+
+AssistantBloc _createBloc(
+  FakeAssistantModelStore store,
+  FakeCommentGenerator generator,
+) {
+  return AssistantBloc(
+    modelStore: store,
+    commentGenerator: generator,
+    promptBuilder: QwenPromptBuilder(
+      systemPrompt: 'You are a concise local assistant.',
+      manualOptions: _testManualOptions,
+      shortCommentOptions: _testShortCommentOptions,
+    ),
+  );
+}
+
+Future<void> _pumpUntilState(
+  WidgetTester tester,
+  AssistantBloc bloc,
+  bool Function(AssistantState state) predicate,
+) {
+  return _pumpUntil(tester, () => predicate(bloc.state));
+}
+
+Future<void> _pumpUntil(
+  WidgetTester tester,
+  bool Function() predicate,
+) async {
+  for (var attempt = 0; attempt < 100; attempt += 1) {
+    await tester.pump(AppAnimations.regular.fast);
+    if (predicate()) return;
+  }
+  throw TestFailure('Condition did not become true.');
+}
+
+Future<void> _disposeFixture(
+  WidgetTester tester,
+  AssistantBloc bloc,
+  FakeAssistantModelStore store,
+) async {
+  await tester.pumpWidget(const SizedBox.shrink());
+  await tester.runAsync(bloc.close);
+  await tester.runAsync(store.close);
+}

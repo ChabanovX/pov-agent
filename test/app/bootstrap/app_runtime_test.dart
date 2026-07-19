@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pov_agent/app/bootstrap/app_runtime.dart';
+import 'package:pov_agent/features/assistant/presentation/bloc/assistant_bloc.dart';
+import 'package:pov_agent/features/assistant/presentation/bloc/assistant_state.dart';
 import 'package:pov_agent/features/camera/application/models/observation_event.dart';
 import 'package:pov_agent/features/camera/application/services/observation_scene_session.dart';
 import 'package:pov_agent/features/camera/domain/entities/detection.dart';
@@ -10,6 +13,7 @@ import 'package:pov_agent/features/camera/domain/services/scene_stabilizer.dart'
 import 'package:pov_agent/features/camera/presentation/bloc/camera_bloc.dart';
 
 import '../../support/fake_camera_controller.dart';
+import '../../support/test_assistant_resources.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -22,9 +26,13 @@ void main() {
       controller: controller,
       stabilizer: SceneStabilizer(),
     );
+    final assistant = TestAssistantResources();
     final runtime = AppRuntime(
       cameraBloc: CameraBloc(controller),
       sceneSession: sceneSession,
+      assistantBloc: assistant.assistantBloc,
+      modelStore: assistant.modelStore,
+      commentGenerator: assistant.commentGenerator,
     );
 
     expect(controller.initCalls, 0);
@@ -68,6 +76,8 @@ void main() {
     await sceneChangesComplete;
 
     expect(controller.closeCalls, 1);
+    expect(assistant.modelStore.closeCalls, 1);
+    expect(assistant.commentGenerator.closeCalls, 1);
   });
 
   testWidgets('close before start prevents later resource acquisition', (
@@ -78,9 +88,13 @@ void main() {
       controller: controller,
       stabilizer: SceneStabilizer(),
     );
+    final assistant = TestAssistantResources();
     final runtime = AppRuntime(
       cameraBloc: CameraBloc(controller),
       sceneSession: sceneSession,
+      assistantBloc: assistant.assistantBloc,
+      modelStore: assistant.modelStore,
+      commentGenerator: assistant.commentGenerator,
     );
     final sceneChangesComplete = expectLater(
       sceneSession.changes,
@@ -105,9 +119,13 @@ void main() {
       controller: controller,
       stabilizer: SceneStabilizer(),
     );
+    final assistant = TestAssistantResources();
     final runtime = AppRuntime(
       cameraBloc: CameraBloc(controller),
       sceneSession: sceneSession,
+      assistantBloc: assistant.assistantBloc,
+      modelStore: assistant.modelStore,
+      commentGenerator: assistant.commentGenerator,
     );
     final sceneChangesComplete = expectLater(
       sceneSession.changes,
@@ -139,9 +157,13 @@ void main() {
       controller: controller,
       stabilizer: SceneStabilizer(),
     );
+    final assistant = TestAssistantResources();
     final runtime = AppRuntime(
       cameraBloc: CameraBloc(controller),
       sceneSession: sceneSession,
+      assistantBloc: assistant.assistantBloc,
+      modelStore: assistant.modelStore,
+      commentGenerator: assistant.commentGenerator,
     );
 
     final startTask = runtime.start();
@@ -156,4 +178,69 @@ void main() {
     expect(controller.initCalls, 1);
     expect(controller.closeCalls, 1);
   });
+
+  testWidgets(
+    'suspends and reloads only a lazily started assistant session',
+    (tester) async {
+      final controller = FakeCameraController();
+      final sceneSession = ObservationSceneSession(
+        controller: controller,
+        stabilizer: SceneStabilizer(),
+      );
+      final assistant = TestAssistantResources();
+      final runtime = AppRuntime(
+        cameraBloc: CameraBloc(controller),
+        sceneSession: sceneSession,
+        assistantBloc: assistant.assistantBloc,
+        modelStore: assistant.modelStore,
+        commentGenerator: assistant.commentGenerator,
+      );
+      await runtime.start();
+
+      runtime
+        ..didChangeAppLifecycleState(AppLifecycleState.inactive)
+        ..didChangeAppLifecycleState(AppLifecycleState.hidden)
+        ..didChangeAppLifecycleState(AppLifecycleState.paused);
+      await tester.pumpAndSettle();
+      expect(assistant.modelStore.suspendCalls, 0);
+
+      runtime
+        ..didChangeAppLifecycleState(AppLifecycleState.hidden)
+        ..didChangeAppLifecycleState(AppLifecycleState.inactive)
+        ..didChangeAppLifecycleState(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+
+      assistant.assistantBloc.add(const AssistantStarted());
+      await tester.pumpAndSettle();
+      expect(assistant.modelStore.prepareCalls, 1);
+      expect(
+        assistant.assistantBloc.state.modelStatus,
+        AssistantModelStatus.ready,
+      );
+
+      runtime
+        ..didChangeAppLifecycleState(AppLifecycleState.inactive)
+        ..didChangeAppLifecycleState(AppLifecycleState.hidden)
+        ..didChangeAppLifecycleState(AppLifecycleState.paused);
+      await tester.pumpAndSettle();
+      expect(assistant.modelStore.suspendCalls, 1);
+      expect(
+        assistant.assistantBloc.state.modelStatus,
+        AssistantModelStatus.suspended,
+      );
+
+      runtime
+        ..didChangeAppLifecycleState(AppLifecycleState.hidden)
+        ..didChangeAppLifecycleState(AppLifecycleState.inactive)
+        ..didChangeAppLifecycleState(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(assistant.modelStore.prepareCalls, 2);
+      expect(
+        assistant.assistantBloc.state.modelStatus,
+        AssistantModelStatus.ready,
+      );
+
+      await tester.runAsync(runtime.close);
+    },
+  );
 }
