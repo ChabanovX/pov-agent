@@ -243,4 +243,207 @@ void main() {
       await tester.runAsync(runtime.close);
     },
   );
+
+  testWidgets(
+    'settles camera work before suspending the assistant runtime',
+    (tester) async {
+      final disableStarted = Completer<void>();
+      final releaseDisable = Completer<void>();
+      final controller = FakeCameraController(
+        onDisable: () async {
+          disableStarted.complete();
+          await releaseDisable.future;
+        },
+      );
+      final sceneSession = ObservationSceneSession(
+        controller: controller,
+        stabilizer: SceneStabilizer(),
+      );
+      final assistant = TestAssistantResources();
+      final runtime = AppRuntime(
+        cameraBloc: CameraBloc(controller),
+        sceneSession: sceneSession,
+        assistantBloc: assistant.assistantBloc,
+        modelStore: assistant.modelStore,
+        commentGenerator: assistant.commentGenerator,
+      );
+      await runtime.start();
+      assistant.assistantBloc.add(const AssistantStarted());
+      await tester.pumpAndSettle();
+
+      runtime.didChangeAppLifecycleState(AppLifecycleState.inactive);
+      await tester.pump();
+      await disableStarted.future;
+
+      expect(assistant.modelStore.suspendCalls, 0);
+      expect(
+        assistant.assistantBloc.state.modelStatus,
+        AssistantModelStatus.ready,
+      );
+
+      releaseDisable.complete();
+      await tester.pumpAndSettle();
+
+      expect(assistant.modelStore.suspendCalls, 1);
+      expect(
+        assistant.assistantBloc.state.modelStatus,
+        AssistantModelStatus.suspended,
+      );
+
+      await tester.runAsync(runtime.close);
+    },
+  );
+
+  testWidgets(
+    'rejects queued suspension after a rapid foreground return',
+    (tester) async {
+      final disableStarted = Completer<void>();
+      final releaseDisable = Completer<void>();
+      final controller = FakeCameraController(
+        onDisable: () async {
+          disableStarted.complete();
+          await releaseDisable.future;
+        },
+      );
+      final sceneSession = ObservationSceneSession(
+        controller: controller,
+        stabilizer: SceneStabilizer(),
+      );
+      final assistant = TestAssistantResources();
+      final runtime = AppRuntime(
+        cameraBloc: CameraBloc(controller),
+        sceneSession: sceneSession,
+        assistantBloc: assistant.assistantBloc,
+        modelStore: assistant.modelStore,
+        commentGenerator: assistant.commentGenerator,
+      );
+      await runtime.start();
+      assistant.assistantBloc.add(const AssistantStarted());
+      await tester.pumpAndSettle();
+
+      runtime.didChangeAppLifecycleState(AppLifecycleState.inactive);
+      await tester.pump();
+      await disableStarted.future;
+      runtime.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      releaseDisable.complete();
+      await tester.pumpAndSettle();
+
+      expect(assistant.modelStore.suspendCalls, 0);
+      expect(
+        assistant.assistantBloc.state.modelStatus,
+        AssistantModelStatus.ready,
+      );
+
+      await tester.runAsync(runtime.close);
+    },
+  );
+
+  test(
+    'settles camera-side shutdown before closing assistant resources',
+    () async {
+      final cameraCloseStarted = Completer<void>();
+      final releaseCameraClose = Completer<void>();
+      final controller = FakeCameraController(
+        onClose: () async {
+          cameraCloseStarted.complete();
+          await releaseCameraClose.future;
+        },
+      );
+      final sceneSession = ObservationSceneSession(
+        controller: controller,
+        stabilizer: SceneStabilizer(),
+      );
+      final assistant = TestAssistantResources();
+      final runtime = AppRuntime(
+        cameraBloc: CameraBloc(controller),
+        sceneSession: sceneSession,
+        assistantBloc: assistant.assistantBloc,
+        modelStore: assistant.modelStore,
+        commentGenerator: assistant.commentGenerator,
+      );
+      await runtime.start();
+
+      final closeTask = runtime.close();
+      await cameraCloseStarted.future;
+
+      expect(assistant.modelStore.closeCalls, 0);
+      expect(assistant.commentGenerator.closeCalls, 0);
+
+      releaseCameraClose.complete();
+      await closeTask;
+
+      expect(assistant.modelStore.closeCalls, 1);
+      expect(assistant.commentGenerator.closeCalls, 1);
+    },
+  );
+
+  test(
+    'closes assistant resources after camera shutdown fails and preserves the error',
+    () async {
+      final cameraCloseStarted = Completer<void>();
+      final releaseCameraClose = Completer<void>();
+      final cameraCloseFailure = StateError('camera close failed');
+      final controller = FakeCameraController(
+        onClose: () async {
+          cameraCloseStarted.complete();
+          await releaseCameraClose.future;
+          throw cameraCloseFailure;
+        },
+      );
+      final sceneSession = ObservationSceneSession(
+        controller: controller,
+        stabilizer: SceneStabilizer(),
+      );
+      final assistant = TestAssistantResources();
+      final runtime = AppRuntime(
+        cameraBloc: CameraBloc(controller),
+        sceneSession: sceneSession,
+        assistantBloc: assistant.assistantBloc,
+        modelStore: assistant.modelStore,
+        commentGenerator: assistant.commentGenerator,
+      );
+      await runtime.start();
+
+      final closeTask = runtime.close();
+      await cameraCloseStarted.future;
+
+      expect(assistant.modelStore.closeCalls, 0);
+      expect(assistant.commentGenerator.closeCalls, 0);
+
+      releaseCameraClose.complete();
+      await expectLater(
+        closeTask,
+        throwsA(same(cameraCloseFailure)),
+      );
+      expect(assistant.modelStore.closeCalls, 1);
+      expect(assistant.commentGenerator.closeCalls, 1);
+    },
+  );
+
+  test('retries retained assistant ownership after terminal close fails', () async {
+    final controller = FakeCameraController();
+    final sceneSession = ObservationSceneSession(
+      controller: controller,
+      stabilizer: SceneStabilizer(),
+    );
+    final assistant = TestAssistantResources();
+    final closeFailure = Exception('native destroy failed');
+    assistant.commentGenerator.closeFailures.add(closeFailure);
+    final runtime = AppRuntime(
+      cameraBloc: CameraBloc(controller),
+      sceneSession: sceneSession,
+      assistantBloc: assistant.assistantBloc,
+      modelStore: assistant.modelStore,
+      commentGenerator: assistant.commentGenerator,
+    );
+    await runtime.start();
+
+    await expectLater(runtime.close(), throwsA(same(closeFailure)));
+    expect(assistant.commentGenerator.closeCalls, 1);
+
+    await runtime.close();
+    await runtime.close();
+
+    expect(assistant.commentGenerator.closeCalls, 2);
+  });
 }

@@ -108,9 +108,14 @@ void main() {
     await _flushMicrotasks();
     expect(frameSource.nextFrameCalls, 1);
 
-    await adapter.disable();
-    firstDetection.complete(AppSuccess(_snapshot(1)));
+    var disableCompleted = false;
+    final disableFuture = adapter.disable().whenComplete(
+      () => disableCompleted = true,
+    );
     await _flushMicrotasks();
+    expect(disableCompleted, isFalse);
+    firstDetection.complete(AppSuccess(_snapshot(1)));
+    expect(await disableFuture, isA<AppSuccess<void>>());
 
     expect(detections, isEmpty);
     expect(adapter.currentFrame, isNull);
@@ -133,9 +138,14 @@ void main() {
     await _flushMicrotasks();
     expect(frameSource.nextFrameCalls, 1);
 
-    await adapter.disable();
-    pendingFrame.complete(AppSuccess(_videoFrame(1)));
+    var disableCompleted = false;
+    final disableFuture = adapter.disable().whenComplete(
+      () => disableCompleted = true,
+    );
     await _flushMicrotasks();
+    expect(disableCompleted, isFalse);
+    pendingFrame.complete(AppSuccess(_videoFrame(1)));
+    expect(await disableFuture, isA<AppSuccess<void>>());
 
     expect(detector.detectCalls, 0);
     expect(adapter.currentFrame, isNull);
@@ -430,13 +440,18 @@ void main() {
     expect(events.last, isA<ObservationInferenceFailed>());
     expect(frameSource.closeCalls, 1);
 
-    await adapter.disable();
-    await adapter.enable(CameraLens.back);
+    var disableCompleted = false;
+    final disableFuture = adapter.disable().whenComplete(
+      () => disableCompleted = true,
+    );
     await _flushMicrotasks();
 
+    expect(disableCompleted, isFalse);
     expect(frameSource.openCalls, 1);
 
     closeResult.complete(const AppSuccess<void>(null));
+    expect(await disableFuture, isA<AppSuccess<void>>());
+    await adapter.enable(CameraLens.back);
     await _flushMicrotasks();
 
     expect(frameSource.openCalls, 2);

@@ -21,6 +21,10 @@ abstract interface class ObservationController {
   Future<AppResult<void>> enable(CameraLens lens);
 
   /// Suspends observation while retaining reusable resources.
+  ///
+  /// Completion means no frame acquisition or inference operation remains in
+  /// flight, so an app-level lifecycle coordinator may safely release another
+  /// native compute runtime afterwards.
   Future<AppResult<void>> disable();
 
   /// Restarts model preparation after a model failure.
