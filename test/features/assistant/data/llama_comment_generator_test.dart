@@ -1,0 +1,369 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:pov_agent/features/assistant/application/models/comment_generation_request.dart';
+import 'package:pov_agent/features/assistant/application/models/generation_options.dart';
+import 'package:pov_agent/features/assistant/application/models/verified_model_artifact.dart';
+import 'package:pov_agent/features/assistant/application/ports/generation_handle.dart';
+import 'package:pov_agent/features/assistant/data/adapters/llama_comment_generator.dart';
+import 'package:pov_agent/features/assistant/data/ffi/llama_inference_worker.dart';
+import 'package:pov_agent/features/assistant/data/ffi/llama_native_runtime.dart';
+import 'package:pov_agent/shared/domain/app_failure.dart';
+import 'package:pov_agent/shared/domain/app_result.dart';
+
+const _testGenerationOptions = GenerationOptions(
+  maxTokens: 16,
+  temperature: 0.4,
+  topP: 0.8,
+  topK: 8,
+  minP: 0,
+);
+
+void main() {
+  const runtimeConfiguration = LlamaRuntimeConfiguration(
+    contextTokens: 2048,
+    batchTokens: 512,
+    threadCount: 4,
+    gpuLayers: 99,
+  );
+  const artifact = VerifiedModelArtifact(
+    modelId: 'Qwen3-0.6B-GGUF',
+    revision: 'pinned-revision',
+    filePath: '/models/qwen.gguf',
+    byteSize: 123,
+    sha256: 'abc123',
+  );
+
+  late _FakeLlamaWorker worker;
+  late LlamaCommentGenerator generator;
+
+  setUp(() {
+    worker = _FakeLlamaWorker();
+    generator = LlamaCommentGenerator(
+      createWorker: () async => worker,
+      runtimeConfiguration: runtimeConfiguration,
+      randomSeed: 42,
+    );
+  });
+
+  tearDown(() => generator.close());
+
+  test('shares an equivalent model load and forwards runtime policy', () async {
+    final results = await Future.wait([
+      generator.loadModel(artifact),
+      generator.loadModel(artifact),
+    ]);
+
+    expect(results, everyElement(isA<AppSuccess<void>>()));
+    expect(worker.loadCalls, 1);
+    expect(worker.loadedPath, artifact.filePath);
+    expect(worker.runtimeConfiguration, same(runtimeConfiguration));
+  });
+
+  test('normalizes native model load failures', () async {
+    worker.loadError = const LlamaWorkerException(
+      status: -2,
+      message: 'bad gguf',
+    );
+
+    final result = await generator.loadModel(artifact);
+
+    expect(
+      result,
+      isA<AppError<void>>().having(
+        (result) => result.failure,
+        'failure',
+        isA<DeviceUnavailableFailure>().having(
+          (failure) => failure.code,
+          'code',
+          'assistant_model_load',
+        ),
+      ),
+    );
+  });
+
+  test('recreates the worker after its initial spawn fails', () async {
+    await generator.close();
+    var spawnAttempts = 0;
+    generator = LlamaCommentGenerator(
+      createWorker: () async {
+        spawnAttempts += 1;
+        if (spawnAttempts == 1) {
+          throw StateError('isolate handshake failed');
+        }
+        return worker;
+      },
+      runtimeConfiguration: runtimeConfiguration,
+      randomSeed: 42,
+    );
+
+    final first = await generator.loadModel(artifact);
+    final retry = await generator.loadModel(artifact);
+
+    expect(first, isA<AppError<void>>());
+    expect(retry, isA<AppSuccess<void>>());
+    expect(spawnAttempts, 2);
+    expect(worker.loadCalls, 1);
+  });
+
+  test('retires a failed model runtime before retrying on a new worker', () async {
+    await generator.close();
+    final failedWorker = _FakeLlamaWorker()
+      ..loadError = const LlamaWorkerException(
+        status: -2,
+        message: 'model load failed',
+      );
+    final recoveredWorker = _FakeLlamaWorker();
+    var spawnAttempts = 0;
+    generator = LlamaCommentGenerator(
+      createWorker: () async {
+        spawnAttempts += 1;
+        return spawnAttempts == 1 ? failedWorker : recoveredWorker;
+      },
+      runtimeConfiguration: runtimeConfiguration,
+      randomSeed: 42,
+    );
+
+    final first = await generator.loadModel(artifact);
+    final retry = await generator.loadModel(artifact);
+
+    expect(first, isA<AppError<void>>());
+    expect(retry, isA<AppSuccess<void>>());
+    expect(failedWorker.closeCalls, 1);
+    expect(recoveredWorker.loadCalls, 1);
+  });
+
+  test('persistent worker close is idempotent and terminal', () async {
+    final nativeWorker = await NativeLlamaInferenceWorker.spawn();
+
+    await Future.wait([nativeWorker.close(), nativeWorker.close()]);
+
+    await expectLater(
+      nativeWorker.load('/models/unused.gguf', runtimeConfiguration),
+      throwsA(isA<StateError>()),
+    );
+  });
+
+  test('concurrent generator closes join the same native teardown', () async {
+    await generator.loadModel(artifact);
+    final closeGate = worker.closeGate = Completer<void>();
+
+    final first = generator.close();
+    final second = generator.close();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(identical(first, second), isTrue);
+    expect(worker.closeCalls, 1);
+
+    closeGate.complete();
+    await Future.wait([first, second]);
+  });
+
+  test(
+    'decodes split UTF-8 and never publishes prompt-prefilled reasoning',
+    () async {
+      await generator.loadModel(artifact);
+      final nativeGeneration = _FakeWorkerGeneration();
+      worker.nextGeneration = nativeGeneration;
+      const options = GenerationOptions(
+        maxTokens: 17,
+        temperature: 0.61,
+        topP: 0.92,
+        topK: 19,
+        minP: 0.04,
+      );
+      final result = await generator.generate(
+        CommentGenerationRequest(
+          prompt: 'chatml prompt',
+          options: options,
+          startsInsideReasoning: true,
+        ),
+      );
+      final handle = _successHandle(result);
+      final visibleChunks = <String>[];
+      final chunksDone = handle.chunks.listen(visibleChunks.add).asFuture<void>();
+
+      nativeGeneration.addText('private chain of thought</thi');
+      final answerBytes = utf8.encode('nk>\nVisible 🌹');
+      nativeGeneration
+        ..addBytes(answerBytes.sublist(0, answerBytes.length - 2))
+        ..addBytes(answerBytes.sublist(answerBytes.length - 2));
+      await nativeGeneration.finish();
+      final completion = await handle.completion;
+      await chunksDone;
+
+      expect(visibleChunks.join(), 'Visible 🌹');
+      expect(visibleChunks.join(), isNot(contains('private')));
+      expect(completion, isA<AppSuccess<String>>());
+      expect((completion as AppSuccess<String>).value, 'Visible 🌹');
+      expect(worker.generatedPrompt, 'chatml prompt');
+      expect(
+        worker.sampling,
+        isA<LlamaSamplingConfiguration>()
+            .having((value) => value.maxTokens, 'maxTokens', 17)
+            .having((value) => value.temperature, 'temperature', 0.61)
+            .having((value) => value.topP, 'topP', 0.92)
+            .having((value) => value.topK, 'topK', 19)
+            .having((value) => value.minP, 'minP', 0.04)
+            .having((value) => value.seed, 'seed', 42),
+      );
+    },
+  );
+
+  test('cancel settles only after native generation has stopped', () async {
+    await generator.loadModel(artifact);
+    final nativeGeneration = _FakeWorkerGeneration(holdCancellation: true);
+    worker.nextGeneration = nativeGeneration;
+    final handle = _successHandle(
+      await generator.generate(
+        CommentGenerationRequest(
+          prompt: 'prompt',
+          options: _testGenerationOptions,
+        ),
+      ),
+    );
+    final chunks = <String>[];
+    final chunksDone = handle.chunks.listen(chunks.add).asFuture<void>();
+    nativeGeneration.addText('Visible prefix');
+
+    var cancelSettled = false;
+    final cancelTask = handle.cancel().then((_) => cancelSettled = true);
+    await Future<void>.delayed(Duration.zero);
+    expect(nativeGeneration.cancelCalls, 1);
+    expect(cancelSettled, isFalse);
+
+    await nativeGeneration.releaseCancellation();
+    await cancelTask;
+    await chunksDone;
+    expect(cancelSettled, isTrue);
+    expect((await handle.completion as AppSuccess<String>).value, 'Visible prefix');
+  });
+
+  test('keeps chunk stream clean and reports generation failure once', () async {
+    await generator.loadModel(artifact);
+    final nativeGeneration = _FakeWorkerGeneration();
+    worker.nextGeneration = nativeGeneration;
+    final handle = _successHandle(
+      await generator.generate(
+        CommentGenerationRequest(
+          prompt: 'prompt',
+          options: _testGenerationOptions,
+        ),
+      ),
+    );
+
+    final chunksExpectation = expectLater(handle.chunks, emitsDone);
+    await nativeGeneration.fail(
+      const LlamaWorkerException(status: -9, message: 'decode failed'),
+    );
+
+    await chunksExpectation;
+    expect(
+      await handle.completion,
+      isA<AppError<String>>().having(
+        (result) => result.failure.code,
+        'code',
+        'assistant_generation',
+      ),
+    );
+  });
+}
+
+GenerationHandle _successHandle(AppResult<GenerationHandle> result) {
+  return switch (result) {
+    AppSuccess<GenerationHandle>(:final value) => value,
+    AppError<GenerationHandle>(:final failure) => throw TestFailure(
+      'Expected generation success, got ${failure.code}.',
+    ),
+  };
+}
+
+final class _FakeLlamaWorker implements LlamaInferenceWorker {
+  int loadCalls = 0;
+  int closeCalls = 0;
+  String? loadedPath;
+  LlamaRuntimeConfiguration? runtimeConfiguration;
+  Exception? loadError;
+  Completer<void>? closeGate;
+  _FakeWorkerGeneration? nextGeneration;
+  String? generatedPrompt;
+  LlamaSamplingConfiguration? sampling;
+
+  @override
+  Future<LlamaWorkerLoadResult> load(
+    String modelPath,
+    LlamaRuntimeConfiguration configuration,
+  ) async {
+    loadCalls += 1;
+    loadedPath = modelPath;
+    runtimeConfiguration = configuration;
+    final error = loadError;
+    if (error != null) throw error;
+    return const LlamaWorkerLoadResult(usesGpu: false);
+  }
+
+  @override
+  Future<LlamaWorkerGeneration> generate(
+    String prompt,
+    LlamaSamplingConfiguration configuration,
+  ) async {
+    generatedPrompt = prompt;
+    sampling = configuration;
+    return nextGeneration ??= _FakeWorkerGeneration();
+  }
+
+  @override
+  Future<void> unload() async {}
+
+  @override
+  Future<void> close() async {
+    closeCalls += 1;
+    await closeGate?.future;
+  }
+}
+
+final class _FakeWorkerGeneration implements LlamaWorkerGeneration {
+  _FakeWorkerGeneration({this.holdCancellation = false});
+
+  final bool holdCancellation;
+  final StreamController<Uint8List> _bytes = StreamController<Uint8List>();
+  final Completer<void> _completion = Completer<void>();
+  final Completer<void> _cancelRelease = Completer<void>();
+  int cancelCalls = 0;
+
+  @override
+  Stream<Uint8List> get bytes => _bytes.stream;
+
+  @override
+  Future<void> get completion => _completion.future;
+
+  void addText(String value) => addBytes(utf8.encode(value));
+
+  void addBytes(List<int> value) => _bytes.add(Uint8List.fromList(value));
+
+  Future<void> finish() async {
+    if (_completion.isCompleted) return;
+    await _bytes.close();
+    _completion.complete();
+  }
+
+  Future<void> fail(Object error) async {
+    if (_completion.isCompleted) return;
+    await _bytes.close();
+    _completion.completeError(error);
+  }
+
+  Future<void> releaseCancellation() async {
+    if (!_cancelRelease.isCompleted) _cancelRelease.complete();
+    await completion;
+  }
+
+  @override
+  Future<void> cancel() async {
+    cancelCalls += 1;
+    if (holdCancellation) await _cancelRelease.future;
+    await finish();
+  }
+}
