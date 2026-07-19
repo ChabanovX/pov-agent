@@ -12,7 +12,11 @@ void main() {
     final controller = FakeCameraController();
     final runtime = await startTestAppRuntime(controller);
     try {
-      await tester.pumpWidget(const PovAgentApp());
+      await tester.pumpWidget(
+        const PovAgentApp(
+          observationSurfaceBuilder: buildTestObservationSurface,
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(find.byType(CupertinoApp), findsOneWidget);
@@ -64,7 +68,11 @@ void main() {
     final controller = FakeCameraController();
     final runtime = await startTestAppRuntime(controller);
     try {
-      await tester.pumpWidget(const PovAgentApp());
+      await tester.pumpWidget(
+        const PovAgentApp(
+          observationSurfaceBuilder: buildTestObservationSurface,
+        ),
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.bySemanticsLabel('Disable camera'));
@@ -87,14 +95,22 @@ void main() {
     final controller = FakeCameraController();
     final runtime = await startTestAppRuntime(controller);
     try {
-      await tester.pumpWidget(const PovAgentApp());
+      await tester.pumpWidget(
+        const PovAgentApp(
+          observationSurfaceBuilder: buildTestObservationSurface,
+        ),
+      );
       await tester.pumpAndSettle();
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
 
       expect(controller.closeCalls, 0);
 
-      await tester.pumpWidget(const PovAgentApp());
+      await tester.pumpWidget(
+        const PovAgentApp(
+          observationSurfaceBuilder: buildTestObservationSurface,
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(find.byKey(testObservationSurfaceKey), findsOneWidget);

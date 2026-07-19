@@ -1,4 +1,3 @@
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pov_agent/app/bootstrap/app_runtime.dart';
 import 'package:pov_agent/features/camera/presentation/bloc/camera_bloc.dart';
@@ -12,7 +11,6 @@ void main() {
     final controller = FakeCameraController();
     final runtime = AppRuntime(
       cameraBloc: CameraBloc(controller),
-      observationSurface: const SizedBox.expand(),
     );
 
     expect(controller.initCalls, 0);

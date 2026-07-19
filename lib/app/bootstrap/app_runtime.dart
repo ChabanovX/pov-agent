@@ -9,17 +9,13 @@ import 'package:pov_agent/features/camera/presentation/bloc/camera_state.dart';
 /// Dependency registration constructs this object without side effects. [start]
 /// begins the camera session, while [close] is the single shutdown boundary.
 final class AppRuntime with WidgetsBindingObserver {
-  /// Creates a runtime for [cameraBloc] and its [observationSurface].
+  /// Creates a runtime for [cameraBloc].
   AppRuntime({
     required this.cameraBloc,
-    required this.observationSurface,
   });
 
   /// The process-owned camera state machine.
   final CameraBloc cameraBloc;
-
-  /// The platform observation surface paired with [cameraBloc].
-  final Widget observationSurface;
 
   Future<void>? _startFuture;
   Future<void>? _closeFuture;
