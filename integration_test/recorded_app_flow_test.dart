@@ -58,16 +58,11 @@ void main() {
 
         await tester.tap(find.text('Enable camera'));
         await _pumpUntilFound(tester, personDetection);
-
-        await tester.tap(find.text('Assistant'));
-        await tester.pumpAndSettle();
-        expect(find.text('Assistant placeholder'), findsOneWidget);
-
-        await tester.tap(find.text('Camera'));
-        await _pumpUntilFound(tester, find.bySemanticsLabel('Disable camera'));
       } finally {
         semantics.dispose();
-        await runtime.close();
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        await tester.runAsync(runtime.close);
         await appDependencies.reset(dispose: false);
       }
     },

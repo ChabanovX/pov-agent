@@ -1,6 +1,8 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:pov_agent/app/app.dart';
+import 'package:pov_agent/features/assistant/presentation/pages/assistant_page.dart';
 import 'package:pov_agent/features/camera/domain/entities/camera_lens.dart';
 
 import '../test/support/fake_camera_controller.dart';
@@ -38,13 +40,15 @@ void main() {
 
       await tester.tap(find.text('Assistant'));
       await tester.pumpAndSettle();
-      expect(find.text('Assistant placeholder'), findsOneWidget);
+      expect(find.byType(AssistantPage), findsOneWidget);
 
       await tester.tap(find.text('Camera'));
       await tester.pumpAndSettle();
       expect(find.byKey(testObservationSurfaceKey), findsOneWidget);
     } finally {
-      await disposeTestAppRuntime(runtime);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      await tester.runAsync(() => disposeTestAppRuntime(runtime));
     }
   });
 }
