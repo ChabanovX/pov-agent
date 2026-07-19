@@ -403,6 +403,32 @@ void main() {
     await bloc.close();
   });
 
+  test('close waits for an in-flight controller enable before teardown', () async {
+    final enableStarted = Completer<void>();
+    final enableGate = Completer<void>();
+    final controller = FakeCameraController(
+      emitModelReadyOnInit: false,
+      onEnable: (_) async {
+        enableStarted.complete();
+        await enableGate.future;
+      },
+    );
+    final bloc = CameraBloc(controller)..add(const CameraStarted());
+    await enableStarted.future;
+
+    final closeFuture = bloc.close();
+    await pumpEventQueue();
+    expect(controller.closeCalls, 0);
+
+    enableGate.complete();
+    await closeFuture;
+
+    expect(bloc.state.status, CameraStatus.enabled);
+    expect(controller.enableCalls, [CameraLens.back]);
+    expect(controller.disableCalls, 0);
+    expect(controller.closeCalls, 1);
+  });
+
   test('close seals event admission before controller teardown', () async {
     final closeStarted = Completer<void>();
     final closeGate = Completer<void>();
