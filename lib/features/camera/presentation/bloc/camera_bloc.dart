@@ -17,7 +17,7 @@ sealed class CameraEvent {
   const CameraEvent();
 }
 
-/// A user or lifecycle intent reconciled with the native observation session.
+/// A user or lifecycle intent reconciled with the observation-controller session.
 sealed class CameraIntentEvent extends CameraEvent {
   /// Creates a camera intent event.
   const CameraIntentEvent();
@@ -72,17 +72,31 @@ final class _ObservationRuntimeEventReceived extends CameraEvent {
   final ObservationEvent event;
 }
 
-/// A state machine that reconciles intent with one observation session.
+enum _ReconciliationOutcome {
+  continueWithLatestState,
+  settled,
+  eventHandlerDone,
+}
+
+/// Reconciles camera intent with one observation-controller session.
 ///
-/// Intent remains responsive while camera and model retries execute in one
-/// sequential reconciliation bucket. Native callbacks are normalized by the
-/// observation adapter before this Bloc receives them.
+/// Owns three related models:
+/// - Desired product state lives in [CameraState]: requested power, surface
+///   activity, and selected lens.
+/// - Applied controller state is the latest usable assumption after command
+///   outcomes; it is invalidated by enable failure, not probed from hardware.
+/// - Pending request generations reject superseded discovery and retry
+///   completions before they can overwrite newer intent.
+///
+/// Each registered event family is sequential, but intent, runtime-event, and
+/// reconciliation families may interleave. This keeps newer intent responsive
+/// while an earlier controller call awaits. Only reconciliation invokes
+/// controller lifecycle methods, so those calls never overlap.
+///
+/// [close] seals event admission, cancels the runtime-event subscription, waits
+/// for reconciliation handlers, then releases the controller.
 final class CameraBloc extends Bloc<CameraEvent, CameraState> {
   /// Creates a camera state machine backed by [_controller].
-  ///
-  /// Intent and runtime events are handled sequentially. Native operations are
-  /// serialized through reconciliation while newer intent updates desired
-  /// state immediately.
   CameraBloc(
     this._controller, {
     bool initiallySurfaceActive = true,
@@ -106,15 +120,23 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
   final ObservationController _controller;
 
   StreamSubscription<ObservationEvent>? _observationSubscription;
+
+  // Each requested/completed pair rejects a stale completion while preserving
+  // any newer request for the next reconciliation pass.
   int _discoveryRequest = 0;
   int _completedDiscoveryRequest = 0;
   int _modelRetryRequest = 0;
   int _completedModelRetryRequest = 0;
   int _observationRetryRequest = 0;
   int _completedObservationRetryRequest = 0;
+
+  // A successful retry call only restarts work. Coalesce repeated UI retries
+  // until a runtime result or failure confirms the new observation phase.
   bool _observationRetryInProgress = false;
-  bool _nativeEnabled = false;
-  CameraLens? _nativeLens;
+
+  // Latest usable controller assumption, distinct from desired UI state.
+  bool _controllerEnabled = false;
+  CameraLens? _controllerLens;
 
   bool get _hasPendingDiscovery {
     return _completedDiscoveryRequest < _discoveryRequest;
@@ -196,7 +218,7 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
         }
         emit(
           state.copyWith(
-            status: _nativeEnabled ? state.status : CameraStatus.disabled,
+            status: _controllerEnabled ? state.status : CameraStatus.disabled,
             requestedEnabled: false,
             cameraFailure: () => null,
           ),
@@ -315,40 +337,42 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
     _CameraReconciliationRequested event,
     Emitter<CameraState> emit,
   ) async {
-    // Concurrency policy: model, observation, and native camera operations are
-    // serialized here while newer intent may update desired state immediately.
+    // Intent handlers run in another event family, so every awaited step must
+    // re-read the latest desired state before choosing the next controller call.
     while (!emit.isDone) {
-      if (_hasPendingObservationRetry) {
-        final canContinue = await _retryObservation(emit);
-        if (!canContinue) return;
-        continue;
+      switch (await _runNextReconciliationStep(emit)) {
+        case _ReconciliationOutcome.continueWithLatestState:
+          continue;
+        case _ReconciliationOutcome.settled:
+        case _ReconciliationOutcome.eventHandlerDone:
+          return;
       }
-      if (_hasPendingModelRetry) {
-        final canContinue = await _retryModel(emit);
-        if (!canContinue) return;
-        continue;
-      }
-      if (_hasPendingDiscovery) {
-        final canContinue = await _discoverCameras(emit);
-        if (!canContinue) return;
-        continue;
-      }
-
-      final settled = await _reconcileNativePower(emit);
-      if (settled) return;
     }
   }
 
-  Future<bool> _retryModel(Emitter<CameraState> emit) async {
+  Future<_ReconciliationOutcome> _runNextReconciliationStep(
+    Emitter<CameraState> emit,
+  ) {
+    if (_hasPendingObservationRetry) return _retryObservation(emit);
+    if (_hasPendingModelRetry) return _retryModel(emit);
+    if (_hasPendingDiscovery) return _discoverCameras(emit);
+    return _reconcileControllerPower(emit);
+  }
+
+  Future<_ReconciliationOutcome> _retryModel(
+    Emitter<CameraState> emit,
+  ) async {
     final request = _modelRetryRequest;
     final result = await _controller.retryModel();
-    if (emit.isDone) return false;
-    if (request != _modelRetryRequest) return true;
+    if (emit.isDone) return _ReconciliationOutcome.eventHandlerDone;
+    if (request != _modelRetryRequest) {
+      return _ReconciliationOutcome.continueWithLatestState;
+    }
     _completedModelRetryRequest = request;
 
     switch (result) {
       case AppSuccess<void>():
-        return true;
+        return _ReconciliationOutcome.continueWithLatestState;
       case AppError<void>(:final failure):
         emit(
           state.copyWith(
@@ -356,20 +380,24 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
             modelFailure: () => failure,
           ),
         );
-        return false;
+        return _ReconciliationOutcome.settled;
     }
   }
 
-  Future<bool> _retryObservation(Emitter<CameraState> emit) async {
+  Future<_ReconciliationOutcome> _retryObservation(
+    Emitter<CameraState> emit,
+  ) async {
     final request = _observationRetryRequest;
     final result = await _controller.retryObservation();
-    if (emit.isDone) return false;
-    if (request != _observationRetryRequest) return true;
+    if (emit.isDone) return _ReconciliationOutcome.eventHandlerDone;
+    if (request != _observationRetryRequest) {
+      return _ReconciliationOutcome.continueWithLatestState;
+    }
     _completedObservationRetryRequest = request;
 
     switch (result) {
       case AppSuccess<void>():
-        return true;
+        return _ReconciliationOutcome.continueWithLatestState;
       case AppError<void>(:final failure):
         _observationRetryInProgress = false;
         emit(
@@ -377,27 +405,29 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
             observationFailure: () => failure,
           ),
         );
-        return false;
+        return _ReconciliationOutcome.settled;
     }
   }
 
-  Future<bool> _discoverCameras(Emitter<CameraState> emit) async {
+  Future<_ReconciliationOutcome> _discoverCameras(
+    Emitter<CameraState> emit,
+  ) async {
     final request = _discoveryRequest;
     final result = await _controller.init();
-    if (emit.isDone) return false;
+    if (emit.isDone) return _ReconciliationOutcome.eventHandlerDone;
 
     if (request != _discoveryRequest) {
-      return true;
+      return _ReconciliationOutcome.continueWithLatestState;
     }
     _completedDiscoveryRequest = request;
 
     switch (result) {
       case AppSuccess(value: final capabilities):
         _emitCapabilities(emit, capabilities);
-        return true;
+        return _ReconciliationOutcome.continueWithLatestState;
       case AppError(:final failure):
         _emitCameraFailure(emit, failure);
-        return false;
+        return _ReconciliationOutcome.settled;
     }
   }
 
@@ -413,7 +443,7 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
         : capabilities.preferredLens;
     emit(
       state.copyWith(
-        status: _nativeEnabled ? CameraStatus.enabled : CameraStatus.disabled,
+        status: _controllerEnabled ? CameraStatus.enabled : CameraStatus.disabled,
         selectedLens: selectedLens,
         availableLenses: capabilities.availableLenses,
         surfaceMounted: true,
@@ -422,19 +452,19 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
     );
   }
 
-  Future<bool> _reconcileNativePower(
+  Future<_ReconciliationOutcome> _reconcileControllerPower(
     Emitter<CameraState> emit,
-  ) async {
+  ) {
     if (!_shouldEnable) {
-      return _disableNativeCamera(emit);
+      return _disableController(emit);
     }
     return _enableSelectedLens(emit);
   }
 
-  Future<bool> _disableNativeCamera(
+  Future<_ReconciliationOutcome> _disableController(
     Emitter<CameraState> emit,
   ) async {
-    if (!_nativeEnabled) {
+    if (!_controllerEnabled) {
       if (state.cameraFailure == null && state.status != CameraStatus.disabled) {
         emit(
           state.copyWith(
@@ -443,36 +473,40 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
           ),
         );
       }
-      return true;
+      return _ReconciliationOutcome.settled;
     }
 
     final result = await _controller.disable();
-    if (emit.isDone) return true;
+    if (emit.isDone) return _ReconciliationOutcome.eventHandlerDone;
 
     switch (result) {
       case AppSuccess<void>():
-        _nativeEnabled = false;
-        _nativeLens = null;
-        if (_shouldEnable) return false;
+        _controllerEnabled = false;
+        _controllerLens = null;
+        if (_shouldEnable) {
+          return _ReconciliationOutcome.continueWithLatestState;
+        }
         emit(
           state.copyWith(
             status: CameraStatus.disabled,
             cameraFailure: () => null,
           ),
         );
-        return true;
+        return _ReconciliationOutcome.settled;
       case AppError<void>(:final failure):
-        if (_shouldEnable) return false;
+        if (_shouldEnable) {
+          return _ReconciliationOutcome.continueWithLatestState;
+        }
         _emitCameraFailure(emit, failure);
-        return true;
+        return _ReconciliationOutcome.settled;
     }
   }
 
-  Future<bool> _enableSelectedLens(
+  Future<_ReconciliationOutcome> _enableSelectedLens(
     Emitter<CameraState> emit,
   ) async {
     final targetLens = state.selectedLens;
-    if (_nativeEnabled && _nativeLens == targetLens) {
+    if (_controllerEnabled && _controllerLens == targetLens) {
       if (state.status != CameraStatus.enabled || state.cameraFailure != null) {
         emit(
           state.copyWith(
@@ -481,24 +515,24 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
           ),
         );
       }
-      return true;
+      return _ReconciliationOutcome.settled;
     }
 
     emit(
       state.copyWith(
-        status: _nativeEnabled ? CameraStatus.switching : CameraStatus.initializing,
+        status: _controllerEnabled ? CameraStatus.switching : CameraStatus.initializing,
         cameraFailure: () => null,
       ),
     );
     final result = await _controller.enable(targetLens);
-    if (emit.isDone) return true;
+    if (emit.isDone) return _ReconciliationOutcome.eventHandlerDone;
 
     switch (result) {
       case AppSuccess<void>():
-        _nativeEnabled = true;
-        _nativeLens = targetLens;
+        _controllerEnabled = true;
+        _controllerLens = targetLens;
         if (!_shouldEnable || state.selectedLens != targetLens) {
-          return false;
+          return _ReconciliationOutcome.continueWithLatestState;
         }
         emit(
           state.copyWith(
@@ -506,15 +540,15 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
             cameraFailure: () => null,
           ),
         );
-        return true;
+        return _ReconciliationOutcome.settled;
       case AppError<void>(:final failure):
-        _nativeEnabled = false;
-        _nativeLens = null;
+        _controllerEnabled = false;
+        _controllerLens = null;
         if (!_shouldEnable || state.selectedLens != targetLens) {
-          return false;
+          return _ReconciliationOutcome.continueWithLatestState;
         }
         _emitCameraFailure(emit, failure);
-        return true;
+        return _ReconciliationOutcome.settled;
     }
   }
 
@@ -539,7 +573,7 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
       await _controller.close();
     } on Exception catch (error, stackTrace) {
       _logger.e(
-        'Could not release the YOLO observation controller cleanly.',
+        'Could not release the observation controller cleanly.',
         error: error,
         stackTrace: stackTrace,
       );
