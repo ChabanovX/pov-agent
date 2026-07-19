@@ -35,11 +35,32 @@ final class AppSpacing extends ThemeExtension<AppSpacing> {
   /// Equal small insets derived from [sm].
   EdgeInsets get insetSm => EdgeInsets.all(sm);
 
+  /// Equal extra-large insets derived from [xl].
+  EdgeInsets get insetXl => EdgeInsets.all(xl);
+
+  /// A start-only inset derived from [sm].
+  EdgeInsetsDirectional get startSm => EdgeInsetsDirectional.only(start: sm);
+
+  /// A bottom-only inset derived from [md].
+  EdgeInsets get bottomMd => EdgeInsets.only(bottom: md);
+
+  /// A top-only inset derived from [xs].
+  EdgeInsets get topXs => EdgeInsets.only(top: xs);
+
   /// A top-only inset derived from [md].
   EdgeInsets get topMd => EdgeInsets.only(top: md);
 
   /// A top-only inset derived from [lg].
   EdgeInsets get topLg => EdgeInsets.only(top: lg);
+
+  /// Horizontal insets derived from [md].
+  EdgeInsets get horizontalMd => EdgeInsets.symmetric(horizontal: md);
+
+  /// Compact control insets using [md] horizontally and [sm] vertically.
+  EdgeInsets get compactControl => EdgeInsets.symmetric(
+    horizontal: md,
+    vertical: sm,
+  );
 
   /// Section insets using [lg] horizontally and [md] vertically.
   EdgeInsets get section => EdgeInsets.symmetric(

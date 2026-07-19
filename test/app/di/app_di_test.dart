@@ -1,6 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pov_agent/app/di/app_di.dart';
 import 'package:pov_agent/core/constants/compilation_constants.dart';
+import 'package:pov_agent/features/assistant/application/models/model_store_state.dart';
+import 'package:pov_agent/features/assistant/application/ports/comment_generator.dart';
+import 'package:pov_agent/features/assistant/application/ports/model_store.dart';
+import 'package:pov_agent/features/assistant/presentation/bloc/assistant_bloc.dart';
 import 'package:pov_agent/features/camera/application/ports/observation_controller.dart';
 import 'package:pov_agent/features/camera/application/ports/recorded_observation_frame_source.dart';
 import 'package:pov_agent/features/camera/data/adapters/recorded_observation_adapter.dart';
@@ -22,6 +26,20 @@ void main() {
         appDependencies<SceneSource>(),
         same(runtime.sceneSession),
       );
+      expect(
+        appDependencies<AssistantBloc>(),
+        same(runtime.assistantBloc),
+      );
+      expect(
+        appDependencies<ModelStore>(),
+        same(runtime.modelStore),
+      );
+      expect(
+        appDependencies<CommentGenerator>(),
+        same(runtime.commentGenerator),
+      );
+      expect(runtime.assistantBloc.state.started, isFalse);
+      expect(runtime.modelStore.current.phase, ModelStorePhase.idle);
 
       if (CompilationConstants.usesRecordedVideo) {
         final adapter = appDependencies<RecordedObservationAdapter>();

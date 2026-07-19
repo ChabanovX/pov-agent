@@ -4,6 +4,7 @@ import UIKit
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var recordedVideoFrameChannel: RecordedVideoFrameChannel?
+  private var modelDiskCapacityChannel: ModelDiskCapacityChannel?
 
   override func application(
     _ application: UIApplication,
@@ -15,6 +16,9 @@ import UIKit
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     recordedVideoFrameChannel = RecordedVideoFrameChannel(
+      messenger: engineBridge.applicationRegistrar.messenger()
+    )
+    modelDiskCapacityChannel = ModelDiskCapacityChannel(
       messenger: engineBridge.applicationRegistrar.messenger()
     )
   }

@@ -21,7 +21,74 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cameraPlaceholderTitle => 'Camera placeholder';
 
   @override
-  String get assistantPlaceholderTitle => 'Assistant placeholder';
+  String get assistantModelNotStartedMessage => 'Open the Assistant tab to prepare the local model.';
+
+  @override
+  String get assistantModelPreparingMessage => 'Preparing the local Qwen model…';
+
+  @override
+  String assistantModelDownloadingMessage(int percent) {
+    return 'Downloading the Qwen model: $percent%';
+  }
+
+  @override
+  String get assistantModelVerifyingMessage => 'Verifying the local Qwen model…';
+
+  @override
+  String get assistantModelSuspendedMessage => 'The local assistant is paused while the app is inactive.';
+
+  @override
+  String get assistantModelNetworkFailureMessage =>
+      'The Qwen model could not be downloaded. Check your connection and retry.';
+
+  @override
+  String get assistantModelStorageFailureMessage => 'There is not enough free storage for the local Qwen model.';
+
+  @override
+  String get assistantModelIntegrityFailureMessage =>
+      'The downloaded Qwen model did not pass verification. Retry the download.';
+
+  @override
+  String get assistantModelUnavailableFailureMessage => 'The local Qwen model could not be loaded on this device.';
+
+  @override
+  String get assistantModelFailureMessage => 'The local Qwen model could not be prepared.';
+
+  @override
+  String get assistantReadyTitle => 'Your on-device assistant is ready';
+
+  @override
+  String get assistantReadyMessage => 'Ask a question to begin a session-only conversation.';
+
+  @override
+  String get assistantConversationLabel => 'Assistant conversation';
+
+  @override
+  String get assistantUserRoleLabel => 'You';
+
+  @override
+  String get assistantRoleLabel => 'Assistant';
+
+  @override
+  String get assistantPromptLabel => 'Message to the local assistant';
+
+  @override
+  String get assistantPromptPlaceholder => 'Ask the local assistant…';
+
+  @override
+  String get assistantSendAction => 'Send';
+
+  @override
+  String get assistantStopAction => 'Stop';
+
+  @override
+  String get assistantThinkingMessage => 'Thinking…';
+
+  @override
+  String get assistantGenerationFailureMessage => 'The local assistant could not finish this answer.';
+
+  @override
+  String get assistantRetryAnswerAction => 'Retry answer';
 
   @override
   String get cameraDisabledMessage => 'Camera is off.';

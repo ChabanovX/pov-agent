@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pov_agent/app/app.dart';
+import 'package:pov_agent/core/constants/ui_constants.dart';
 
 import 'support/fake_camera_controller.dart';
 import 'support/test_app_dependencies.dart';
@@ -22,7 +23,7 @@ void main() {
       expect(find.byType(CupertinoApp), findsOneWidget);
       expect(tester.widget<Title>(find.byType(Title)).title, 'POV Agent');
       expect(find.byKey(testObservationSurfaceKey), findsOneWidget);
-      expect(find.text('Assistant placeholder'), findsNothing);
+      expect(find.byKey(assistantPromptFieldKey), findsNothing);
       expect(controller.enableCalls, hasLength(1));
       expect(
         tester.widget<CupertinoTabBar>(find.byType(CupertinoTabBar)).currentIndex,
@@ -33,7 +34,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(testObservationSurfaceKey), findsNothing);
-      expect(find.text('Assistant placeholder'), findsOneWidget);
+      expect(find.byKey(assistantPromptFieldKey), findsOneWidget);
       expect(controller.disableCalls, 1);
       expect(
         tester.widget<CupertinoTabBar>(find.byType(CupertinoTabBar)).currentIndex,
@@ -47,17 +48,31 @@ void main() {
       expect(controller.enableCalls, hasLength(2));
 
       tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.inactive,
+      );
+      tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.hidden,
+      );
+      tester.binding.handleAppLifecycleStateChanged(
         AppLifecycleState.paused,
       );
       await tester.pumpAndSettle();
       expect(controller.disableCalls, 2);
 
       tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.hidden,
+      );
+      tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.inactive,
+      );
+      tester.binding.handleAppLifecycleStateChanged(
         AppLifecycleState.resumed,
       );
       await tester.pumpAndSettle();
       expect(controller.enableCalls, hasLength(3));
     } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
       await tester.runAsync(() => disposeTestAppRuntime(runtime));
     }
   });
@@ -85,6 +100,8 @@ void main() {
       expect(find.text('Camera is off.'), findsOneWidget);
       expect(controller.enableCalls, hasLength(1));
     } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
       await tester.runAsync(() => disposeTestAppRuntime(runtime));
     }
   });
@@ -117,6 +134,8 @@ void main() {
       expect(controller.initCalls, 1);
       expect(controller.closeCalls, 0);
     } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
       await tester.runAsync(() => disposeTestAppRuntime(runtime));
     }
   });

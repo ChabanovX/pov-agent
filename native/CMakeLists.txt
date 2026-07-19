@@ -1,0 +1,69 @@
+cmake_minimum_required(VERSION 3.21)
+
+project(pov_llama LANGUAGES C CXX OBJC ASM)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+if(NOT DEFINED LLAMA_CPP_DIR)
+  message(FATAL_ERROR "LLAMA_CPP_DIR must point to the pinned llama.cpp submodule")
+endif()
+
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_COMMON OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_APP OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_MTMD OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_UI OFF CACHE BOOL "" FORCE)
+set(LLAMA_USE_PREBUILT_UI OFF CACHE BOOL "" FORCE)
+set(LLAMA_OPENSSL OFF CACHE BOOL "" FORCE)
+set(GGML_BACKEND_DL OFF CACHE BOOL "" FORCE)
+set(GGML_ACCELERATE ON CACHE BOOL "" FORCE)
+set(GGML_BLAS OFF CACHE BOOL "" FORCE)
+set(GGML_METAL ON CACHE BOOL "" FORCE)
+set(GGML_METAL_EMBED_LIBRARY ON CACHE BOOL "" FORCE)
+set(GGML_METAL_NDEBUG ON CACHE BOOL "" FORCE)
+set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
+
+add_subdirectory(${LLAMA_CPP_DIR} ${CMAKE_BINARY_DIR}/llama_cpp_build)
+
+add_library(pov_llama SHARED
+  llama_bridge/llama_bridge.cpp
+)
+
+target_include_directories(pov_llama PRIVATE
+  ${LLAMA_CPP_DIR}/include
+)
+
+target_compile_options(pov_llama PRIVATE
+  -fvisibility=hidden
+)
+
+find_library(ACCELERATE_FRAMEWORK Accelerate REQUIRED)
+find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
+find_library(METAL_FRAMEWORK Metal REQUIRED)
+find_library(METALKIT_FRAMEWORK MetalKit REQUIRED)
+
+target_link_libraries(pov_llama PRIVATE
+  llama
+  ${ACCELERATE_FRAMEWORK}
+  ${FOUNDATION_FRAMEWORK}
+  ${METAL_FRAMEWORK}
+  ${METALKIT_FRAMEWORK}
+)
+
+if(APPLE)
+  target_link_options(pov_llama PRIVATE
+    "LINKER:-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/llama_bridge/exports.txt"
+  )
+endif()
+
+set_target_properties(pov_llama PROPERTIES
+  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/out"
+  OUTPUT_NAME "pov_llama"
+)

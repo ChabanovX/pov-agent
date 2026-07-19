@@ -8,6 +8,7 @@ final class AppSizes extends ThemeExtension<AppSizes> {
   /// Creates component-size tokens from the supplied dimensions.
   const AppSizes({
     required this.icon,
+    required this.heroIcon,
     required this.controlHeight,
     required this.progressTrackWidth,
     required this.maxContentWidth,
@@ -15,6 +16,9 @@ final class AppSizes extends ThemeExtension<AppSizes> {
 
   /// The standard icon size in logical pixels.
   final double icon;
+
+  /// The hero icon size in logical pixels.
+  final double heroIcon;
 
   /// The standard interactive-control height in logical pixels.
   final double controlHeight;
@@ -28,6 +32,7 @@ final class AppSizes extends ThemeExtension<AppSizes> {
   /// The standard application component dimensions.
   static const regular = AppSizes(
     icon: kIconSize,
+    heroIcon: kHeroIconSize,
     controlHeight: kControlHeight,
     progressTrackWidth: kProgressTrackWidth,
     maxContentWidth: kMaxContentWidth,
@@ -36,12 +41,14 @@ final class AppSizes extends ThemeExtension<AppSizes> {
   @override
   AppSizes copyWith({
     double? icon,
+    double? heroIcon,
     double? controlHeight,
     double? progressTrackWidth,
     double? maxContentWidth,
   }) {
     return AppSizes(
       icon: icon ?? this.icon,
+      heroIcon: heroIcon ?? this.heroIcon,
       controlHeight: controlHeight ?? this.controlHeight,
       progressTrackWidth: progressTrackWidth ?? this.progressTrackWidth,
       maxContentWidth: maxContentWidth ?? this.maxContentWidth,
@@ -53,6 +60,7 @@ final class AppSizes extends ThemeExtension<AppSizes> {
     if (other is! AppSizes) return this;
     return AppSizes(
       icon: _lerp(icon, other.icon, t),
+      heroIcon: _lerp(heroIcon, other.heroIcon, t),
       controlHeight: _lerp(controlHeight, other.controlHeight, t),
       progressTrackWidth: _lerp(
         progressTrackWidth,

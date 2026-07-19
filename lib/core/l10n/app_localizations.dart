@@ -115,11 +115,137 @@ abstract class AppLocalizations {
   /// **'Camera placeholder'**
   String get cameraPlaceholderTitle;
 
-  /// Placeholder message centered on the AI assistant tab.
+  /// Status shown before the router starts lazy assistant model preparation.
   ///
   /// In en, this message translates to:
-  /// **'Assistant placeholder'**
-  String get assistantPlaceholderTitle;
+  /// **'Open the Assistant tab to prepare the local model.'**
+  String get assistantModelNotStartedMessage;
+
+  /// Status shown while the assistant resolves its cache or loads the verified model.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing the local Qwen model…'**
+  String get assistantModelPreparingMessage;
+
+  /// Progress status shown during the first assistant model download.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading the Qwen model: {percent}%'**
+  String assistantModelDownloadingMessage(int percent);
+
+  /// Status shown while cached or downloaded assistant model bytes are verified.
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying the local Qwen model…'**
+  String get assistantModelVerifyingMessage;
+
+  /// Status shown after background lifecycle suspends model work.
+  ///
+  /// In en, this message translates to:
+  /// **'The local assistant is paused while the app is inactive.'**
+  String get assistantModelSuspendedMessage;
+
+  /// Actionable assistant model failure shown for unavailable network transport.
+  ///
+  /// In en, this message translates to:
+  /// **'The Qwen model could not be downloaded. Check your connection and retry.'**
+  String get assistantModelNetworkFailureMessage;
+
+  /// Actionable assistant model failure shown when the model volume lacks free space.
+  ///
+  /// In en, this message translates to:
+  /// **'There is not enough free storage for the local Qwen model.'**
+  String get assistantModelStorageFailureMessage;
+
+  /// Actionable assistant model failure shown after size or checksum verification fails.
+  ///
+  /// In en, this message translates to:
+  /// **'The downloaded Qwen model did not pass verification. Retry the download.'**
+  String get assistantModelIntegrityFailureMessage;
+
+  /// Actionable assistant model failure shown when native model services are unavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The local Qwen model could not be loaded on this device.'**
+  String get assistantModelUnavailableFailureMessage;
+
+  /// Fallback assistant model preparation failure.
+  ///
+  /// In en, this message translates to:
+  /// **'The local Qwen model could not be prepared.'**
+  String get assistantModelFailureMessage;
+
+  /// Title of the empty assistant conversation state after the model is ready.
+  ///
+  /// In en, this message translates to:
+  /// **'Your on-device assistant is ready'**
+  String get assistantReadyTitle;
+
+  /// Body of the empty assistant conversation state.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask a question to begin a session-only conversation.'**
+  String get assistantReadyMessage;
+
+  /// Accessibility label for the scrollable session transcript.
+  ///
+  /// In en, this message translates to:
+  /// **'Assistant conversation'**
+  String get assistantConversationLabel;
+
+  /// Compact role label displayed above a user message bubble.
+  ///
+  /// In en, this message translates to:
+  /// **'You'**
+  String get assistantUserRoleLabel;
+
+  /// Compact role label displayed above a local assistant response bubble.
+  ///
+  /// In en, this message translates to:
+  /// **'Assistant'**
+  String get assistantRoleLabel;
+
+  /// Accessibility label for the manual assistant prompt field.
+  ///
+  /// In en, this message translates to:
+  /// **'Message to the local assistant'**
+  String get assistantPromptLabel;
+
+  /// Placeholder shown in the multiline manual assistant prompt field.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask the local assistant…'**
+  String get assistantPromptPlaceholder;
+
+  /// Button and accessibility label for starting manual generation.
+  ///
+  /// In en, this message translates to:
+  /// **'Send'**
+  String get assistantSendAction;
+
+  /// Button and accessibility label for cancelling active manual generation.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get assistantStopAction;
+
+  /// Placeholder shown in the response bubble before the first visible token arrives.
+  ///
+  /// In en, this message translates to:
+  /// **'Thinking…'**
+  String get assistantThinkingMessage;
+
+  /// Recoverable failure shown under an uncommitted manual assistant turn.
+  ///
+  /// In en, this message translates to:
+  /// **'The local assistant could not finish this answer.'**
+  String get assistantGenerationFailureMessage;
+
+  /// Button label for resubmitting the latest failed manual prompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry answer'**
+  String get assistantRetryAnswerAction;
 
   /// Message shown when the user has manually disabled the camera.
   ///

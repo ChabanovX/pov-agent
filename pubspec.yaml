@@ -15,8 +15,14 @@ environment:
 dependencies:
   # Applies explicit concurrency policies to camera lifecycle Bloc events.
   bloc_concurrency: ^0.3.0
+  # Describes native code assets emitted by the llama.cpp build hook.
+  code_assets: ^1.2.1
+  # Computes the pinned GGUF checksum before the cache is trusted.
+  crypto: ^3.0.7
   # Bundles the Cupertino icon font used by the tab bar and camera controls.
   cupertino_icons: ^1.0.8
+  # Allocates UTF-8 buffers at the narrow llama.cpp FFI boundary.
+  ffi: ^2.2.0
   # Owns the Cupertino application shell and native platform integration.
   flutter:
     sdk: flutter
@@ -29,12 +35,16 @@ dependencies:
   get_it: ^9.2.1
   # Reserved by the router-authority contract for navigation beyond the tab shell.
   go_router: ^17.3.0
+  # Runs the reproducible llama.cpp native build during Flutter builds.
+  hooks: ^2.0.2
   # Backs generated localization messages and locale canonicalization.
   intl: ^0.20.2
   # Provides the backend wrapped by the project-wide AppLogger facade.
   logger: ^2.7.0
   # Marks test-only seams without introducing Flutter imports into data code.
   meta: ^1.18.0
+  # Resolves the application-support directory for verified model artifacts.
+  path_provider: ^2.1.5
   # Implements the data-layer camera permission gateway on iOS and Android.
   permission_handler: ^12.0.3
   # Drives the native camera surface and on-device YOLO inference boundary.

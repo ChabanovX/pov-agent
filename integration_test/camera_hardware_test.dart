@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:pov_agent/app/app.dart';
@@ -23,13 +24,6 @@ void main() {
         await tester.tap(find.bySemanticsLabel('Switch camera'));
         await _pumpUntilFound(tester, find.bySemanticsLabel('Disable camera'));
 
-        await tester.tap(find.text('Assistant'));
-        await tester.pumpAndSettle();
-        expect(find.text('Assistant placeholder'), findsOneWidget);
-
-        await tester.tap(find.text('Camera'));
-        await _pumpUntilFound(tester, find.bySemanticsLabel('Disable camera'));
-
         await tester.tap(find.bySemanticsLabel('Disable camera'));
         await tester.pumpAndSettle();
         expect(find.text('Camera is off.'), findsOneWidget);
@@ -37,7 +31,9 @@ void main() {
         await tester.tap(find.text('Enable camera'));
         await _pumpUntilFound(tester, find.bySemanticsLabel('Disable camera'));
       } finally {
-        await runtime.close();
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        await tester.runAsync(runtime.close);
         await appDependencies.reset(dispose: false);
       }
     },
