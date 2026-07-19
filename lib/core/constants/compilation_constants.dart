@@ -133,7 +133,7 @@ abstract final class CompilationConstants {
   /// Maximum generated tokens for a short `/no_think` comment.
   static const String qwenCommentMaxTokens = String.fromEnvironment(
     'QWEN_COMMENT_MAX_TOKENS',
-    defaultValue: '96',
+    defaultValue: '32',
   );
 
   /// Temperature for a short `/no_think` comment.
