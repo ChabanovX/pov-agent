@@ -490,9 +490,12 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
     YOLOModelManager.cancelDownload(configuration.modelPath);
     await _downloadSubscription?.cancel();
     try {
-      await _modelLoadTask;
-      await _frameSourceOpenTask;
-      await _activeReplayTask;
+      final pendingTasks = [
+        ?_modelLoadTask,
+        ?_frameSourceOpenTask,
+        ?_activeReplayTask,
+      ];
+      await Future.wait(pendingTasks);
     } finally {
       // Keep the pre-registration marker until model resolution settles, then
       // clear it so a later app runtime cannot inherit stale cancellation.
