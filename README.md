@@ -8,6 +8,17 @@ as context.
 > on-device YOLO detection works today. Scene understanding, the local language
 > model, speech recognition, and spoken responses are still on the roadmap.
 
+<p align="center">
+  <img
+    src="docs/images/ios-yolo-detection.png"
+    alt="POV Agent camera screen showing YOLO detections for people and a truck"
+    width="420"
+  >
+</p>
+<p align="center">
+  <em>YOLO detection running in the iOS app through the recorded-video acceptance path.</em>
+</p>
+
 ## Why
 
 Most assistants only know what the user describes. POV Agent explores a more
