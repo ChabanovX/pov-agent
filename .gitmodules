@@ -2,3 +2,6 @@
 	path = tool/flutter_agentic_harness
 	url = https://github.com/ChabanovX/flutter-harness.git
 	branch = main
+[submodule "native/third_party/llama.cpp"]
+	path = native/third_party/llama.cpp
+	url = https://github.com/ggml-org/llama.cpp.git
