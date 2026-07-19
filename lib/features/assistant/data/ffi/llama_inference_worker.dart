@@ -26,6 +26,64 @@ final class LlamaWorkerLoadResult {
   final bool usesGpu;
 }
 
+/// Coordinates terminal worker cleanup without losing retryable native state.
+///
+/// A failed native close keeps ownership in the worker isolate and clears the
+/// active task so a later [close] call can retry. Port disposal starts only
+/// after native destruction succeeds; once disposal begins, calls remain
+/// joined because the native runtime no longer exists to retry.
+final class LlamaWorkerShutdownCoordinator {
+  /// Creates a coordinator around the worker's native and port boundaries.
+  factory LlamaWorkerShutdownCoordinator({
+    required Future<void> Function() closeNative,
+    required Future<void> Function() dispose,
+  }) {
+    return LlamaWorkerShutdownCoordinator._(closeNative, dispose);
+  }
+
+  LlamaWorkerShutdownCoordinator._(this._closeNative, this._dispose);
+
+  final Future<void> Function() _closeNative;
+  final Future<void> Function() _dispose;
+
+  Future<void>? _closeTask;
+  bool _closing = false;
+  bool _closed = false;
+
+  /// Whether a terminal close currently owns the worker command boundary.
+  bool get isClosing => _closing;
+
+  /// Whether native destruction and worker-port disposal both completed.
+  bool get isClosed => _closed;
+
+  /// Closes native ownership before disposing the worker communication ports.
+  Future<void> close() {
+    final existing = _closeTask;
+    if (existing != null) return existing;
+
+    _closing = true;
+    final task = _closeOnce();
+    _closeTask = task;
+    return task;
+  }
+
+  Future<void> _closeOnce() async {
+    try {
+      await _closeNative();
+    } on Object {
+      // Native destroy deliberately retains its opaque pointer on failure.
+      // Keep the isolate reachable and let a later close retry that pointer.
+      _closing = false;
+      _closeTask = null;
+      rethrow;
+    }
+
+    await _dispose();
+    _closed = true;
+    _closing = false;
+  }
+}
+
 /// One active raw-byte generation owned by the inference worker.
 abstract interface class LlamaWorkerGeneration {
   /// UTF-8 token fragments in decode order.
@@ -58,7 +116,9 @@ abstract interface class LlamaInferenceWorker {
   /// Cancels active generation and releases the loaded model.
   Future<void> unload();
 
-  /// Permanently shuts down the worker isolate exactly once.
+  /// Permanently shuts down the worker isolate.
+  ///
+  /// A failed native destroy keeps the isolate reachable for another attempt.
   Future<void> close();
 }
 
@@ -77,6 +137,10 @@ final class NativeLlamaInferenceWorker implements LlamaInferenceWorker {
     this._errorPort,
     this._exitPort,
   ) {
+    _shutdown = LlamaWorkerShutdownCoordinator(
+      closeNative: _closeNative,
+      dispose: _disposePorts,
+    );
     _subscription = _receivePort.listen(_handleEvent);
     _errorSubscription = _errorPort.listen(_handleIsolateError);
     _exitSubscription = _exitPort.listen(_handleIsolateExit);
@@ -126,6 +190,7 @@ final class NativeLlamaInferenceWorker implements LlamaInferenceWorker {
   final Map<int, Completer<Object?>> _requests = {};
   final Map<int, _NativeWorkerGeneration> _generations = {};
 
+  late final LlamaWorkerShutdownCoordinator _shutdown;
   late final StreamSubscription<Object?> _subscription;
   late final StreamSubscription<Object?> _errorSubscription;
   late final StreamSubscription<Object?> _exitSubscription;
@@ -133,9 +198,7 @@ final class NativeLlamaInferenceWorker implements LlamaInferenceWorker {
   var _nextRequestId = 1;
   var _nextGenerationId = 1;
   LlamaWorkerException? _terminalFailure;
-  var _closing = false;
   var _closed = false;
-  Completer<void>? _closeCompleter;
 
   @override
   Future<LlamaWorkerLoadResult> load(
@@ -197,31 +260,13 @@ final class NativeLlamaInferenceWorker implements LlamaInferenceWorker {
   }
 
   @override
-  Future<void> close() {
-    final existing = _closeCompleter;
-    if (existing != null) return existing.future;
-    final completer = _closeCompleter = Completer<void>();
-    if (_closed) {
-      completer.complete();
-      return completer.future;
-    }
-    _closing = true;
+  Future<void> close() => _shutdown.close();
 
-    unawaited(() async {
-      try {
-        if (_terminalFailure == null) {
-          final activeGenerations = _activeCompletionFutures();
-          await _request([_commandClose], allowWhileClosing: true);
-          await Future.wait(activeGenerations);
-        }
-        await _disposePorts();
-        completer.complete();
-      } on Object catch (error, stackTrace) {
-        await _disposePorts();
-        completer.completeError(error, stackTrace);
-      }
-    }());
-    return completer.future;
+  Future<void> _closeNative() async {
+    if (_closed || _terminalFailure != null) return;
+    final activeGenerations = _activeCompletionFutures();
+    await _request([_commandClose], allowWhileClosing: true);
+    await Future.wait(activeGenerations);
   }
 
   Future<Object?> _request(
@@ -331,7 +376,6 @@ final class NativeLlamaInferenceWorker implements LlamaInferenceWorker {
   Future<void> _disposePorts() async {
     if (_closed) return;
     _closed = true;
-    _closing = true;
     _failAll(
       _terminalFailure ??
           const LlamaWorkerException(
@@ -354,7 +398,7 @@ final class NativeLlamaInferenceWorker implements LlamaInferenceWorker {
     if (_closed) throw StateError('The inference worker is closed.');
     final terminalFailure = _terminalFailure;
     if (terminalFailure != null) throw terminalFailure;
-    if (_closing && !allowWhileClosing) {
+    if (_shutdown.isClosing && !allowWhileClosing) {
       throw StateError('The inference worker is closing.');
     }
   }
@@ -515,12 +559,15 @@ final class _LlamaWorkerHost {
   ) {
     try {
       _cancelActive();
-      _runtime?.close();
+      final previousRuntime = _runtime;
+      if (previousRuntime != null) {
+        previousRuntime.close();
+        _runtime = null;
+      }
       final runtime = LlamaNativeRuntime.load(modelPath, configuration);
       _runtime = runtime;
       _respond(requestId, value: runtime.usesGpu);
     } on Object catch (error) {
-      _runtime = null;
       _respondError(requestId, error);
     }
   }
@@ -593,12 +640,16 @@ final class _LlamaWorkerHost {
   }
 
   void _cancel(int requestId, int generationId) {
-    if (_activeGenerationId == generationId) {
-      _runtime?.cancel();
-      _activeGenerationId = null;
-      _events.send([_eventGenerationCancelled, generationId]);
+    try {
+      if (_activeGenerationId == generationId) {
+        _runtime?.cancel();
+        _activeGenerationId = null;
+        _events.send([_eventGenerationCancelled, generationId]);
+      }
+      _respond(requestId);
+    } on Object catch (error) {
+      _respondError(requestId, error);
     }
-    _respond(requestId);
   }
 
   void _unload(int requestId) {

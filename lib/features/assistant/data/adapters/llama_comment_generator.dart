@@ -49,9 +49,23 @@ final class LlamaCommentGenerator implements CommentGenerator {
   Future<AppResult<void>>? _loadTask;
   VerifiedModelArtifact? _loadingArtifact;
   VerifiedModelArtifact? _loadedArtifact;
+  bool? _loadedModelUsesGpu;
+  bool? _lastUnloadSucceeded;
   _LlamaGenerationHandle? _activeGeneration;
   Future<void>? _closeTask;
   var _closed = false;
+
+  /// Whether the currently loaded model uses the native GPU backend.
+  ///
+  /// This diagnostic is `null` while no model is loaded. Physical-device
+  /// acceptance tests use it to reject a silent CPU fallback on iOS.
+  bool? get loadedModelUsesGpu => _loadedModelUsesGpu;
+
+  /// Whether the latest requested model unload completed without native error.
+  ///
+  /// This diagnostic is `null` before an unload or after a new load starts.
+  /// Product-facing lifecycle remains normalized through [CommentGenerator].
+  bool? get lastUnloadSucceeded => _lastUnloadSucceeded;
 
   @override
   Future<AppResult<void>> loadModel(VerifiedModelArtifact artifact) async {
@@ -92,8 +106,13 @@ final class LlamaCommentGenerator implements CommentGenerator {
     try {
       await _activeGeneration?.cancel();
       _activeGeneration = null;
+      _loadedModelUsesGpu = null;
+      _lastUnloadSucceeded = null;
       worker = await _obtainWorker();
-      await worker.load(artifact.filePath, _runtimeConfiguration);
+      final loadResult = await worker.load(
+        artifact.filePath,
+        _runtimeConfiguration,
+      );
       if (_closed) {
         await worker.unload();
         return const AppError<void>(
@@ -104,9 +123,11 @@ final class LlamaCommentGenerator implements CommentGenerator {
         );
       }
       _loadedArtifact = artifact;
+      _loadedModelUsesGpu = loadResult.usesGpu;
       return const AppSuccess<void>(null);
     } on Object catch (error, stackTrace) {
       _loadedArtifact = null;
+      _loadedModelUsesGpu = null;
       if (worker != null) await _retireWorkerAfterLoadFailure(worker);
       return AppError<void>(
         _nativeFailure(
@@ -230,8 +251,12 @@ final class LlamaCommentGenerator implements CommentGenerator {
       final workerTask = _workerTask;
       if (workerTask != null) await (await workerTask).unload();
       _loadedArtifact = null;
+      _loadedModelUsesGpu = null;
+      _lastUnloadSucceeded = true;
     } on Object catch (error, stackTrace) {
       _loadedArtifact = null;
+      _loadedModelUsesGpu = null;
+      _lastUnloadSucceeded = false;
       _logger.e(
         'Failed to unload the native model.',
         error: error,
@@ -245,7 +270,20 @@ final class LlamaCommentGenerator implements CommentGenerator {
     final existing = _closeTask;
     if (existing != null) return existing;
     _closed = true;
-    return _closeTask = _closeOnce();
+    final task = _closeRetriably();
+    _closeTask = task;
+    return task;
+  }
+
+  Future<void> _closeRetriably() async {
+    try {
+      await _closeOnce();
+    } on Object {
+      // The worker keeps native ownership after a failed destroy. Do not cache
+      // that failed attempt: a later close must be able to reach it again.
+      _closeTask = null;
+      rethrow;
+    }
   }
 
   Future<void> _closeOnce() async {
@@ -261,18 +299,16 @@ final class LlamaCommentGenerator implements CommentGenerator {
         error: error,
         stackTrace: stackTrace,
       );
+      rethrow;
     } finally {
       _loadedArtifact = null;
+      _loadedModelUsesGpu = null;
     }
   }
 }
 
 final class _LlamaGenerationHandle implements GenerationHandle {
-  _LlamaGenerationHandle(
-    this._native,
-    this._filter,
-    this._onSettled,
-  ) {
+  _LlamaGenerationHandle(this._native, this._filter, this._onSettled) {
     unawaited(_forward());
   }
 

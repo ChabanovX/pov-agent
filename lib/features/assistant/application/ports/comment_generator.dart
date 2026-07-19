@@ -19,6 +19,9 @@ abstract interface class CommentGenerator {
   /// Cancels active generation and releases model and context handles.
   Future<void> unload();
 
-  /// Cancels active work and permanently closes the runtime exactly once.
+  /// Cancels active work and permanently closes the runtime.
+  ///
+  /// Concurrent calls share one attempt. A failed native teardown retains
+  /// ownership and may be retried; a successful close remains idempotent.
   Future<void> close();
 }

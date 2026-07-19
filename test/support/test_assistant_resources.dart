@@ -111,6 +111,11 @@ final class TestCommentGenerator implements CommentGenerator {
   /// Number of terminal closes.
   int closeCalls = 0;
 
+  /// Failures thrown by successive terminal-close attempts.
+  final List<Exception> closeFailures = [];
+
+  bool _closed = false;
+
   @override
   Future<AppResult<void>> loadModel(VerifiedModelArtifact artifact) async {
     return const AppSuccess<void>(null);
@@ -135,7 +140,9 @@ final class TestCommentGenerator implements CommentGenerator {
 
   @override
   Future<void> close() async {
-    if (closeCalls > 0) return;
+    if (_closed) return;
     closeCalls += 1;
+    if (closeFailures.isNotEmpty) throw closeFailures.removeAt(0);
+    _closed = true;
   }
 }

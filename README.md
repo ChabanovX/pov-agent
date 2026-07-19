@@ -199,7 +199,20 @@ tool/verify_assistant_ios.sh <simulator-id>
 
 This lane is skipped by the normal test suite so routine verification never
 causes an unexpected model download. Simulator inference is CPU-only; physical
-device Metal, memory, and thermal acceptance remains a separate hardware gate.
+device acceptance is a separate ten-minute gate. It rejects CPU fallback,
+first verifies visible streaming, intentional cancellation, unload, and reload,
+then requires every `/no_think` comment to complete in under ten seconds while
+real YOLO replay remains active. It bounds retained and periodically sampled
+active-generation process memory, exercises the app lifecycle contract, and
+rebuilds the in-process runtime graph from verified cache with transport disabled:
+
+```sh
+tool/verify_assistant_device_ios.sh <physical-device-id>
+```
+
+Capture an Instruments Activity Monitor or Time Profiler trace alongside that
+gate to retain device thermal-state evidence; the test itself reports the
+per-minute resident-memory samples and final growth limits.
 
 ## Privacy and offline behavior
 

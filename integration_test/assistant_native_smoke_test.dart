@@ -4,24 +4,31 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:pov_agent/app/app.dart';
+import 'package:pov_agent/app/bootstrap/app_runtime.dart';
 import 'package:pov_agent/app/di/app_di.dart';
 import 'package:pov_agent/core/constants/ui_constants.dart';
-import 'package:pov_agent/core/design_system/tokens/tokens.dart';
+import 'package:pov_agent/features/assistant/data/adapters/llama_comment_generator.dart';
 import 'package:pov_agent/features/assistant/data/datasources/model_artifact_downloader.dart';
 import 'package:pov_agent/features/assistant/domain/entities/conversation_message.dart';
 import 'package:pov_agent/features/assistant/presentation/bloc/assistant_bloc.dart';
 import 'package:pov_agent/features/assistant/presentation/bloc/assistant_state.dart';
 import 'package:pov_agent/features/camera/presentation/bloc/camera_state.dart';
 
+import '../test/support/assistant_acceptance_durations.dart';
+
 const _runNativeAssistantTest = bool.fromEnvironment(
   'RUN_NATIVE_ASSISTANT_TEST',
 );
-final Duration _modelPreparationTimeout = AppAnimations.regular.slow * 2500;
-final Duration _generationTimeout = AppAnimations.regular.slow * 1667;
-final Duration _stateTransitionTimeout = AppAnimations.regular.slow * 84;
-final Duration _modelResumeTimeout = AppAnimations.regular.slow * 834;
-final Duration _fullScenarioTimeout = AppAnimations.regular.slow * 6667;
-final Duration _offlineScenarioTimeout = AppAnimations.regular.slow * 3334;
+const Duration _modelPreparationTimeout = AssistantAcceptanceDurations.modelPreparation;
+const Duration _generationTimeout = AssistantAcceptanceDurations.generation;
+const Duration _stateTransitionTimeout = AssistantAcceptanceDurations.stateTransition;
+const Duration _modelResumeTimeout = AssistantAcceptanceDurations.modelReload;
+const Duration _runtimeStartTimeout = AssistantAcceptanceDurations.runtimeStart;
+const Duration _runtimeCloseTimeout = AssistantAcceptanceDurations.runtimeClose;
+const Duration _dependencyResetTimeout = AssistantAcceptanceDurations.dependencyReset;
+const Duration _recordedYoloPollInterval = AssistantAcceptanceDurations.poll;
+const Duration _fullScenarioTimeout = AssistantAcceptanceDurations.smokeScenario;
+const Duration _offlineScenarioTimeout = AssistantAcceptanceDurations.offlineScenario;
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -33,10 +40,11 @@ void main() {
       final runtime = configureDependenciesForTesting(
         modelArtifactDownloader: offlineGuard,
       );
+      final generator = runtime.commentGenerator as LlamaCommentGenerator;
       final semantics = tester.ensureSemantics();
-      await runtime.start();
       StreamSubscription<AssistantState>? stateSubscription;
       try {
+        await runtime.start().timeout(_runtimeStartTimeout);
         await tester.pumpWidget(const PovAgentApp());
         await _pumpUntilFound(
           tester,
@@ -51,15 +59,12 @@ void main() {
         runtime.assistantBloc.add(const AssistantStarted());
         await tester.pump();
 
-        final readyState = await tester.runAsync(
-          () => _waitForState(
-            runtime.assistantBloc,
-            (state) =>
-                state.modelStatus == AssistantModelStatus.ready || state.modelStatus == AssistantModelStatus.failure,
-            timeout: _modelPreparationTimeout,
-          ),
+        final readyState = await _waitForState(
+          runtime.assistantBloc,
+          (state) =>
+              state.modelStatus == AssistantModelStatus.ready || state.modelStatus == AssistantModelStatus.failure,
+          timeout: _modelPreparationTimeout,
         );
-        if (readyState == null) fail('The model readiness wait returned null.');
         if (readyState.modelStatus == AssistantModelStatus.failure) {
           fail(
             'Qwen preparation failed: '
@@ -84,24 +89,19 @@ void main() {
         await tester.enterText(
           find.byKey(assistantPromptFieldKey),
           'Reply with one short English sentence confirming that the iOS '
-          'Simulator is ready.',
+          'runtime is ready.',
         );
         await tester.pump();
         await tester.tap(find.byKey(assistantSubmitControlKey));
         await tester.pump();
 
-        final completedState = await tester.runAsync(
-          () => _waitForState(
-            runtime.assistantBloc,
-            (state) =>
-                state.generationStatus == AssistantGenerationStatus.failure ||
-                (state.generationStatus == AssistantGenerationStatus.idle && state.messages.length >= 2),
-            timeout: _generationTimeout,
-          ),
+        final completedState = await _waitForState(
+          runtime.assistantBloc,
+          (state) =>
+              state.generationStatus == AssistantGenerationStatus.failure ||
+              (state.generationStatus == AssistantGenerationStatus.idle && state.messages.length >= 2),
+          timeout: _generationTimeout,
         );
-        if (completedState == null) {
-          fail('The generation completion wait returned null.');
-        }
         if (completedState.generationStatus == AssistantGenerationStatus.failure) {
           fail(
             'Qwen generation failed: '
@@ -126,25 +126,21 @@ void main() {
         await tester.pump();
         await tester.tap(find.byKey(assistantSubmitControlKey));
         await tester.pump();
-        await tester.runAsync(
-          () => _waitForState(
-            runtime.assistantBloc,
-            (state) => state.generationStatus == AssistantGenerationStatus.generating,
-            timeout: _stateTransitionTimeout,
-          ),
+        await _waitForState(
+          runtime.assistantBloc,
+          (state) => state.generationStatus == AssistantGenerationStatus.generating,
+          timeout: _stateTransitionTimeout,
         );
         await tester.pump();
         await tester.tap(find.byKey(assistantSubmitControlKey));
         await tester.pump();
 
-        final cancelledState = await tester.runAsync(
-          () => _waitForState(
-            runtime.assistantBloc,
-            (state) => state.generationStatus == AssistantGenerationStatus.idle && state.draftPrompt.isEmpty,
-            timeout: _stateTransitionTimeout,
-          ),
+        final cancelledState = await _waitForState(
+          runtime.assistantBloc,
+          (state) => state.generationStatus == AssistantGenerationStatus.idle && state.draftPrompt.isEmpty,
+          timeout: _stateTransitionTimeout,
         );
-        expect(cancelledState?.messages, hasLength(committedMessageCount));
+        expect(cancelledState.messages, hasLength(committedMessageCount));
 
         tester.binding.handleAppLifecycleStateChanged(
           AppLifecycleState.inactive,
@@ -156,13 +152,16 @@ void main() {
           AppLifecycleState.paused,
         );
         await tester.pump();
-        await tester.runAsync(
-          () => _waitForState(
-            runtime.assistantBloc,
-            (state) => state.modelStatus == AssistantModelStatus.suspended,
-            timeout: _stateTransitionTimeout,
-          ),
+        await _waitForState(
+          runtime.assistantBloc,
+          (state) => state.modelStatus == AssistantModelStatus.suspended,
+          timeout: _stateTransitionTimeout,
         );
+        await _waitForSuccessfulUnload(
+          generator,
+          timeout: _stateTransitionTimeout,
+        );
+        expect(generator.loadedModelUsesGpu, isNull);
 
         tester.binding.handleAppLifecycleStateChanged(
           AppLifecycleState.hidden,
@@ -174,28 +173,23 @@ void main() {
           AppLifecycleState.resumed,
         );
         await tester.pump();
-        final resumedState = await tester.runAsync(
-          () => _waitForState(
-            runtime.assistantBloc,
-            (state) =>
-                state.modelStatus == AssistantModelStatus.ready || state.modelStatus == AssistantModelStatus.failure,
-            timeout: _modelResumeTimeout,
-          ),
+        final resumedState = await _waitForState(
+          runtime.assistantBloc,
+          (state) =>
+              state.modelStatus == AssistantModelStatus.ready || state.modelStatus == AssistantModelStatus.failure,
+          timeout: _modelResumeTimeout,
         );
-        expect(resumedState?.modelStatus, AssistantModelStatus.ready);
-        expect(resumedState?.messages, hasLength(committedMessageCount));
+        expect(resumedState.modelStatus, AssistantModelStatus.ready);
+        expect(resumedState.messages, hasLength(committedMessageCount));
         expect(offlineGuard.downloadCalls, downloadCallsAtReady);
       } finally {
         await stateSubscription?.cancel();
         semantics.dispose();
-        await tester.pumpWidget(const SizedBox.shrink());
-        await tester.pump();
-        await tester.runAsync(runtime.close);
-        await appDependencies.reset(dispose: false);
+        await _disposeRuntime(tester, runtime);
       }
     },
     skip: !_runNativeAssistantTest,
-    timeout: Timeout(_fullScenarioTimeout),
+    timeout: const Timeout(_fullScenarioTimeout),
   );
 
   testWidgets(
@@ -206,21 +200,18 @@ void main() {
       final runtime = configureDependenciesForTesting(
         modelArtifactDownloader: offlineGuard,
       );
-      await runtime.start();
       try {
+        await runtime.start().timeout(_runtimeStartTimeout);
         await tester.pumpWidget(const PovAgentApp());
         runtime.assistantBloc.add(const AssistantStarted());
         await tester.pump();
 
-        final readyState = await tester.runAsync(
-          () => _waitForState(
-            runtime.assistantBloc,
-            (state) =>
-                state.modelStatus == AssistantModelStatus.ready || state.modelStatus == AssistantModelStatus.failure,
-            timeout: _modelResumeTimeout,
-          ),
+        final readyState = await _waitForState(
+          runtime.assistantBloc,
+          (state) =>
+              state.modelStatus == AssistantModelStatus.ready || state.modelStatus == AssistantModelStatus.failure,
+          timeout: _modelResumeTimeout,
         );
-        if (readyState == null) fail('The offline readiness wait returned null.');
         if (readyState.modelStatus == AssistantModelStatus.failure) {
           fail(
             'Verified cache restart failed: '
@@ -239,18 +230,13 @@ void main() {
         await tester.tap(find.byKey(assistantSubmitControlKey));
         await tester.pump();
 
-        final completedState = await tester.runAsync(
-          () => _waitForState(
-            runtime.assistantBloc,
-            (state) =>
-                state.generationStatus == AssistantGenerationStatus.failure ||
-                (state.generationStatus == AssistantGenerationStatus.idle && state.messages.length >= 2),
-            timeout: _generationTimeout,
-          ),
+        final completedState = await _waitForState(
+          runtime.assistantBloc,
+          (state) =>
+              state.generationStatus == AssistantGenerationStatus.failure ||
+              (state.generationStatus == AssistantGenerationStatus.idle && state.messages.length >= 2),
+          timeout: _generationTimeout,
         );
-        if (completedState == null) {
-          fail('The offline generation wait returned null.');
-        }
         if (completedState.generationStatus == AssistantGenerationStatus.failure) {
           fail(
             'Offline generation failed: '
@@ -260,14 +246,11 @@ void main() {
         expect(completedState.messages.last.content.trim(), isNotEmpty);
         expect(offlineGuard.downloadCalls, downloadCallsBeforeRestart);
       } finally {
-        await tester.pumpWidget(const SizedBox.shrink());
-        await tester.pump();
-        await tester.runAsync(runtime.close);
-        await appDependencies.reset(dispose: false);
+        await _disposeRuntime(tester, runtime);
       }
     },
     skip: !_runNativeAssistantTest,
-    timeout: Timeout(_offlineScenarioTimeout),
+    timeout: const Timeout(_offlineScenarioTimeout),
   );
 }
 
@@ -276,7 +259,7 @@ Future<void> _pumpUntilFound<CandidateType>(
   FinderBase<CandidateType> finder,
 ) async {
   for (var attempt = 0; attempt < 600; attempt += 1) {
-    await tester.pump(AppAnimations.regular.fast);
+    await tester.pump(_recordedYoloPollInterval);
     if (finder.evaluate().isNotEmpty) return;
   }
   fail('Timed out waiting for active recorded YOLO inference.');
@@ -289,6 +272,61 @@ Future<AssistantState> _waitForState(
 }) {
   if (predicate(bloc.state)) return Future.value(bloc.state);
   return bloc.stream.firstWhere(predicate).timeout(timeout);
+}
+
+Future<void> _waitForSuccessfulUnload(
+  LlamaCommentGenerator generator, {
+  required Duration timeout,
+}) async {
+  final watch = Stopwatch()..start();
+  while (watch.elapsed < timeout) {
+    switch (generator.lastUnloadSucceeded) {
+      case true:
+        return;
+      case false:
+        fail('The native assistant model failed to unload.');
+      case null:
+        await Future<void>.delayed(_recordedYoloPollInterval);
+    }
+  }
+  fail('Timed out waiting for the native assistant model to unload.');
+}
+
+Future<void> _disposeRuntime(
+  WidgetTester tester,
+  AppRuntime runtime,
+) async {
+  Object? firstError;
+  StackTrace? firstStackTrace;
+
+  Future<void> attempt(
+    Future<void> Function() operation,
+    Duration timeout,
+  ) async {
+    try {
+      await operation().timeout(timeout);
+    } on Object catch (error, stackTrace) {
+      firstError ??= error;
+      firstStackTrace ??= stackTrace;
+    }
+  }
+
+  await attempt(
+    () async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+    _dependencyResetTimeout,
+  );
+  await attempt(runtime.close, _runtimeCloseTimeout);
+  await attempt(
+    () => appDependencies.reset(dispose: false),
+    _dependencyResetTimeout,
+  );
+
+  if (firstError case final error?) {
+    Error.throwWithStackTrace(error, firstStackTrace!);
+  }
 }
 
 final class _OfflineGuardDownloader implements ModelArtifactDownloader {

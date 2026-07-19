@@ -207,13 +207,18 @@ final class LlamaNativeRuntime {
   /// Cancels active sampling and clears its KV memory.
   void cancel() {
     if (_runtime == nullptr) return;
-    LlamaBridgeBindings.cancelGeneration(_runtime);
+    final status = LlamaBridgeBindings.cancelGeneration(_runtime);
+    if (status < 0) throw _exceptionFor(status);
   }
 
   /// Releases all native resources exactly once.
+  ///
+  /// A failed native quiescence leaves the runtime open so callers can report
+  /// the diagnostic and retry cleanup instead of acknowledging a false unload.
   void close() {
     if (_runtime == nullptr) return;
-    LlamaBridgeBindings.destroy(_runtime);
+    final status = LlamaBridgeBindings.destroy(_runtime);
+    if (status < 0) throw _exceptionFor(status);
     _runtime = nullptr;
     calloc
       ..free(_tokenBuffer)

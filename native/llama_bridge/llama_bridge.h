@@ -39,7 +39,7 @@ POV_LLAMA_EXPORT pov_llama_runtime* pov_llama_create(
     char* error_buffer,
     int32_t error_buffer_length);
 
-POV_LLAMA_EXPORT void pov_llama_destroy(pov_llama_runtime* runtime);
+POV_LLAMA_EXPORT int32_t pov_llama_destroy(pov_llama_runtime* runtime);
 
 POV_LLAMA_EXPORT int32_t pov_llama_begin_generation(
     pov_llama_runtime* runtime,
@@ -57,7 +57,7 @@ POV_LLAMA_EXPORT int32_t pov_llama_next_token(
     int32_t output_buffer_length,
     int32_t* output_length);
 
-POV_LLAMA_EXPORT void pov_llama_cancel_generation(
+POV_LLAMA_EXPORT int32_t pov_llama_cancel_generation(
     pov_llama_runtime* runtime);
 
 POV_LLAMA_EXPORT int32_t pov_llama_copy_error(

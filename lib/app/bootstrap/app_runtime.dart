@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:pov_agent/core/logging/app_logger.dart';
 import 'package:pov_agent/features/assistant/application/ports/comment_generator.dart';
 import 'package:pov_agent/features/assistant/application/ports/model_store.dart';
 import 'package:pov_agent/features/assistant/presentation/bloc/assistant_bloc.dart';
@@ -46,6 +47,9 @@ final class AppRuntime with WidgetsBindingObserver {
   _AppRuntimePhase _phase = _AppRuntimePhase.idle;
   bool _bindingObserverRegistered = false;
   bool _appForegrounded = true;
+  var _lifecycleEpoch = 0;
+
+  static final AppLogger _logger = AppLogger('AppRuntime');
 
   /// Starts camera discovery and waits until the initial power state settles.
   ///
@@ -111,24 +115,61 @@ final class AppRuntime with WidgetsBindingObserver {
       case AppLifecycleState.resumed:
         if (_appForegrounded) return;
         _appForegrounded = true;
+        _lifecycleEpoch += 1;
         if (!assistantBloc.isClosed) {
           assistantBloc.add(const AssistantResumed());
         }
       case AppLifecycleState.inactive || AppLifecycleState.hidden || AppLifecycleState.paused:
         if (!_appForegrounded) return;
         _appForegrounded = false;
-        if (!assistantBloc.isClosed) {
-          assistantBloc.add(const AssistantSuspended());
-        }
+        final epoch = ++_lifecycleEpoch;
+        unawaited(_suspendAssistantAfterCamera(epoch));
       case AppLifecycleState.detached:
         _appForegrounded = false;
+        _lifecycleEpoch += 1;
         unawaited(close());
+    }
+  }
+
+  Future<void> _suspendAssistantAfterCamera(int epoch) async {
+    try {
+      if (!cameraBloc.isClosed) {
+        final cameraSettled = _isCameraInactive(cameraBloc.state)
+            ? null
+            : cameraBloc.stream.firstWhere(_isCameraInactive);
+        cameraBloc.add(
+          const CameraSurfaceActivityChanged(active: false),
+        );
+        await cameraSettled;
+      }
+
+      if (epoch != _lifecycleEpoch ||
+          _appForegrounded ||
+          _phase == _AppRuntimePhase.closing ||
+          _phase == _AppRuntimePhase.closed ||
+          assistantBloc.isClosed) {
+        return;
+      }
+      // Both runtimes can submit Metal work. Let the camera controller settle
+      // before freeing llama.cpp so background teardown never races a final
+      // camera inference command buffer.
+      assistantBloc.add(const AssistantSuspended());
+    } on Object catch (error, stackTrace) {
+      if (_phase == _AppRuntimePhase.closing || _phase == _AppRuntimePhase.closed) {
+        return;
+      }
+      _logger.e(
+        'Failed to settle camera resources before assistant suspension.',
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
   }
 
   /// Releases process-owned resources exactly once.
   ///
-  /// Concurrent and subsequent calls share the first shutdown operation.
+  /// Concurrent calls share one attempt. A successful attempt stays
+  /// idempotent; a failed attempt may be retried while every owner is retained.
   Future<void> close() {
     final existingTask = _closeFuture;
     if (existingTask != null) return existingTask;
@@ -136,31 +177,58 @@ final class AppRuntime with WidgetsBindingObserver {
     final completion = Completer<void>();
     _closeFuture = completion.future;
     _phase = _AppRuntimePhase.closing;
-    _closeRequested.complete();
+    _lifecycleEpoch += 1;
+    if (!_closeRequested.isCompleted) _closeRequested.complete();
+    final closeFuture = completion.future;
     unawaited(
       _close().then<void>(
         completion.complete,
-        onError: completion.completeError,
+        onError: (Object error, StackTrace stackTrace) {
+          // Every owner remains referenced after a failed teardown. Clear only
+          // the failed attempt so a later close can retry retained native state.
+          if (identical(_closeFuture, closeFuture)) _closeFuture = null;
+          completion.completeError(error, stackTrace);
+        },
       ),
     );
-    return completion.future;
+    return closeFuture;
   }
 
   Future<void> _close() async {
+    Object? firstError;
+    StackTrace? firstStackTrace;
+
+    Future<void> closeOwner(Future<void> Function() close) async {
+      try {
+        await close();
+      } on Object catch (error, stackTrace) {
+        firstError ??= error;
+        firstStackTrace ??= stackTrace;
+      }
+    }
+
     try {
       try {
         if (_bindingObserverRegistered) {
           WidgetsBinding.instance.removeObserver(this);
         }
+      } on Object catch (error, stackTrace) {
+        firstError ??= error;
+        firstStackTrace ??= stackTrace;
       } finally {
         _bindingObserverRegistered = false;
-        // These owners can shut down independently. Start both tasks before
-        // awaiting so an asynchronous failure in one cannot skip the other.
+        // Stop both camera-side owners before llama.cpp teardown. They may close
+        // concurrently with each other, but assistant resources start only once
+        // neither owner can submit or observe another camera inference result.
         await Future.wait<void>([
-          sceneSession.close(),
-          cameraBloc.close(),
-          _closeAssistantResources(),
+          closeOwner(sceneSession.close),
+          closeOwner(cameraBloc.close),
         ]);
+        await closeOwner(_closeAssistantResources);
+      }
+
+      if (firstError case final error?) {
+        Error.throwWithStackTrace(error, firstStackTrace!);
       }
     } finally {
       _phase = _AppRuntimePhase.closed;
@@ -198,4 +266,8 @@ bool _isCameraSettled(CameraState state) {
   if (state.status == CameraStatus.failure) return true;
   final shouldEnable = state.requestedEnabled && state.surfaceActive;
   return shouldEnable ? state.status == CameraStatus.enabled : state.status == CameraStatus.disabled;
+}
+
+bool _isCameraInactive(CameraState state) {
+  return state.status == CameraStatus.disabled || state.status == CameraStatus.failure;
 }
