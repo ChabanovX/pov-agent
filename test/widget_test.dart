@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:some_camera_with_llm/app/app.dart';
+import 'package:pov_agent/app/app.dart';
 
 import 'support/fake_camera_controller.dart';
 import 'support/test_app_dependencies.dart';
@@ -12,10 +12,11 @@ void main() {
     final controller = FakeCameraController();
     final runtime = await startTestAppRuntime(controller);
     try {
-      await tester.pumpWidget(const SomeCameraWithLlmApp());
+      await tester.pumpWidget(const PovAgentApp());
       await tester.pumpAndSettle();
 
       expect(find.byType(CupertinoApp), findsOneWidget);
+      expect(tester.widget<Title>(find.byType(Title)).title, 'POV Agent');
       expect(find.byKey(testObservationSurfaceKey), findsOneWidget);
       expect(find.text('Assistant placeholder'), findsNothing);
       expect(controller.enableCalls, hasLength(1));
@@ -63,7 +64,7 @@ void main() {
     final controller = FakeCameraController();
     final runtime = await startTestAppRuntime(controller);
     try {
-      await tester.pumpWidget(const SomeCameraWithLlmApp());
+      await tester.pumpWidget(const PovAgentApp());
       await tester.pumpAndSettle();
 
       await tester.tap(find.bySemanticsLabel('Disable camera'));
@@ -86,14 +87,14 @@ void main() {
     final controller = FakeCameraController();
     final runtime = await startTestAppRuntime(controller);
     try {
-      await tester.pumpWidget(const SomeCameraWithLlmApp());
+      await tester.pumpWidget(const PovAgentApp());
       await tester.pumpAndSettle();
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
 
       expect(controller.closeCalls, 0);
 
-      await tester.pumpWidget(const SomeCameraWithLlmApp());
+      await tester.pumpWidget(const PovAgentApp());
       await tester.pumpAndSettle();
 
       expect(find.byKey(testObservationSurfaceKey), findsOneWidget);

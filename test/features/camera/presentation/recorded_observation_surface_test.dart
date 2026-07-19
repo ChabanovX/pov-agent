@@ -2,12 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:some_camera_with_llm/features/camera/application/models/recorded_observation_frame.dart';
-import 'package:some_camera_with_llm/features/camera/application/ports/recorded_observation_frame_source.dart';
-import 'package:some_camera_with_llm/features/camera/data/debug/recorded_bus_fixture.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/detection.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/normalized_box.dart';
-import 'package:some_camera_with_llm/features/camera/presentation/widgets/recorded_observation_surface.dart';
+import 'package:pov_agent/features/camera/application/models/recorded_observation_frame.dart';
+import 'package:pov_agent/features/camera/application/ports/recorded_observation_frame_source.dart';
+import 'package:pov_agent/features/camera/data/debug/recorded_bus_fixture.dart';
+import 'package:pov_agent/features/camera/domain/entities/detection.dart';
+import 'package:pov_agent/features/camera/domain/entities/normalized_box.dart';
+import 'package:pov_agent/features/camera/presentation/widgets/recorded_observation_surface.dart';
 
 void main() {
   testWidgets('renders an empty surface before the decoder publishes a frame', (

@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:some_camera_with_llm/features/camera/application/models/recorded_video_frame.dart';
-import 'package:some_camera_with_llm/features/camera/data/datasources/method_channel_recorded_video_frame_source.dart';
-import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
-import 'package:some_camera_with_llm/shared/domain/app_result.dart';
+import 'package:pov_agent/features/camera/application/models/recorded_video_frame.dart';
+import 'package:pov_agent/features/camera/data/datasources/method_channel_recorded_video_frame_source.dart';
+import 'package:pov_agent/shared/domain/app_failure.dart';
+import 'package:pov_agent/shared/domain/app_result.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();

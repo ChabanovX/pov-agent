@@ -3,7 +3,7 @@ import CoreImage
 import Flutter
 import UIKit
 
-private let recordedVideoChannelName = "some_camera_with_llm/recorded_video"
+private let recordedVideoChannelName = "pov_agent/recorded_video"
 
 /// Pull-based decoder for the bundled debug video.
 ///
@@ -13,7 +13,7 @@ private let recordedVideoChannelName = "some_camera_with_llm/recorded_video"
 final class RecordedVideoFrameChannel {
   private let channel: FlutterMethodChannel
   private let decodeQueue = DispatchQueue(
-    label: "some_camera_with_llm.recorded_video_decoder",
+    label: "pov_agent.recorded_video_decoder",
     qos: .userInitiated
   )
   private let imageContext = CIContext(options: [.cacheIntermediates: false])

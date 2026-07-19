@@ -1,5 +1,7 @@
-name: some_camera_with_llm
-description: "A new Flutter project."
+name: pov_agent
+description: >-
+  A Flutter prototype for a camera-aware multimodal agent with on-device
+  perception and planned voice interaction.
 publish_to: 'none'
 
 version: 1.0.0+1

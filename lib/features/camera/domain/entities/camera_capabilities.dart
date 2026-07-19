@@ -1,4 +1,4 @@
-import 'package:some_camera_with_llm/features/camera/domain/entities/camera_lens.dart';
+import 'package:pov_agent/features/camera/domain/entities/camera_lens.dart';
 
 /// The camera lenses available to the current device.
 final class CameraCapabilities {

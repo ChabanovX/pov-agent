@@ -1,14 +1,14 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:some_camera_with_llm/core/design_system/app_theme.dart';
-import 'package:some_camera_with_llm/core/l10n/app_localizations.dart';
-import 'package:some_camera_with_llm/features/camera/application/models/observation_event.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/observation_diagnostics.dart';
-import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_bloc.dart';
-import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_state.dart';
-import 'package:some_camera_with_llm/features/camera/presentation/pages/camera_page.dart';
-import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
+import 'package:pov_agent/core/design_system/app_theme.dart';
+import 'package:pov_agent/core/l10n/app_localizations.dart';
+import 'package:pov_agent/features/camera/application/models/observation_event.dart';
+import 'package:pov_agent/features/camera/domain/entities/observation_diagnostics.dart';
+import 'package:pov_agent/features/camera/presentation/bloc/camera_bloc.dart';
+import 'package:pov_agent/features/camera/presentation/bloc/camera_state.dart';
+import 'package:pov_agent/features/camera/presentation/pages/camera_page.dart';
+import 'package:pov_agent/shared/domain/app_failure.dart';
 
 import '../../../support/fake_camera_controller.dart';
 

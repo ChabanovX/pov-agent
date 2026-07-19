@@ -1,8 +1,8 @@
-import 'package:some_camera_with_llm/features/camera/data/dto/yolo_detection_dto.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/detection.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/normalized_box.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/observation_diagnostics.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/observation_snapshot.dart';
+import 'package:pov_agent/features/camera/data/dto/yolo_detection_dto.dart';
+import 'package:pov_agent/features/camera/domain/entities/detection.dart';
+import 'package:pov_agent/features/camera/domain/entities/normalized_box.dart';
+import 'package:pov_agent/features/camera/domain/entities/observation_diagnostics.dart';
+import 'package:pov_agent/features/camera/domain/entities/observation_snapshot.dart';
 
 /// A mapper from YOLO plugin payloads to owned domain values.
 abstract final class YoloResultMapper {

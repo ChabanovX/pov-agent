@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:some_camera_with_llm/core/constants/ui_constants.dart';
+import 'package:pov_agent/core/constants/ui_constants.dart';
 
 /// Semantic animation durations used throughout the application.
 @immutable

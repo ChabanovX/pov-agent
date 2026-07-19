@@ -9,7 +9,7 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'Camera Assistant';
+  String get appTitle => 'POV Agent';
 
   @override
   String get cameraTabLabel => 'Camera';

@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
-import 'package:some_camera_with_llm/core/design_system/tokens/tokens.dart';
-import 'package:some_camera_with_llm/core/l10n/app_localizations.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/observation_diagnostics.dart';
+import 'package:pov_agent/core/design_system/tokens/tokens.dart';
+import 'package:pov_agent/core/l10n/app_localizations.dart';
+import 'package:pov_agent/features/camera/domain/entities/observation_diagnostics.dart';
 
 /// A layout for the observation surface, diagnostics, and camera controls.
 final class CameraWidget extends StatelessWidget {

@@ -1,4 +1,4 @@
-import 'package:some_camera_with_llm/features/camera/domain/entities/detection.dart';
+import 'package:pov_agent/features/camera/domain/entities/detection.dart';
 
 /// Detection output for one encoded or live observation frame.
 final class ObservationSnapshot {

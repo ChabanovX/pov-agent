@@ -1,11 +1,11 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:some_camera_with_llm/features/camera/data/datasources/recorded_frame_inference.dart';
-import 'package:some_camera_with_llm/features/camera/data/repositories/recorded_frame_detector_impl.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/observation_snapshot.dart';
-import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
-import 'package:some_camera_with_llm/shared/domain/app_result.dart';
+import 'package:pov_agent/features/camera/data/datasources/recorded_frame_inference.dart';
+import 'package:pov_agent/features/camera/data/repositories/recorded_frame_detector_impl.dart';
+import 'package:pov_agent/features/camera/domain/entities/observation_snapshot.dart';
+import 'package:pov_agent/shared/domain/app_failure.dart';
+import 'package:pov_agent/shared/domain/app_result.dart';
 import 'package:ultralytics_yolo/ultralytics_yolo.dart';
 
 void main() {

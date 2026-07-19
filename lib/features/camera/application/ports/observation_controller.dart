@@ -1,7 +1,7 @@
-import 'package:some_camera_with_llm/features/camera/application/models/observation_event.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/camera_capabilities.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/camera_lens.dart';
-import 'package:some_camera_with_llm/shared/domain/app_result.dart';
+import 'package:pov_agent/features/camera/application/models/observation_event.dart';
+import 'package:pov_agent/features/camera/domain/entities/camera_capabilities.dart';
+import 'package:pov_agent/features/camera/domain/entities/camera_lens.dart';
+import 'package:pov_agent/shared/domain/app_result.dart';
 
 /// A controller for one observation session without exposed plugin types.
 abstract interface class ObservationController {

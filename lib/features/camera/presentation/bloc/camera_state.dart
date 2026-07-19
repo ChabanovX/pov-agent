@@ -1,7 +1,7 @@
-import 'package:some_camera_with_llm/features/camera/domain/entities/camera_lens.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/detection.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/observation_diagnostics.dart';
-import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
+import 'package:pov_agent/features/camera/domain/entities/camera_lens.dart';
+import 'package:pov_agent/features/camera/domain/entities/detection.dart';
+import 'package:pov_agent/features/camera/domain/entities/observation_diagnostics.dart';
+import 'package:pov_agent/shared/domain/app_failure.dart';
 
 /// The native camera power and transition phase.
 enum CameraStatus {

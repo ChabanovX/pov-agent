@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:some_camera_with_llm/app/widgets/observation_surface.dart';
-import 'package:some_camera_with_llm/features/camera/application/models/observation_event.dart';
-import 'package:some_camera_with_llm/features/camera/application/ports/camera_permission_gateway.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/camera_capabilities.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/camera_lens.dart';
-import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
-import 'package:some_camera_with_llm/shared/domain/app_result.dart';
+import 'package:pov_agent/app/widgets/observation_surface.dart';
+import 'package:pov_agent/features/camera/application/models/observation_event.dart';
+import 'package:pov_agent/features/camera/application/ports/camera_permission_gateway.dart';
+import 'package:pov_agent/features/camera/domain/entities/camera_capabilities.dart';
+import 'package:pov_agent/features/camera/domain/entities/camera_lens.dart';
+import 'package:pov_agent/shared/domain/app_failure.dart';
+import 'package:pov_agent/shared/domain/app_result.dart';
 import 'package:ultralytics_yolo/core/yolo_model_manager.dart';
 import 'package:ultralytics_yolo/ultralytics_yolo.dart';
 

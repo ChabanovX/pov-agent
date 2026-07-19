@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:some_camera_with_llm/app/bootstrap/app_runtime.dart';
-import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_bloc.dart';
+import 'package:pov_agent/app/bootstrap/app_runtime.dart';
+import 'package:pov_agent/features/camera/presentation/bloc/camera_bloc.dart';
 
 import '../../support/fake_camera_controller.dart';
 

@@ -1,12 +1,12 @@
 import 'dart:typed_data';
 
 import 'package:meta/meta.dart';
-import 'package:some_camera_with_llm/features/camera/application/ports/recorded_frame_detector.dart';
-import 'package:some_camera_with_llm/features/camera/data/datasources/recorded_frame_inference.dart';
-import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_failure_mapper.dart';
-import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_result_mapper.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/observation_snapshot.dart';
-import 'package:some_camera_with_llm/shared/domain/app_result.dart';
+import 'package:pov_agent/features/camera/application/ports/recorded_frame_detector.dart';
+import 'package:pov_agent/features/camera/data/datasources/recorded_frame_inference.dart';
+import 'package:pov_agent/features/camera/data/mappers/yolo_failure_mapper.dart';
+import 'package:pov_agent/features/camera/data/mappers/yolo_result_mapper.dart';
+import 'package:pov_agent/features/camera/domain/entities/observation_snapshot.dart';
+import 'package:pov_agent/shared/domain/app_result.dart';
 
 /// A function that returns the current UTC time.
 @visibleForTesting

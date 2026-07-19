@@ -1,5 +1,5 @@
 import 'package:flutter/services.dart';
-import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
+import 'package:pov_agent/shared/domain/app_failure.dart';
 
 /// A mapper for recorded-video channel failures at the data boundary.
 abstract final class RecordedVideoFailureMapper {

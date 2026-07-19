@@ -1,20 +1,20 @@
 import 'dart:async';
 
 import 'package:meta/meta.dart';
-import 'package:some_camera_with_llm/features/camera/application/models/observation_configuration.dart';
-import 'package:some_camera_with_llm/features/camera/application/models/observation_event.dart';
-import 'package:some_camera_with_llm/features/camera/application/models/recorded_observation_frame.dart';
-import 'package:some_camera_with_llm/features/camera/application/models/recorded_video_frame.dart';
-import 'package:some_camera_with_llm/features/camera/application/ports/observation_controller.dart';
-import 'package:some_camera_with_llm/features/camera/application/ports/recorded_frame_detector.dart';
-import 'package:some_camera_with_llm/features/camera/application/ports/recorded_observation_frame_source.dart';
-import 'package:some_camera_with_llm/features/camera/application/ports/recorded_video_frame_source.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/camera_capabilities.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/camera_lens.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/observation_diagnostics.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/observation_snapshot.dart';
-import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
-import 'package:some_camera_with_llm/shared/domain/app_result.dart';
+import 'package:pov_agent/features/camera/application/models/observation_configuration.dart';
+import 'package:pov_agent/features/camera/application/models/observation_event.dart';
+import 'package:pov_agent/features/camera/application/models/recorded_observation_frame.dart';
+import 'package:pov_agent/features/camera/application/models/recorded_video_frame.dart';
+import 'package:pov_agent/features/camera/application/ports/observation_controller.dart';
+import 'package:pov_agent/features/camera/application/ports/recorded_frame_detector.dart';
+import 'package:pov_agent/features/camera/application/ports/recorded_observation_frame_source.dart';
+import 'package:pov_agent/features/camera/application/ports/recorded_video_frame_source.dart';
+import 'package:pov_agent/features/camera/domain/entities/camera_capabilities.dart';
+import 'package:pov_agent/features/camera/domain/entities/camera_lens.dart';
+import 'package:pov_agent/features/camera/domain/entities/observation_diagnostics.dart';
+import 'package:pov_agent/features/camera/domain/entities/observation_snapshot.dart';
+import 'package:pov_agent/shared/domain/app_failure.dart';
+import 'package:pov_agent/shared/domain/app_result.dart';
 import 'package:ultralytics_yolo/core/yolo_model_manager.dart';
 
 const _recordedObservationFrameInterval = Duration(milliseconds: 200);

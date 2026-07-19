@@ -1,11 +1,11 @@
 import 'package:flutter/services.dart';
 import 'package:meta/meta.dart';
-import 'package:some_camera_with_llm/features/camera/application/models/recorded_video_frame.dart';
-import 'package:some_camera_with_llm/features/camera/application/ports/recorded_video_frame_source.dart';
-import 'package:some_camera_with_llm/features/camera/data/mappers/recorded_video_failure_mapper.dart';
-import 'package:some_camera_with_llm/shared/domain/app_result.dart';
+import 'package:pov_agent/features/camera/application/models/recorded_video_frame.dart';
+import 'package:pov_agent/features/camera/application/ports/recorded_video_frame_source.dart';
+import 'package:pov_agent/features/camera/data/mappers/recorded_video_failure_mapper.dart';
+import 'package:pov_agent/shared/domain/app_result.dart';
 
-const _recordedVideoChannelName = 'some_camera_with_llm/recorded_video';
+const _recordedVideoChannelName = 'pov_agent/recorded_video';
 
 /// A bundled-video decoder backed by the app-owned iOS platform channel.
 final class MethodChannelRecordedVideoFrameSource implements RecordedVideoFrameSource {

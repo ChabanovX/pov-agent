@@ -1,4 +1,4 @@
-import 'package:some_camera_with_llm/shared/domain/app_result.dart';
+import 'package:pov_agent/shared/domain/app_result.dart';
 
 /// A boundary for foreground camera permission requests.
 ///

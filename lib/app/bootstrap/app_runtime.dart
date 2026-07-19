@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
-import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_bloc.dart';
-import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_state.dart';
+import 'package:pov_agent/features/camera/presentation/bloc/camera_bloc.dart';
+import 'package:pov_agent/features/camera/presentation/bloc/camera_state.dart';
 
 /// The process-level owner of application resources and their lifecycle.
 ///
