@@ -3,18 +3,18 @@ import 'dart:collection';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:some_camera_with_llm/features/camera/application/models/observation_event.dart';
-import 'package:some_camera_with_llm/features/camera/application/models/recorded_video_frame.dart';
-import 'package:some_camera_with_llm/features/camera/application/ports/recorded_frame_detector.dart';
-import 'package:some_camera_with_llm/features/camera/application/ports/recorded_video_frame_source.dart';
-import 'package:some_camera_with_llm/features/camera/data/adapters/recorded_observation_adapter.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/camera_capabilities.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/camera_lens.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/detection.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/normalized_box.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/observation_snapshot.dart';
-import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
-import 'package:some_camera_with_llm/shared/domain/app_result.dart';
+import 'package:pov_agent/features/camera/application/models/observation_event.dart';
+import 'package:pov_agent/features/camera/application/models/recorded_video_frame.dart';
+import 'package:pov_agent/features/camera/application/ports/recorded_frame_detector.dart';
+import 'package:pov_agent/features/camera/application/ports/recorded_video_frame_source.dart';
+import 'package:pov_agent/features/camera/data/adapters/recorded_observation_adapter.dart';
+import 'package:pov_agent/features/camera/domain/entities/camera_capabilities.dart';
+import 'package:pov_agent/features/camera/domain/entities/camera_lens.dart';
+import 'package:pov_agent/features/camera/domain/entities/detection.dart';
+import 'package:pov_agent/features/camera/domain/entities/normalized_box.dart';
+import 'package:pov_agent/features/camera/domain/entities/observation_snapshot.dart';
+import 'package:pov_agent/shared/domain/app_failure.dart';
+import 'package:pov_agent/shared/domain/app_result.dart';
 import 'package:ultralytics_yolo/core/yolo_model_manager.dart';
 
 void main() {

@@ -1,12 +1,12 @@
 import 'package:flutter/cupertino.dart';
-import 'package:some_camera_with_llm/app/router/app_router.dart';
-import 'package:some_camera_with_llm/core/design_system/app_theme.dart';
-import 'package:some_camera_with_llm/core/l10n/app_localizations.dart';
+import 'package:pov_agent/app/router/app_router.dart';
+import 'package:pov_agent/core/design_system/app_theme.dart';
+import 'package:pov_agent/core/l10n/app_localizations.dart';
 
-/// The root widget for the camera observation application.
-final class SomeCameraWithLlmApp extends StatelessWidget {
+/// The root widget for POV Agent.
+final class PovAgentApp extends StatelessWidget {
   /// Creates the application root.
-  const SomeCameraWithLlmApp({super.key});
+  const PovAgentApp({super.key});
 
   @override
   Widget build(BuildContext context) {

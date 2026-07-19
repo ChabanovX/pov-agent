@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_failure_mapper.dart';
-import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
+import 'package:pov_agent/features/camera/data/mappers/yolo_failure_mapper.dart';
+import 'package:pov_agent/shared/domain/app_failure.dart';
 import 'package:ultralytics_yolo/ultralytics_yolo.dart';
 
 void main() {

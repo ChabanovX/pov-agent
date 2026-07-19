@@ -2,14 +2,14 @@ import 'dart:async';
 
 import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:some_camera_with_llm/core/logging/app_logger.dart';
-import 'package:some_camera_with_llm/features/camera/application/models/observation_event.dart';
-import 'package:some_camera_with_llm/features/camera/application/ports/observation_controller.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/camera_capabilities.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/camera_lens.dart';
-import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_state.dart';
-import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
-import 'package:some_camera_with_llm/shared/domain/app_result.dart';
+import 'package:pov_agent/core/logging/app_logger.dart';
+import 'package:pov_agent/features/camera/application/models/observation_event.dart';
+import 'package:pov_agent/features/camera/application/ports/observation_controller.dart';
+import 'package:pov_agent/features/camera/domain/entities/camera_capabilities.dart';
+import 'package:pov_agent/features/camera/domain/entities/camera_lens.dart';
+import 'package:pov_agent/features/camera/presentation/bloc/camera_state.dart';
+import 'package:pov_agent/shared/domain/app_failure.dart';
+import 'package:pov_agent/shared/domain/app_result.dart';
 
 /// An input accepted by [CameraBloc].
 sealed class CameraEvent {

@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
-import 'package:some_camera_with_llm/features/camera/domain/entities/observation_snapshot.dart';
-import 'package:some_camera_with_llm/shared/domain/app_result.dart';
+import 'package:pov_agent/features/camera/domain/entities/observation_snapshot.dart';
+import 'package:pov_agent/shared/domain/app_result.dart';
 
 /// A detector that runs the production model over encoded recorded frames.
 abstract interface class RecordedFrameDetector {

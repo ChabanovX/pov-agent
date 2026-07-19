@@ -94,7 +94,7 @@ abstract class AppLocalizations {
   /// Application title used by the operating system.
   ///
   /// In en, this message translates to:
-  /// **'Camera Assistant'**
+  /// **'POV Agent'**
   String get appTitle;
 
   /// Label and page title for the camera tab.

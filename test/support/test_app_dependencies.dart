@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
-import 'package:some_camera_with_llm/app/bootstrap/app_runtime.dart';
-import 'package:some_camera_with_llm/app/di/app_di.dart';
-import 'package:some_camera_with_llm/features/camera/presentation/bloc/camera_bloc.dart';
+import 'package:pov_agent/app/bootstrap/app_runtime.dart';
+import 'package:pov_agent/app/di/app_di.dart';
+import 'package:pov_agent/features/camera/presentation/bloc/camera_bloc.dart';
 
 import 'fake_camera_controller.dart';
 

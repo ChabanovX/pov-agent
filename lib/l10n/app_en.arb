@@ -1,6 +1,6 @@
 {
   "@@locale": "en",
-  "appTitle": "Camera Assistant",
+  "appTitle": "POV Agent",
   "@appTitle": {
     "description": "Application title used by the operating system."
   },

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:some_camera_with_llm/app/app.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/camera_lens.dart';
+import 'package:pov_agent/app/app.dart';
+import 'package:pov_agent/features/camera/domain/entities/camera_lens.dart';
 
 import '../test/support/fake_camera_controller.dart';
 import '../test/support/test_app_dependencies.dart';
@@ -15,7 +15,7 @@ void main() {
     final controller = FakeCameraController();
     final runtime = await startTestAppRuntime(controller);
     try {
-      await tester.pumpWidget(const SomeCameraWithLlmApp());
+      await tester.pumpWidget(const PovAgentApp());
       await tester.pumpAndSettle();
 
       expect(find.byKey(testObservationSurfaceKey), findsOneWidget);

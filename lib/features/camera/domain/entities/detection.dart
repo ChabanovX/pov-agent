@@ -1,4 +1,4 @@
-import 'package:some_camera_with_llm/features/camera/domain/entities/normalized_box.dart';
+import 'package:pov_agent/features/camera/domain/entities/normalized_box.dart';
 
 /// One model-owned object detection without plugin or wire-format types.
 final class Detection {

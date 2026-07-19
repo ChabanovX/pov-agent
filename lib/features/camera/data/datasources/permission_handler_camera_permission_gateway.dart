@@ -1,8 +1,8 @@
 import 'package:permission_handler/permission_handler.dart';
-import 'package:some_camera_with_llm/features/camera/application/ports/camera_permission_gateway.dart';
-import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_failure_mapper.dart';
-import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
-import 'package:some_camera_with_llm/shared/domain/app_result.dart';
+import 'package:pov_agent/features/camera/application/ports/camera_permission_gateway.dart';
+import 'package:pov_agent/features/camera/data/mappers/yolo_failure_mapper.dart';
+import 'package:pov_agent/shared/domain/app_failure.dart';
+import 'package:pov_agent/shared/domain/app_result.dart';
 
 /// A camera permission gateway backed by `permission_handler`.
 final class PermissionHandlerCameraPermissionGateway implements CameraPermissionGateway {

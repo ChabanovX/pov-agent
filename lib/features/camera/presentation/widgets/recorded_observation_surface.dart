@@ -1,9 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/semantics.dart';
-import 'package:some_camera_with_llm/core/design_system/tokens/tokens.dart';
-import 'package:some_camera_with_llm/features/camera/application/models/recorded_observation_frame.dart';
-import 'package:some_camera_with_llm/features/camera/application/ports/recorded_observation_frame_source.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/detection.dart';
+import 'package:pov_agent/core/design_system/tokens/tokens.dart';
+import 'package:pov_agent/features/camera/application/models/recorded_observation_frame.dart';
+import 'package:pov_agent/features/camera/application/ports/recorded_observation_frame_source.dart';
+import 'package:pov_agent/features/camera/domain/entities/detection.dart';
 
 /// A surface for recorded frames with Flutter-rendered YOLO detections.
 final class RecordedObservationSurface extends StatelessWidget {

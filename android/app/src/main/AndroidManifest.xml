@@ -3,7 +3,7 @@
     <uses-permission android:name="android.permission.INTERNET"/>
 
     <application
-        android:label="some_camera_with_llm"
+        android:label="POV Agent"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

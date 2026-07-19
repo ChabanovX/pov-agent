@@ -1,4 +1,4 @@
-package com.example.some_camera_with_llm
+package com.example.pov_agent
 
 import io.flutter.embedding.android.FlutterActivity
 

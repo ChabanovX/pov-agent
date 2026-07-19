@@ -1,4 +1,4 @@
-import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
+import 'package:pov_agent/shared/domain/app_failure.dart';
 
 /// The success or normalized failure produced by an application operation.
 sealed class AppResult<T> {

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
-import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
+import 'package:pov_agent/shared/domain/app_failure.dart';
 import 'package:ultralytics_yolo/ultralytics_yolo.dart';
 
 /// A mapper for YOLO transport, model, and inference failures.

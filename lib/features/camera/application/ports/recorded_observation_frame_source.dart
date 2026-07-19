@@ -1,4 +1,4 @@
-import 'package:some_camera_with_llm/features/camera/application/models/recorded_observation_frame.dart';
+import 'package:pov_agent/features/camera/application/models/recorded_observation_frame.dart';
 
 /// A source of recorded frames synchronized with inference results.
 abstract interface class RecordedObservationFrameSource {

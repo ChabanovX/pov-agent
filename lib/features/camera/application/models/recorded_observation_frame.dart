@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:some_camera_with_llm/features/camera/domain/entities/detection.dart';
+import 'package:pov_agent/features/camera/domain/entities/detection.dart';
 
 /// One recorded frame and the model detections synchronized with that image.
 final class RecordedObservationFrame {

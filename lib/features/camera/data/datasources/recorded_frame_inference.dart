@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:some_camera_with_llm/features/camera/application/models/observation_configuration.dart';
+import 'package:pov_agent/features/camera/application/models/observation_configuration.dart';
 import 'package:ultralytics_yolo/ultralytics_yolo.dart';
 
 /// The raw native inference boundary for encoded recorded frames.

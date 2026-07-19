@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 
-import 'package:some_camera_with_llm/core/design_system/tokens/tokens.dart';
+import 'package:pov_agent/core/design_system/tokens/tokens.dart';
 
 /// Application-wide Cupertino theme factories.
 abstract final class AppTheme {

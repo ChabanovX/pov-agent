@@ -2,10 +2,10 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:some_camera_with_llm/app/app.dart';
-import 'package:some_camera_with_llm/app/di/app_di.dart';
-import 'package:some_camera_with_llm/core/design_system/tokens/tokens.dart';
-import 'package:some_camera_with_llm/features/camera/presentation/widgets/recorded_observation_surface.dart';
+import 'package:pov_agent/app/app.dart';
+import 'package:pov_agent/app/di/app_di.dart';
+import 'package:pov_agent/core/design_system/tokens/tokens.dart';
+import 'package:pov_agent/features/camera/presentation/widgets/recorded_observation_surface.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -17,7 +17,7 @@ void main() {
       final semantics = tester.ensureSemantics();
       await runtime.start();
       try {
-        await tester.pumpWidget(const SomeCameraWithLlmApp());
+        await tester.pumpWidget(const PovAgentApp());
         await _pumpUntilFound(tester, find.byType(RecordedObservationSurface));
         await _pumpUntilFound(tester, find.bySemanticsLabel('Disable camera'));
         final personDetection = find.semantics.byLabel(

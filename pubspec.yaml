@@ -1,44 +1,72 @@
-name: some_camera_with_llm
-description: "A new Flutter project."
+name: pov_agent
+description: >-
+  A Flutter prototype for a camera-aware multimodal agent with on-device
+  perception and planned voice interaction.
+# This is an application package; keeping it off pub.dev avoids accidental
+# publication while the GitHub repository remains directly runnable.
 publish_to: 'none'
 
 version: 1.0.0+1
 
 environment:
+  # The application and its checked-in harness are validated against Dart 3.12.
   sdk: ^3.12.0
 
 dependencies:
+  # Applies explicit concurrency policies to camera lifecycle Bloc events.
   bloc_concurrency: ^0.3.0
+  # Bundles the Cupertino icon font used by the tab bar and camera controls.
   cupertino_icons: ^1.0.8
+  # Owns the Cupertino application shell and native platform integration.
   flutter:
     sdk: flutter
+  # Connects presentation widgets to the app-owned CameraBloc.
   flutter_bloc: ^9.1.1
+  # Supplies Flutter's localization delegates to generated AppLocalizations.
   flutter_localizations:
     sdk: flutter
+  # Owns the composition registry; service-locator access stays inside app/di.
   get_it: ^9.2.1
+  # Reserved by the router-authority contract for navigation beyond the tab shell.
   go_router: ^17.3.0
+  # Backs generated localization messages and locale canonicalization.
   intl: ^0.20.2
+  # Provides the backend wrapped by the project-wide AppLogger facade.
   logger: ^2.7.0
+  # Marks test-only seams without introducing Flutter imports into data code.
   meta: ^1.18.0
+  # Implements the data-layer camera permission gateway on iOS and Android.
   permission_handler: ^12.0.3
+  # Drives the native camera surface and on-device YOLO inference boundary.
   ultralytics_yolo: ^0.6.10
 
 dev_dependencies:
+  # Supports the harness's configured golden-test lane.
   alchemist: ^0.14.0
+  # Generates typed asset access when the harness generation command is used.
   assetify: ^1.0.2
+  # Adds Bloc-specific analyzer rules to the shared analysis preset.
   bloc_lint: ^0.4.2
+  # Runs the Bloc semantic checks included in repository verification.
   bloc_tools: ^0.1.0-dev.8
+  # Exercises camera lifecycle and UI states with deterministic fakes.
   flutter_test:
     sdk: flutter
+  # Runs camera and recorded-video journeys on simulators and physical devices.
   integration_test:
     sdk: flutter
+  # Supplies the base analyzer rules extended by analysis_options.yaml.
   very_good_analysis: 10.2.0
 
 flutter:
+  # Regenerates AppLocalizations from lib/l10n during Flutter builds.
   generate: true
 
   assets:
+    # Keeps the pinned Core ML model available without a first-run download.
     - assets/models/yolo26n.mlpackage.zip
+    # Provides deterministic camera input for the iOS Simulator acceptance lane.
     - assets/video/pedestrians.mp4
 
+  # Makes Material Icons available to widgets exported by ultralytics_yolo.
   uses-material-design: true

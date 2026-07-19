@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:some_camera_with_llm/app/app.dart';
-import 'package:some_camera_with_llm/app/di/app_di.dart';
-import 'package:some_camera_with_llm/core/design_system/tokens/tokens.dart';
+import 'package:pov_agent/app/app.dart';
+import 'package:pov_agent/app/di/app_di.dart';
+import 'package:pov_agent/core/design_system/tokens/tokens.dart';
 
 const _runHardwareCameraTest = bool.fromEnvironment(
   'RUN_HARDWARE_CAMERA_TEST',
@@ -17,7 +17,7 @@ void main() {
       final runtime = configureDependencies();
       await runtime.start();
       try {
-        await tester.pumpWidget(const SomeCameraWithLlmApp());
+        await tester.pumpWidget(const PovAgentApp());
         await _pumpUntilFound(tester, find.bySemanticsLabel('Disable camera'));
 
         await tester.tap(find.bySemanticsLabel('Switch camera'));

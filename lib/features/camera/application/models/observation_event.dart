@@ -1,6 +1,6 @@
-import 'package:some_camera_with_llm/features/camera/domain/entities/detection.dart';
-import 'package:some_camera_with_llm/features/camera/domain/entities/observation_diagnostics.dart';
-import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
+import 'package:pov_agent/features/camera/domain/entities/detection.dart';
+import 'package:pov_agent/features/camera/domain/entities/observation_diagnostics.dart';
+import 'package:pov_agent/shared/domain/app_failure.dart';
 
 /// Runtime updates emitted by the native observation adapter.
 sealed class ObservationEvent {

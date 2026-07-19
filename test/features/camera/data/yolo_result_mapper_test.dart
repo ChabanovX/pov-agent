@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:some_camera_with_llm/features/camera/data/mappers/yolo_result_mapper.dart';
+import 'package:pov_agent/features/camera/data/mappers/yolo_result_mapper.dart';
 
 void main() {
   test('maps valid native detections into owned normalized domain values', () {

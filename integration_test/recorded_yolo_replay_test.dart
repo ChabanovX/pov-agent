@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:some_camera_with_llm/core/logging/app_logger.dart';
-import 'package:some_camera_with_llm/features/camera/data/datasources/recorded_frame_inference.dart';
-import 'package:some_camera_with_llm/features/camera/data/debug/recorded_bus_fixture.dart';
-import 'package:some_camera_with_llm/features/camera/data/repositories/recorded_frame_detector_impl.dart';
-import 'package:some_camera_with_llm/shared/domain/app_failure.dart';
-import 'package:some_camera_with_llm/shared/domain/app_result.dart';
+import 'package:pov_agent/core/logging/app_logger.dart';
+import 'package:pov_agent/features/camera/data/datasources/recorded_frame_inference.dart';
+import 'package:pov_agent/features/camera/data/debug/recorded_bus_fixture.dart';
+import 'package:pov_agent/features/camera/data/repositories/recorded_frame_detector_impl.dart';
+import 'package:pov_agent/shared/domain/app_failure.dart';
+import 'package:pov_agent/shared/domain/app_result.dart';
 import 'package:ultralytics_yolo/core/yolo_model_manager.dart';
 import 'package:ultralytics_yolo/core/yolo_model_resolver.dart';
 
