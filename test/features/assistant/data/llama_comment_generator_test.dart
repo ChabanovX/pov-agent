@@ -223,6 +223,7 @@ void main() {
         CommentGenerationRequest(
           prompt: 'chatml prompt',
           options: options,
+          completionPolicy: GenerationCompletionPolicy.modelOrTokenLimit,
           startsInsideReasoning: true,
         ),
       );
@@ -257,6 +258,171 @@ void main() {
     },
   );
 
+  test(
+    'publishes the first substantive sentence and then stops native decoding',
+    () async {
+      await generator.loadModel(artifact);
+      final nativeGeneration = _FakeWorkerGeneration(holdCancellation: true);
+      worker.nextGeneration = nativeGeneration;
+      final handle = _successHandle(
+        await generator.generate(
+          CommentGenerationRequest(
+            prompt: 'short comment prompt',
+            options: _testGenerationOptions,
+            completionPolicy: GenerationCompletionPolicy.firstSubstantiveEnglishSentence,
+          ),
+        ),
+      );
+      final chunks = <String>[];
+      final chunksDone = handle.chunks.listen(chunks.add).asFuture<void>();
+
+      nativeGeneration.addText(
+        '<think>Maybe? private.</think>\n\n'
+        'Sure! A person is visible. Extra sentence.',
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(nativeGeneration.cancelCalls, 1);
+      expect(chunks, isEmpty);
+      var completionSettled = false;
+      unawaited(handle.completion.then((_) => completionSettled = true));
+      await Future<void>.delayed(Duration.zero);
+      expect(completionSettled, isFalse);
+
+      await nativeGeneration.releaseCancellation();
+      final completion = await handle.completion;
+      await chunksDone;
+
+      expect(completion, isA<AppSuccess<String>>());
+      expect(chunks.join(), 'A person is visible.');
+      expect(
+        (completion as AppSuccess<String>).value,
+        'A person is visible.',
+      );
+    },
+  );
+
+  test('rejects a short comment that reaches model end mid-sentence', () async {
+    await generator.loadModel(artifact);
+    final nativeGeneration = _FakeWorkerGeneration();
+    worker.nextGeneration = nativeGeneration;
+    final handle = _successHandle(
+      await generator.generate(
+        CommentGenerationRequest(
+          prompt: 'short comment prompt',
+          options: _testGenerationOptions,
+          completionPolicy: GenerationCompletionPolicy.firstSubstantiveEnglishSentence,
+        ),
+      ),
+    );
+    final chunks = <String>[];
+    final chunksDone = handle.chunks.listen(chunks.add).asFuture<void>();
+
+    nativeGeneration.addText('A person remains partially described');
+    await nativeGeneration.finish();
+    final completion = await handle.completion;
+    await chunksDone;
+
+    expect(chunks, isEmpty);
+    expect(
+      completion,
+      isA<AppError<String>>().having(
+        (result) => result.failure.code,
+        'code',
+        'assistant_sentence_incomplete',
+      ),
+    );
+  });
+
+  test(
+    'joins native completion when policy cancellation fails',
+    () async {
+      await generator.loadModel(artifact);
+      final cancelError = Exception('native cancellation failed');
+      final nativeGeneration = _FakeWorkerGeneration()..cancelError = cancelError;
+      worker.nextGeneration = nativeGeneration;
+      final handle = _successHandle(
+        await generator.generate(
+          CommentGenerationRequest(
+            prompt: 'short comment prompt',
+            options: _testGenerationOptions,
+            completionPolicy: GenerationCompletionPolicy.firstSubstantiveEnglishSentence,
+          ),
+        ),
+      );
+      final chunks = <String>[];
+      final chunksDone = handle.chunks.listen(chunks.add).asFuture<void>();
+
+      nativeGeneration.addText('A person is visible. Extra sentence.');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(nativeGeneration.cancelCalls, 1);
+      var completionSettled = false;
+      unawaited(handle.completion.then((_) => completionSettled = true));
+      await Future<void>.delayed(Duration.zero);
+      expect(completionSettled, isFalse);
+      expect(chunks, isEmpty);
+
+      await nativeGeneration.finish();
+      final completion = await handle.completion;
+      await chunksDone;
+
+      expect(
+        completion,
+        isA<AppError<String>>()
+            .having(
+              (result) => result.failure.code,
+              'code',
+              'assistant_generation',
+            )
+            .having(
+              (result) => result.failure.cause,
+              'cause',
+              same(cancelError),
+            ),
+      );
+      expect(chunks, isEmpty);
+    },
+  );
+
+  test(
+    'cancels and joins native work after a local decoding failure',
+    () async {
+      await generator.loadModel(artifact);
+      final nativeGeneration = _FakeWorkerGeneration(holdCancellation: true);
+      worker.nextGeneration = nativeGeneration;
+      final handle = _successHandle(
+        await generator.generate(
+          CommentGenerationRequest(
+            prompt: 'prompt',
+            options: _testGenerationOptions,
+            completionPolicy: GenerationCompletionPolicy.modelOrTokenLimit,
+          ),
+        ),
+      );
+
+      nativeGeneration.addBytes(const [0xFF]);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(nativeGeneration.cancelCalls, 1);
+      var completionSettled = false;
+      unawaited(handle.completion.then((_) => completionSettled = true));
+      await Future<void>.delayed(Duration.zero);
+      expect(completionSettled, isFalse);
+
+      await nativeGeneration.releaseCancellation();
+
+      expect(
+        await handle.completion,
+        isA<AppError<String>>().having(
+          (result) => result.failure.code,
+          'code',
+          'assistant_generation',
+        ),
+      );
+    },
+  );
+
   test('cancel settles only after native generation has stopped', () async {
     await generator.loadModel(artifact);
     final nativeGeneration = _FakeWorkerGeneration(holdCancellation: true);
@@ -266,6 +432,7 @@ void main() {
         CommentGenerationRequest(
           prompt: 'prompt',
           options: _testGenerationOptions,
+          completionPolicy: GenerationCompletionPolicy.modelOrTokenLimit,
         ),
       ),
     );
@@ -300,6 +467,7 @@ void main() {
           CommentGenerationRequest(
             prompt: 'prompt',
             options: _testGenerationOptions,
+            completionPolicy: GenerationCompletionPolicy.modelOrTokenLimit,
           ),
         ),
       );
@@ -389,6 +557,7 @@ final class _FakeWorkerGeneration implements LlamaWorkerGeneration {
   final StreamController<Uint8List> _bytes = StreamController<Uint8List>();
   final Completer<void> _completion = Completer<void>();
   final Completer<void> _cancelRelease = Completer<void>();
+  Exception? cancelError;
   int cancelCalls = 0;
 
   @override
@@ -421,6 +590,8 @@ final class _FakeWorkerGeneration implements LlamaWorkerGeneration {
   @override
   Future<void> cancel() async {
     cancelCalls += 1;
+    final error = cancelError;
+    if (error != null) throw error;
     if (holdCancellation) await _cancelRelease.future;
     await finish();
   }

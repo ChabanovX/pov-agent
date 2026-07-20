@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pov_agent/features/assistant/application/models/comment_generation_request.dart';
 import 'package:pov_agent/features/assistant/application/models/generation_options.dart';
 import 'package:pov_agent/features/assistant/application/services/qwen_prompt_builder.dart';
 import 'package:pov_agent/features/assistant/domain/entities/conversation_message.dart';
@@ -58,6 +59,10 @@ void main() {
     );
     expect(request.options, _manualOptions);
     expect(request.startsInsideReasoning, isTrue);
+    expect(
+      request.completionPolicy,
+      GenerationCompletionPolicy.modelOrTokenLimit,
+    );
     expect(request.prompt, isNot(contains('private chain')));
   });
 
@@ -69,7 +74,10 @@ void main() {
     expect(
       request.prompt,
       '<|im_start|>system\n'
-      'Always answer in English.<|im_end|>\n'
+      'Always answer in English.\n'
+      'For this request, output only one brief complete English sentence of at '
+      'least three words. '
+      'Do not introduce or explain it.<|im_end|>\n'
       '<|im_start|>user\n'
       'Describe the stable scene. /think\n'
       '/no_think<|im_end|>\n'
@@ -77,6 +85,16 @@ void main() {
     );
     expect(request.options, _shortCommentOptions);
     expect(request.startsInsideReasoning, isFalse);
+    expect(
+      request.completionPolicy,
+      GenerationCompletionPolicy.firstSubstantiveEnglishSentence,
+    );
+  });
+
+  test('keeps the short output bound out of manual dialogue', () {
+    final request = builder.manualDialogue(prompt: 'Explain the scene.');
+
+    expect(request.prompt, isNot(contains('Do not introduce or explain it.')));
   });
 
   test('accepts injected policies instead of reading shared constants', () {

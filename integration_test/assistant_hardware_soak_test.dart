@@ -11,6 +11,7 @@ import 'package:pov_agent/app/di/assistant_build_configuration.dart';
 import 'package:pov_agent/features/assistant/application/models/model_store_state.dart';
 import 'package:pov_agent/features/assistant/application/ports/comment_generator.dart';
 import 'package:pov_agent/features/assistant/application/ports/generation_handle.dart';
+import 'package:pov_agent/features/assistant/application/services/first_complete_english_sentence_accumulator.dart';
 import 'package:pov_agent/features/assistant/application/services/qwen_prompt_builder.dart';
 import 'package:pov_agent/features/assistant/data/adapters/llama_comment_generator.dart';
 import 'package:pov_agent/features/assistant/data/datasources/model_artifact_downloader.dart';
@@ -247,21 +248,24 @@ void main() {
           lessThanOrEqualTo(_maxSampledPeakGrowthBytes),
           reason: 'Periodic active-generation samples must remain bounded.',
         );
-        tester
-          ..printToConsole(
-            'IPHONE_ACCEPTANCE stage=soak_complete '
-            'elapsed_seconds=${soakWatch.elapsed.inSeconds} '
-            'turns=$completedTurns qwen_load_yolo_frames='
-            '$yoloFramesDuringQwenPreparation concurrent_yolo_frames='
-            '$yoloFramesDuringGeneration slowest_comment_ms='
-            '${slowestComment.inMilliseconds} retained_growth_mib='
-            '${_mebibytes(retainedGrowth)} sampled_peak_growth_mib='
-            '${_mebibytes(sampledPeakGrowth)}',
-          )
-          ..printToConsole('IPHONE_ACCEPTANCE stage=lifecycle_pause_requested')
-          ..binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+        tester.printToConsole(
+          'IPHONE_ACCEPTANCE stage=soak_complete '
+          'elapsed_seconds=${soakWatch.elapsed.inSeconds} '
+          'turns=$completedTurns qwen_load_yolo_frames='
+          '$yoloFramesDuringQwenPreparation concurrent_yolo_frames='
+          '$yoloFramesDuringGeneration slowest_comment_ms='
+          '${slowestComment.inMilliseconds} retained_growth_mib='
+          '${_mebibytes(retainedGrowth)} sampled_peak_growth_mib='
+          '${_mebibytes(sampledPeakGrowth)}',
+        );
         final frameBeforeLifecycle = latestYoloFrameNumber;
-        await tester.pump();
+        tester.printToConsole(
+          'IPHONE_ACCEPTANCE stage=lifecycle_pause_requested',
+        );
+        _sendApplicationToBackground(tester.binding);
+        // A paused physical binding does not owe the test another rendered
+        // frame. Await the lifecycle-owned streams directly; pumping here can
+        // deadlock after suspension has already completed.
         await _expectModelStatus(
           runtime.assistantBloc,
           AssistantModelStatus.suspended,
@@ -287,10 +291,8 @@ void main() {
           )
           ..printToConsole(
             'IPHONE_ACCEPTANCE stage=lifecycle_resume_requested',
-          )
-          ..binding.handleAppLifecycleStateChanged(
-            AppLifecycleState.resumed,
           );
+        _sendApplicationToForeground(tester.binding);
         await tester.pump();
         await _expectModelReady(
           runtime.assistantBloc,
@@ -426,6 +428,20 @@ void main() {
   );
 }
 
+void _sendApplicationToBackground(TestWidgetsFlutterBinding binding) {
+  binding
+    ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+    ..handleAppLifecycleStateChanged(AppLifecycleState.hidden)
+    ..handleAppLifecycleStateChanged(AppLifecycleState.paused);
+}
+
+void _sendApplicationToForeground(TestWidgetsFlutterBinding binding) {
+  binding
+    ..handleAppLifecycleStateChanged(AppLifecycleState.hidden)
+    ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+    ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+}
+
 LlamaCommentGenerator _expectGpuBackedGenerator(CommentGenerator generator) {
   expect(generator, isA<LlamaCommentGenerator>());
   final llamaGenerator = generator as LlamaCommentGenerator;
@@ -449,7 +465,10 @@ Future<void> _expectModelReady(
     timeout: timeout,
   );
   if (state.modelStatus == AssistantModelStatus.failure) {
-    fail('Model $context failed: ${state.modelFailure?.code ?? 'unknown'}.');
+    fail(
+      'Model $context failed: ${state.modelFailure?.code ?? 'unknown'}; '
+      'cause=${state.modelFailure?.cause ?? 'unavailable'}.',
+    );
   }
 }
 
@@ -627,14 +646,19 @@ T _successValue<T>(AppResult<T> result, String operation) {
 void _expectValidShortComment(_GenerationMeasurement measurement) {
   final answer = measurement.answer;
   final englishWords = RegExp(
-    r"\b[A-Za-z]{2,}(?:'[A-Za-z]+)?\b",
+    r"\b[A-Za-z]+(?:['’][A-Za-z]+)?\b",
   ).allMatches(answer);
   final obviousNonLatinScript = RegExp(
     r'[\u0370-\u052F\u0590-\u08FF\u0900-\u097F\u3040-\u30FF'
     r'\u3400-\u9FFF\uAC00-\uD7AF]',
   );
-
-  expect(answer.trim(), isNotEmpty);
+  final completeSentenceEnding = RegExp(
+    r'''[.!?]+(?:['"”’»)\]}]*)$''',
+  );
+  final trimmedAnswer = answer.trim();
+  final accumulator = FirstCompleteEnglishSentenceAccumulator();
+  final extractedSentence = accumulator.add(trimmedAnswer) ?? accumulator.finish();
+  expect(trimmedAnswer, isNotEmpty);
   expect(answer, isNot(contains('<think>')));
   expect(answer, isNot(contains('</think>')));
   expect(answer, isNot(contains('<|')));
@@ -642,7 +666,20 @@ void _expectValidShortComment(_GenerationMeasurement measurement) {
   expect(
     englishWords.length,
     greaterThanOrEqualTo(3),
-    reason: 'A short English sentence must contain several English words.',
+    reason: 'A substantive English sentence must contain at least three words.',
+  );
+  expect(
+    trimmedAnswer,
+    matches(completeSentenceEnding),
+    reason: 'The short-comment cap must not expose a truncated sentence.',
+  );
+  expect(
+    extractedSentence,
+    trimmedAnswer,
+    reason:
+        'The short-comment output must be exactly one substantive English '
+        'sentence; '
+        'answer="$trimmedAnswer".',
   );
   expect(
     measurement.elapsed,

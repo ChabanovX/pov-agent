@@ -6,6 +6,7 @@ import 'package:pov_agent/features/assistant/application/models/comment_generati
 import 'package:pov_agent/features/assistant/application/models/verified_model_artifact.dart';
 import 'package:pov_agent/features/assistant/application/ports/comment_generator.dart';
 import 'package:pov_agent/features/assistant/application/ports/generation_handle.dart';
+import 'package:pov_agent/features/assistant/application/services/first_complete_english_sentence_accumulator.dart';
 import 'package:pov_agent/features/assistant/application/services/qwen_reasoning_filter.dart';
 import 'package:pov_agent/features/assistant/data/ffi/llama_inference_worker.dart';
 import 'package:pov_agent/features/assistant/data/ffi/llama_native_runtime.dart';
@@ -58,7 +59,7 @@ final class LlamaCommentGenerator implements CommentGenerator {
   /// Whether the currently loaded model uses the native GPU backend.
   ///
   /// This diagnostic is `null` while no model is loaded. Physical-device
-  /// acceptance tests use it to reject a silent CPU fallback on iOS.
+  /// acceptance tests use it to reject CPU fallback on supported iOS devices.
   bool? get loadedModelUsesGpu => _loadedModelUsesGpu;
 
   /// Whether the latest requested model unload completed without native error.
@@ -221,6 +222,7 @@ final class LlamaCommentGenerator implements CommentGenerator {
         QwenReasoningFilter(
           startsInsideReasoning: request.startsInsideReasoning,
         ),
+        request.completionPolicy,
         () {
           if (identical(_activeGeneration, handle)) {
             _activeGeneration = null;
@@ -308,16 +310,24 @@ final class LlamaCommentGenerator implements CommentGenerator {
 }
 
 final class _LlamaGenerationHandle implements GenerationHandle {
-  _LlamaGenerationHandle(this._native, this._filter, this._onSettled) {
+  _LlamaGenerationHandle(
+    this._native,
+    this._filter,
+    this._completionPolicy,
+    this._onSettled,
+  ) {
     unawaited(_forward());
   }
 
   final LlamaWorkerGeneration _native;
   final QwenReasoningFilter _filter;
+  final GenerationCompletionPolicy _completionPolicy;
   final void Function() _onSettled;
   final StreamController<String> _chunks = StreamController<String>();
   final Completer<AppResult<String>> _completion = Completer<AppResult<String>>();
   final StringBuffer _visibleAnswer = StringBuffer();
+  final FirstCompleteEnglishSentenceAccumulator _sentenceAccumulator = FirstCompleteEnglishSentenceAccumulator();
+  Future<void>? _nativeCancelTask;
   Future<void>? _cancelTask;
 
   bool get isSettled => _completion.isCompleted;
@@ -329,17 +339,80 @@ final class _LlamaGenerationHandle implements GenerationHandle {
   Future<AppResult<String>> get completion => _completion.future;
 
   Future<void> _forward() async {
-    AppResult<String> result;
+    final nativeCompletionOutcome = _captureFailure(_native.completion);
+    _CapturedFailure? processingFailure;
+    Future<_CapturedFailure?>? policyCancelOutcome;
+    String? completedSentence;
+
     try {
       final decoded = const Utf8Decoder().bind(_native.bytes);
       await for (final chunk in decoded) {
-        _publish(_filter.add(chunk));
+        final visible = _filter.add(chunk);
+        if (_completionPolicy == GenerationCompletionPolicy.firstSubstantiveEnglishSentence) {
+          completedSentence = _sentenceAccumulator.add(visible);
+          if (completedSentence != null) {
+            // Observe cancellation immediately: leaving an await-for loop may
+            // suspend while its stream subscription is being cancelled.
+            policyCancelOutcome = _captureFailure(_requestNativeCancel());
+            break;
+          }
+        } else {
+          _publish(visible);
+        }
       }
-      await _native.completion;
-      _publish(_filter.finish());
-      result = AppSuccess<String>(_visibleAnswer.toString());
     } on Object catch (error, stackTrace) {
+      processingFailure = (error: error, stackTrace: stackTrace);
+      // Local decoding/filtering failures must not release single-flight
+      // ownership while the native worker can still be generating.
+      policyCancelOutcome ??= _captureFailure(_requestNativeCancel());
+    }
+
+    final policyCancelFailure = await policyCancelOutcome;
+    final nativeCompletionFailure = await nativeCompletionOutcome;
+    final terminalFailure = processingFailure ?? policyCancelFailure ?? nativeCompletionFailure;
+    final AppResult<String> result;
+    if (terminalFailure != null) {
       result = AppError<String>(
+        _nativeFailure(
+          code: 'assistant_generation',
+          message: 'Local generation failed.',
+          error: terminalFailure.error,
+          stackTrace: terminalFailure.stackTrace,
+        ),
+      );
+    } else {
+      result = _finishSuccessfulForward(completedSentence);
+    }
+
+    // Completion must not depend on whether presentation subscribed to chunks.
+    // A single-subscription controller's close future waits for a listener.
+    unawaited(_chunks.close());
+    if (!_completion.isCompleted) _completion.complete(result);
+    _onSettled();
+  }
+
+  AppResult<String> _finishSuccessfulForward(String? completedSentence) {
+    try {
+      var sentence = completedSentence;
+      final tail = _filter.finish();
+      if (_completionPolicy == GenerationCompletionPolicy.firstSubstantiveEnglishSentence) {
+        sentence ??= _sentenceAccumulator.add(tail);
+        sentence ??= _sentenceAccumulator.finish();
+        if (sentence == null) {
+          return const AppError<String>(
+            UnexpectedFailure(
+              code: 'assistant_sentence_incomplete',
+              message: 'The local model did not complete a short sentence.',
+            ),
+          );
+        }
+        _publish(sentence);
+      } else {
+        _publish(tail);
+      }
+      return AppSuccess<String>(_visibleAnswer.toString());
+    } on Object catch (error, stackTrace) {
+      return AppError<String>(
         _nativeFailure(
           code: 'assistant_generation',
           message: 'Local generation failed.',
@@ -348,12 +421,19 @@ final class _LlamaGenerationHandle implements GenerationHandle {
         ),
       );
     }
+  }
 
-    // Completion must not depend on whether presentation subscribed to chunks.
-    // A single-subscription controller's close future waits for a listener.
-    unawaited(_chunks.close());
-    if (!_completion.isCompleted) _completion.complete(result);
-    _onSettled();
+  Future<void> _requestNativeCancel() {
+    return _nativeCancelTask ??= Future<void>.sync(_native.cancel);
+  }
+
+  Future<_CapturedFailure?> _captureFailure(Future<void> operation) async {
+    try {
+      await operation;
+      return null;
+    } on Object catch (error, stackTrace) {
+      return (error: error, stackTrace: stackTrace);
+    }
   }
 
   void _publish(String chunk) {
@@ -369,13 +449,15 @@ final class _LlamaGenerationHandle implements GenerationHandle {
 
   Future<void> _cancelAndWait() async {
     try {
-      await _native.cancel();
+      await _requestNativeCancel();
     } on Object {
       // The normalized terminal result is published through completion.
     }
     await completion;
   }
 }
+
+typedef _CapturedFailure = ({Object error, StackTrace stackTrace});
 
 DeviceUnavailableFailure _nativeFailure({
   required String code,

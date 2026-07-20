@@ -83,6 +83,7 @@ void main() {
       () => CommentGenerationRequest(
         prompt: ' \n ',
         options: _testGenerationOptions,
+        completionPolicy: GenerationCompletionPolicy.modelOrTokenLimit,
       ),
       throwsArgumentError,
     );
@@ -90,7 +91,12 @@ void main() {
     final request = CommentGenerationRequest(
       prompt: '<|im_start|>assistant\n',
       options: _testGenerationOptions,
+      completionPolicy: GenerationCompletionPolicy.modelOrTokenLimit,
     );
     expect(request.options, _testGenerationOptions);
+    expect(
+      request.completionPolicy,
+      GenerationCompletionPolicy.modelOrTokenLimit,
+    );
   });
 }

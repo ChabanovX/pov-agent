@@ -6,6 +6,10 @@ import 'package:pov_agent/features/assistant/domain/entities/conversation_messag
 const _chatStart = '<|im_start|>';
 const _chatEnd = '<|im_end|>';
 const _endOfText = '<|endoftext|>';
+const _shortCommentSystemInstruction =
+    'For this request, output only one brief complete English sentence of at '
+    'least three words. '
+    'Do not introduce or explain it.';
 
 /// Formats assistant requests with Qwen3's pinned ChatML conversation shape.
 ///
@@ -47,6 +51,7 @@ final class QwenPromptBuilder {
       thinkingSwitch: '/think',
       options: manualOptions,
       prefillReasoning: true,
+      completionPolicy: GenerationCompletionPolicy.modelOrTokenLimit,
     );
   }
 
@@ -61,6 +66,8 @@ final class QwenPromptBuilder {
       thinkingSwitch: '/no_think',
       options: shortCommentOptions,
       prefillReasoning: false,
+      systemInstruction: _shortCommentSystemInstruction,
+      completionPolicy: GenerationCompletionPolicy.firstSubstantiveEnglishSentence,
     );
   }
 
@@ -70,12 +77,19 @@ final class QwenPromptBuilder {
     required String thinkingSwitch,
     required GenerationOptions options,
     required bool prefillReasoning,
+    required GenerationCompletionPolicy completionPolicy,
+    String? systemInstruction,
   }) {
     final sanitizedPrompt = _requirePrompt(prompt, 'prompt');
     final buffer = StringBuffer()
       ..write('${_chatStart}system\n')
-      ..write(_systemPrompt)
-      ..write('$_chatEnd\n');
+      ..write(_systemPrompt);
+    if (systemInstruction != null) {
+      buffer
+        ..write('\n')
+        ..write(systemInstruction);
+    }
+    buffer.write('$_chatEnd\n');
 
     for (final message in history) {
       final content = _sanitizeHistoryMessage(message);
@@ -97,6 +111,7 @@ final class QwenPromptBuilder {
       prompt: buffer.toString(),
       options: options,
       startsInsideReasoning: prefillReasoning,
+      completionPolicy: completionPolicy,
     );
   }
 }
