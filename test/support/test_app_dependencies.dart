@@ -15,11 +15,11 @@ Future<AppRuntime> startTestAppRuntime(
     controller: controller,
     stabilizer: SceneStabilizer(),
   );
-  final assistant = TestAssistantResources();
+  final assistant = TestAssistantResources(sceneSource: sceneSession);
   final runtime = AppRuntime(
     cameraBloc: CameraBloc(controller),
     sceneSession: sceneSession,
-    assistantBloc: assistant.assistantBloc,
+    observerBloc: assistant.observerBloc,
     modelStore: assistant.modelStore,
     commentGenerator: assistant.commentGenerator,
   );

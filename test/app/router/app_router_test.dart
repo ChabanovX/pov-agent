@@ -7,7 +7,7 @@ import '../../support/test_app_dependencies.dart';
 import '../../support/test_assistant_resources.dart';
 
 void main() {
-  testWidgets('starts the app-owned assistant only on its first tab visit', (
+  testWidgets('keeps the eager observer and camera active across tabs', (
     tester,
   ) async {
     final runtime = await startTestAppRuntime(FakeCameraController());
@@ -20,19 +20,22 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(modelStore.prepareCalls, 0);
-      expect(runtime.assistantBloc.state.started, isFalse);
+      expect(modelStore.prepareCalls, 1);
+      expect(runtime.observerBloc.state.started, isTrue);
+      expect(runtime.cameraBloc.state.surfaceActive, isTrue);
 
       await tester.tap(find.text('Assistant'));
       await tester.pumpAndSettle();
       expect(modelStore.prepareCalls, 1);
-      expect(runtime.assistantBloc.state.started, isTrue);
+      expect(runtime.observerBloc.state.started, isTrue);
+      expect(runtime.cameraBloc.state.surfaceActive, isTrue);
 
       await tester.tap(find.text('Camera'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Assistant'));
       await tester.pumpAndSettle();
       expect(modelStore.prepareCalls, 1);
+      expect(runtime.cameraBloc.state.surfaceActive, isTrue);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();

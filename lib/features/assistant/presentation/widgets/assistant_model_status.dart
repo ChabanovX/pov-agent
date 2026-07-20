@@ -2,7 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:pov_agent/core/constants/ui_constants.dart';
 import 'package:pov_agent/core/design_system/tokens/tokens.dart';
 import 'package:pov_agent/core/l10n/app_localizations.dart';
-import 'package:pov_agent/features/assistant/presentation/bloc/assistant_state.dart';
+import 'package:pov_agent/features/assistant/presentation/bloc/observer_state.dart';
 import 'package:pov_agent/shared/domain/app_failure.dart';
 
 /// Projects a non-ready assistant model phase into actionable status UI.
@@ -15,7 +15,7 @@ final class AssistantModelStatusView extends StatelessWidget {
   });
 
   /// The model state rendered by this status surface.
-  final AssistantState state;
+  final ObserverState state;
 
   /// Retries a recoverable model preparation failure.
   final VoidCallback onRetry;
@@ -29,63 +29,61 @@ final class AssistantModelStatusView extends StatelessWidget {
     const typography = AppTypography.regular;
     final localizations = AppLocalizations.of(context);
     final message = _messageFor(localizations);
-    final downloading = state.modelStatus == AssistantModelStatus.downloading;
+    final downloading = state.modelStatus == ObserverModelStatus.downloading;
     final loading = switch (state.modelStatus) {
-      AssistantModelStatus.loading || AssistantModelStatus.downloading || AssistantModelStatus.verifying => true,
+      ObserverModelStatus.loading || ObserverModelStatus.downloading || ObserverModelStatus.verifying => true,
       _ => false,
     };
 
-    return Center(
-      child: SingleChildScrollView(
-        padding: spacing.page,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: colors.surface,
-            borderRadius: radius.lg,
-            boxShadow: shadows.level1,
-          ),
-          child: Padding(
-            padding: spacing.insetXl,
-            child: Semantics(
-              container: true,
-              liveRegion: true,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (loading)
-                    const CupertinoActivityIndicator()
-                  else
-                    Icon(
-                      _iconFor(state.modelStatus),
-                      color: state.modelStatus == AssistantModelStatus.failure ? colors.danger : colors.primary,
-                      size: spacing.xl,
-                    ),
+    return Padding(
+      padding: spacing.topMd,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: radius.lg,
+          boxShadow: shadows.level1,
+        ),
+        child: Padding(
+          padding: spacing.insetXl,
+          child: Semantics(
+            container: true,
+            liveRegion: true,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (loading)
+                  const CupertinoActivityIndicator()
+                else
+                  Icon(
+                    _iconFor(state.modelStatus),
+                    color: state.modelStatus == ObserverModelStatus.failure ? colors.danger : colors.primary,
+                    size: spacing.xl,
+                  ),
+                Padding(
+                  padding: spacing.topMd,
+                  child: Text(
+                    message,
+                    style: typography.body.copyWith(color: colors.onSurface),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                if (downloading)
                   Padding(
-                    padding: spacing.topMd,
-                    child: Text(
-                      message,
-                      style: typography.body.copyWith(color: colors.onSurface),
-                      textAlign: TextAlign.center,
+                    padding: spacing.topLg,
+                    child: _DownloadProgress(
+                      progress: state.modelDownloadProgress ?? 0,
                     ),
                   ),
-                  if (downloading)
-                    Padding(
-                      padding: spacing.topLg,
-                      child: _DownloadProgress(
-                        progress: state.modelDownloadProgress ?? 0,
-                      ),
+                if (state.modelStatus == ObserverModelStatus.failure)
+                  Padding(
+                    padding: spacing.topLg,
+                    child: CupertinoButton.filled(
+                      key: assistantModelRetryButtonKey,
+                      onPressed: onRetry,
+                      child: Text(localizations.retryAction),
                     ),
-                  if (state.modelStatus == AssistantModelStatus.failure)
-                    Padding(
-                      padding: spacing.topLg,
-                      child: CupertinoButton.filled(
-                        key: assistantModelRetryButtonKey,
-                        onPressed: onRetry,
-                        child: Text(localizations.retryAction),
-                      ),
-                    ),
-                ],
-              ),
+                  ),
+              ],
             ),
           ),
         ),
@@ -95,15 +93,15 @@ final class AssistantModelStatusView extends StatelessWidget {
 
   String _messageFor(AppLocalizations localizations) {
     return switch (state.modelStatus) {
-      AssistantModelStatus.idle => localizations.assistantModelNotStartedMessage,
-      AssistantModelStatus.loading => localizations.assistantModelPreparingMessage,
-      AssistantModelStatus.downloading => localizations.assistantModelDownloadingMessage(
+      ObserverModelStatus.idle => localizations.assistantModelNotStartedMessage,
+      ObserverModelStatus.loading => localizations.assistantModelPreparingMessage,
+      ObserverModelStatus.downloading => localizations.assistantModelDownloadingMessage(
         ((state.modelDownloadProgress ?? 0) * 100).round(),
       ),
-      AssistantModelStatus.verifying => localizations.assistantModelVerifyingMessage,
-      AssistantModelStatus.suspended => localizations.assistantModelSuspendedMessage,
-      AssistantModelStatus.failure => _failureMessage(localizations),
-      AssistantModelStatus.ready => localizations.assistantReadyTitle,
+      ObserverModelStatus.verifying => localizations.assistantModelVerifyingMessage,
+      ObserverModelStatus.suspended => localizations.assistantModelSuspendedMessage,
+      ObserverModelStatus.failure => _failureMessage(localizations),
+      ObserverModelStatus.ready => localizations.assistantReadyTitle,
     };
   }
 
@@ -161,11 +159,11 @@ final class _DownloadProgress extends StatelessWidget {
   }
 }
 
-IconData _iconFor(AssistantModelStatus status) {
+IconData _iconFor(ObserverModelStatus status) {
   return switch (status) {
-    AssistantModelStatus.failure => CupertinoIcons.exclamationmark_triangle,
-    AssistantModelStatus.suspended => CupertinoIcons.pause_circle,
-    AssistantModelStatus.idle => CupertinoIcons.chat_bubble_2,
+    ObserverModelStatus.failure => CupertinoIcons.exclamationmark_triangle,
+    ObserverModelStatus.suspended => CupertinoIcons.pause_circle,
+    ObserverModelStatus.idle => CupertinoIcons.chat_bubble_2,
     _ => CupertinoIcons.sparkles,
   };
 }

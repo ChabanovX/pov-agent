@@ -91,6 +91,95 @@ class AppLocalizationsEn extends AppLocalizations {
   String get assistantRetryAnswerAction => 'Retry answer';
 
   @override
+  String get observerTitle => 'Automatic observer';
+
+  @override
+  String get observerSceneTitle => 'Stable scene';
+
+  @override
+  String get observerModelReadyStatus => 'Local model ready';
+
+  @override
+  String get observerEmptySceneMessage => 'No stable objects are visible yet.';
+
+  @override
+  String get observerIntervalLabel => 'Observation interval';
+
+  @override
+  String get observerIntervalTenSecondsLabel => '10s';
+
+  @override
+  String get observerIntervalThirtySecondsLabel => '30s';
+
+  @override
+  String get observerIntervalOneMinuteLabel => '1m';
+
+  @override
+  String get observerIntervalTwoMinutesLabel => '2m';
+
+  @override
+  String get observerIntervalFiveMinutesLabel => '5m';
+
+  @override
+  String observerSceneObjectLabel(String label, int id, String region) {
+    return '$label #$id · $region';
+  }
+
+  @override
+  String get observerRegionUpperLeft => 'upper left';
+
+  @override
+  String get observerRegionUpperCenter => 'upper center';
+
+  @override
+  String get observerRegionUpperRight => 'upper right';
+
+  @override
+  String get observerRegionMiddleLeft => 'middle left';
+
+  @override
+  String get observerRegionCenter => 'center';
+
+  @override
+  String get observerRegionMiddleRight => 'middle right';
+
+  @override
+  String get observerRegionLowerLeft => 'lower left';
+
+  @override
+  String get observerRegionLowerCenter => 'lower center';
+
+  @override
+  String get observerRegionLowerRight => 'lower right';
+
+  @override
+  String observerRunningStatus(int seconds) {
+    return 'Watching every $seconds seconds';
+  }
+
+  @override
+  String get observerStoppedStatus => 'Automatic observation is stopped.';
+
+  @override
+  String get observerStartAction => 'Start observer';
+
+  @override
+  String get observerStopAction => 'Stop observer';
+
+  @override
+  String get observerTranscriptLabel => 'Automatic observation transcript';
+
+  @override
+  String get observerRoleLabel => 'Observer';
+
+  @override
+  String get observerThinkingMessage => 'Interpreting the latest scene…';
+
+  @override
+  String get observerGenerationFailureMessage =>
+      'The observer could not comment on this scene. It will retry on the next interval.';
+
+  @override
   String get cameraDisabledMessage => 'Camera is off.';
 
   @override

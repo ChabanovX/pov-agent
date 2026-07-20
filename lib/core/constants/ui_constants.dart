@@ -21,6 +21,18 @@ const assistantAnswerRetryButtonKey = Key('assistant-answer-retry-button');
 /// Stable key for retrying local-model preparation.
 const assistantModelRetryButtonKey = Key('assistant-model-retry-button');
 
+/// Stable key for the automatic observer start-or-stop control.
+const observerToggleButtonKey = Key('observer-toggle-button');
+
+/// Stable key for the session-only observation interval control.
+const observerIntervalControlKey = Key('observer-interval-control');
+
+/// Stable key for the latest stable-scene object summary.
+const observerSceneKey = Key('observer-scene');
+
+/// Stable key for the automatic observation transcript.
+const observerTranscriptKey = Key('observer-transcript');
+
 /// The light theme's primary ARGB color value.
 const int kColorPrimaryLightValue = 0xFF1C6E5C;
 

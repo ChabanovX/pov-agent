@@ -9,12 +9,17 @@ import 'package:pov_agent/core/design_system/tokens/tokens.dart';
 import 'package:pov_agent/core/l10n/app_localizations.dart';
 import 'package:pov_agent/features/assistant/application/models/generation_options.dart';
 import 'package:pov_agent/features/assistant/application/models/model_store_state.dart';
+import 'package:pov_agent/features/assistant/application/services/observer_request_builder.dart';
 import 'package:pov_agent/features/assistant/application/services/qwen_prompt_builder.dart';
-import 'package:pov_agent/features/assistant/presentation/bloc/assistant_bloc.dart';
-import 'package:pov_agent/features/assistant/presentation/bloc/assistant_state.dart';
+import 'package:pov_agent/features/assistant/presentation/bloc/observer_bloc.dart';
+import 'package:pov_agent/features/assistant/presentation/bloc/observer_state.dart';
 import 'package:pov_agent/features/assistant/presentation/pages/assistant_page.dart';
+import 'package:pov_agent/features/assistant/presentation/services/observer_timer_controller.dart';
 import 'package:pov_agent/shared/domain/app_failure.dart';
 import 'package:pov_agent/shared/domain/app_result.dart';
+import 'package:pov_agent/shared/domain/scene_region.dart';
+import 'package:pov_agent/shared/domain/scene_snapshot.dart';
+import 'package:pov_agent/shared/domain/tracked_object.dart';
 
 import '../../../support/fake_assistant_runtime.dart';
 
@@ -53,11 +58,11 @@ void main() {
         return const AppSuccess(testQwenArtifact);
       },
     );
-    final bloc = _createBloc(store, FakeCommentGenerator())..add(const AssistantStarted());
+    final bloc = _createBloc(store, FakeCommentGenerator())..add(const ObserverStarted());
     await _pumpUntilState(
       tester,
       bloc,
-      (state) => state.modelStatus == AssistantModelStatus.loading,
+      (state) => state.modelStatus == ObserverModelStatus.loading,
     );
     await tester.pumpWidget(_TestAssistantApp(bloc: bloc));
 
@@ -68,7 +73,7 @@ void main() {
     await _pumpUntilState(
       tester,
       bloc,
-      (state) => state.modelStatus == AssistantModelStatus.downloading,
+      (state) => state.modelStatus == ObserverModelStatus.downloading,
     );
     expect(find.text('Downloading the Qwen model: 37%'), findsOneWidget);
 
@@ -76,7 +81,7 @@ void main() {
     await _pumpUntilState(
       tester,
       bloc,
-      (state) => state.modelStatus == AssistantModelStatus.verifying,
+      (state) => state.modelStatus == ObserverModelStatus.verifying,
     );
     expect(find.text('Verifying the local Qwen model…'), findsOneWidget);
 
@@ -84,7 +89,7 @@ void main() {
     await _pumpUntilState(
       tester,
       bloc,
-      (state) => state.modelStatus == AssistantModelStatus.ready,
+      (state) => state.modelStatus == ObserverModelStatus.ready,
     );
     expect(find.text('Your on-device assistant is ready'), findsOneWidget);
     expect(find.byKey(assistantPromptFieldKey), findsOneWidget);
@@ -107,11 +112,11 @@ void main() {
         return const AppSuccess(testQwenArtifact);
       },
     );
-    final bloc = _createBloc(store, FakeCommentGenerator())..add(const AssistantStarted());
+    final bloc = _createBloc(store, FakeCommentGenerator())..add(const ObserverStarted());
     await _pumpUntilState(
       tester,
       bloc,
-      (state) => state.modelStatus == AssistantModelStatus.failure,
+      (state) => state.modelStatus == ObserverModelStatus.failure,
     );
     await tester.pumpWidget(_TestAssistantApp(bloc: bloc));
 
@@ -127,7 +132,7 @@ void main() {
     await _pumpUntilState(
       tester,
       bloc,
-      (state) => state.modelStatus == AssistantModelStatus.ready,
+      (state) => state.modelStatus == ObserverModelStatus.ready,
     );
 
     expect(store.prepareCalls, 2);
@@ -148,11 +153,11 @@ void main() {
     final generator = FakeCommentGenerator();
     final handle = FakeGenerationHandle();
     generator.enqueueHandle(handle);
-    final bloc = _createBloc(store, generator)..add(const AssistantStarted());
+    final bloc = _createBloc(store, generator)..add(const ObserverStarted());
     await _pumpUntilState(
       tester,
       bloc,
-      (state) => state.modelStatus == AssistantModelStatus.ready,
+      (state) => state.modelStatus == ObserverModelStatus.ready,
     );
     await tester.pumpWidget(_TestAssistantApp(bloc: bloc));
 
@@ -196,11 +201,11 @@ void main() {
     final generator = FakeCommentGenerator();
     final handle = FakeGenerationHandle();
     generator.enqueueHandle(handle);
-    final bloc = _createBloc(store, generator)..add(const AssistantStarted());
+    final bloc = _createBloc(store, generator)..add(const ObserverStarted());
     await _pumpUntilState(
       tester,
       bloc,
-      (state) => state.modelStatus == AssistantModelStatus.ready,
+      (state) => state.modelStatus == ObserverModelStatus.ready,
     );
     await tester.pumpWidget(_TestAssistantApp(bloc: bloc));
 
@@ -215,7 +220,7 @@ void main() {
     await _pumpUntilState(
       tester,
       bloc,
-      (state) => state.draftResponse == 'Uncommitted prefix',
+      (state) => state.manualDraftResponse == 'Uncommitted prefix',
     );
 
     await tester.tap(find.byKey(assistantSubmitControlKey));
@@ -226,7 +231,7 @@ void main() {
     await _pumpUntilState(
       tester,
       bloc,
-      (state) => state.generationStatus == AssistantGenerationStatus.idle,
+      (state) => state.activeGeneration == null,
     );
 
     expect(handle.cancelCalls, 1);
@@ -248,11 +253,11 @@ void main() {
     generator
       ..enqueueHandle(failedHandle)
       ..enqueueHandle(retryHandle);
-    final bloc = _createBloc(store, generator)..add(const AssistantStarted());
+    final bloc = _createBloc(store, generator)..add(const ObserverStarted());
     await _pumpUntilState(
       tester,
       bloc,
-      (state) => state.modelStatus == AssistantModelStatus.ready,
+      (state) => state.modelStatus == ObserverModelStatus.ready,
     );
     await tester.pumpWidget(_TestAssistantApp(bloc: bloc));
 
@@ -272,7 +277,7 @@ void main() {
     await _pumpUntilState(
       tester,
       bloc,
-      (state) => state.generationStatus == AssistantGenerationStatus.failure,
+      (state) => state.manualFailure != null,
     );
 
     expect(
@@ -294,12 +299,88 @@ void main() {
 
     await _disposeFixture(tester, bloc, store);
   });
+
+  testWidgets('shows scene, interval controls, and automatic streaming', (
+    tester,
+  ) async {
+    const objectLabel = 'person';
+    final store = FakeAssistantModelStore();
+    final generator = FakeCommentGenerator();
+    final handle = FakeGenerationHandle();
+    final scene = FakeSceneSource(
+      current: SceneSnapshot(
+        objects: const [
+          TrackedObject(
+            id: 3,
+            classId: 0,
+            label: objectLabel,
+            region: SceneRegion.center,
+          ),
+        ],
+      ),
+    );
+    late void Function() fireTick;
+    final bloc = _createBloc(
+      store,
+      generator,
+      sceneSource: scene,
+      periodicTimerFactory: (_, onTick) {
+        fireTick = onTick;
+        return _DormantTimer();
+      },
+    )..add(const ObserverStarted());
+    generator.enqueueHandle(handle);
+    await _pumpUntilState(
+      tester,
+      bloc,
+      (state) => state.modelStatus == ObserverModelStatus.ready,
+    );
+    await tester.pumpWidget(_TestAssistantApp(bloc: bloc));
+
+    expect(find.text('Automatic observer'), findsOneWidget);
+    expect(find.text('person #3 · center'), findsOneWidget);
+    expect(find.text('Watching every 10 seconds'), findsOneWidget);
+
+    fireTick();
+    await _pumpUntil(tester, () => generator.requests.length == 1);
+    handle.emit('A person is standing');
+    await _pumpUntilState(
+      tester,
+      bloc,
+      (state) => state.automaticDraft.isNotEmpty,
+    );
+    expect(find.text('A person is standing'), findsOneWidget);
+
+    await tester.runAsync(() async {
+      handle.succeed('A person is standing in the center.');
+      await Future<void>.delayed(Duration.zero);
+    });
+    await _pumpUntilState(tester, bloc, (state) => state.comments.length == 1);
+    expect(find.text('A person is standing in the center.'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('30s'));
+    await tester.tap(find.text('30s'));
+    await _pumpUntilState(
+      tester,
+      bloc,
+      (state) => state.interval.seconds == 30,
+    );
+    expect(find.text('Watching every 30 seconds'), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(observerToggleButtonKey));
+    await tester.tap(find.byKey(observerToggleButtonKey));
+    await _pumpUntilState(tester, bloc, (state) => !state.observationEnabled);
+    expect(find.text('Automatic observation is stopped.'), findsOneWidget);
+
+    await _disposeFixture(tester, bloc, store);
+    await scene.close();
+  });
 }
 
 final class _TestAssistantApp extends StatelessWidget {
   const _TestAssistantApp({required this.bloc});
 
-  final AssistantBloc bloc;
+  final ObserverBloc bloc;
 
   @override
   Widget build(BuildContext context) {
@@ -315,25 +396,46 @@ final class _TestAssistantApp extends StatelessWidget {
   }
 }
 
-AssistantBloc _createBloc(
+ObserverBloc _createBloc(
   FakeAssistantModelStore store,
-  FakeCommentGenerator generator,
-) {
-  return AssistantBloc(
+  FakeCommentGenerator generator, {
+  FakeSceneSource? sceneSource,
+  ObserverPeriodicTimerFactory? periodicTimerFactory,
+}) {
+  return ObserverBloc(
+    sceneSource: sceneSource ?? FakeSceneSource(),
     modelStore: store,
     commentGenerator: generator,
-    promptBuilder: QwenPromptBuilder(
-      systemPrompt: 'You are a concise local assistant.',
-      manualOptions: _testManualOptions,
-      shortCommentOptions: _testShortCommentOptions,
+    requestBuilder: ObserverRequestBuilder(
+      qwenPromptBuilder: QwenPromptBuilder(
+        systemPrompt: 'You are a concise local assistant.',
+        manualOptions: _testManualOptions,
+        shortCommentOptions: _testShortCommentOptions,
+      ),
     ),
+    periodicTimerFactory: periodicTimerFactory ?? (_, _) => _DormantTimer(),
   );
+}
+
+final class _DormantTimer implements Timer {
+  var _active = true;
+
+  @override
+  bool get isActive => _active;
+
+  @override
+  int get tick => 0;
+
+  @override
+  void cancel() {
+    _active = false;
+  }
 }
 
 Future<void> _pumpUntilState(
   WidgetTester tester,
-  AssistantBloc bloc,
-  bool Function(AssistantState state) predicate,
+  ObserverBloc bloc,
+  bool Function(ObserverState state) predicate,
 ) {
   return _pumpUntil(tester, () => predicate(bloc.state));
 }
@@ -351,7 +453,7 @@ Future<void> _pumpUntil(
 
 Future<void> _disposeFixture(
   WidgetTester tester,
-  AssistantBloc bloc,
+  ObserverBloc bloc,
   FakeAssistantModelStore store,
 ) async {
   await tester.pumpWidget(const SizedBox.shrink());

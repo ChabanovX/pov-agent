@@ -109,6 +109,134 @@
   "@assistantRetryAnswerAction": {
     "description": "Button label for resubmitting the latest failed manual prompt."
   },
+  "observerTitle": "Automatic observer",
+  "@observerTitle": {
+    "description": "Heading for the continuous scene observer controls and transcript."
+  },
+  "observerSceneTitle": "Stable scene",
+  "@observerSceneTitle": {
+    "description": "Heading above the latest stable scene objects."
+  },
+  "observerModelReadyStatus": "Local model ready",
+  "@observerModelReadyStatus": {
+    "description": "Compact model status shown while observer generation is available."
+  },
+  "observerEmptySceneMessage": "No stable objects are visible yet.",
+  "@observerEmptySceneMessage": {
+    "description": "Message shown while the stable scene contains no objects."
+  },
+  "observerIntervalLabel": "Observation interval",
+  "@observerIntervalLabel": {
+    "description": "Accessibility label for the session-only interval selector."
+  },
+  "observerIntervalTenSecondsLabel": "10s",
+  "@observerIntervalTenSecondsLabel": {
+    "description": "Compact label for a ten-second observer interval."
+  },
+  "observerIntervalThirtySecondsLabel": "30s",
+  "@observerIntervalThirtySecondsLabel": {
+    "description": "Compact label for a thirty-second observer interval."
+  },
+  "observerIntervalOneMinuteLabel": "1m",
+  "@observerIntervalOneMinuteLabel": {
+    "description": "Compact label for a one-minute observer interval."
+  },
+  "observerIntervalTwoMinutesLabel": "2m",
+  "@observerIntervalTwoMinutesLabel": {
+    "description": "Compact label for a two-minute observer interval."
+  },
+  "observerIntervalFiveMinutesLabel": "5m",
+  "@observerIntervalFiveMinutesLabel": {
+    "description": "Compact label for a five-minute observer interval."
+  },
+  "observerSceneObjectLabel": "{label} #{id} · {region}",
+  "@observerSceneObjectLabel": {
+    "description": "Stable scene object label with session ID and grid region.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "id": {
+        "type": "int"
+      },
+      "region": {
+        "type": "String"
+      }
+    }
+  },
+  "observerRegionUpperLeft": "upper left",
+  "@observerRegionUpperLeft": {
+    "description": "Name of the upper-left scene grid region."
+  },
+  "observerRegionUpperCenter": "upper center",
+  "@observerRegionUpperCenter": {
+    "description": "Name of the upper-center scene grid region."
+  },
+  "observerRegionUpperRight": "upper right",
+  "@observerRegionUpperRight": {
+    "description": "Name of the upper-right scene grid region."
+  },
+  "observerRegionMiddleLeft": "middle left",
+  "@observerRegionMiddleLeft": {
+    "description": "Name of the middle-left scene grid region."
+  },
+  "observerRegionCenter": "center",
+  "@observerRegionCenter": {
+    "description": "Name of the center scene grid region."
+  },
+  "observerRegionMiddleRight": "middle right",
+  "@observerRegionMiddleRight": {
+    "description": "Name of the middle-right scene grid region."
+  },
+  "observerRegionLowerLeft": "lower left",
+  "@observerRegionLowerLeft": {
+    "description": "Name of the lower-left scene grid region."
+  },
+  "observerRegionLowerCenter": "lower center",
+  "@observerRegionLowerCenter": {
+    "description": "Name of the lower-center scene grid region."
+  },
+  "observerRegionLowerRight": "lower right",
+  "@observerRegionLowerRight": {
+    "description": "Name of the lower-right scene grid region."
+  },
+  "observerRunningStatus": "Watching every {seconds} seconds",
+  "@observerRunningStatus": {
+    "description": "Status shown while periodic scene comments are enabled.",
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "observerStoppedStatus": "Automatic observation is stopped.",
+  "@observerStoppedStatus": {
+    "description": "Status shown while the automatic observer timer is disabled."
+  },
+  "observerStartAction": "Start observer",
+  "@observerStartAction": {
+    "description": "Button label for enabling periodic scene comments."
+  },
+  "observerStopAction": "Stop observer",
+  "@observerStopAction": {
+    "description": "Button label for disabling periodic comments and cancelling active observer generation."
+  },
+  "observerTranscriptLabel": "Automatic observation transcript",
+  "@observerTranscriptLabel": {
+    "description": "Accessibility label for session-only automatic comments."
+  },
+  "observerRoleLabel": "Observer",
+  "@observerRoleLabel": {
+    "description": "Role label displayed above automatic scene comments."
+  },
+  "observerThinkingMessage": "Interpreting the latest scene…",
+  "@observerThinkingMessage": {
+    "description": "Placeholder shown before automatic comment text begins streaming."
+  },
+  "observerGenerationFailureMessage": "The observer could not comment on this scene. It will retry on the next interval.",
+  "@observerGenerationFailureMessage": {
+    "description": "Recoverable automatic generation failure shown until the next timer attempt."
+  },
   "cameraDisabledMessage": "Camera is off.",
   "@cameraDisabledMessage": {
     "description": "Message shown when the user has manually disabled the camera."

@@ -47,6 +47,9 @@ final class AppSpacing extends ThemeExtension<AppSpacing> {
   /// A top-only inset derived from [xs].
   EdgeInsets get topXs => EdgeInsets.only(top: xs);
 
+  /// A top-only inset derived from [sm].
+  EdgeInsets get topSm => EdgeInsets.only(top: sm);
+
   /// A top-only inset derived from [md].
   EdgeInsets get topMd => EdgeInsets.only(top: md);
 

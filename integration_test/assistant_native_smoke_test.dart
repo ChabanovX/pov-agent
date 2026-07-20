@@ -10,8 +10,8 @@ import 'package:pov_agent/core/constants/ui_constants.dart';
 import 'package:pov_agent/features/assistant/data/adapters/llama_comment_generator.dart';
 import 'package:pov_agent/features/assistant/data/datasources/model_artifact_downloader.dart';
 import 'package:pov_agent/features/assistant/domain/entities/conversation_message.dart';
-import 'package:pov_agent/features/assistant/presentation/bloc/assistant_bloc.dart';
-import 'package:pov_agent/features/assistant/presentation/bloc/assistant_state.dart';
+import 'package:pov_agent/features/assistant/presentation/bloc/observer_bloc.dart';
+import 'package:pov_agent/features/assistant/presentation/bloc/observer_state.dart';
 import 'package:pov_agent/features/camera/presentation/bloc/camera_state.dart';
 
 import '../test/support/assistant_acceptance_durations.dart';
@@ -42,7 +42,7 @@ void main() {
       );
       final generator = runtime.commentGenerator as LlamaCommentGenerator;
       final semantics = tester.ensureSemantics();
-      StreamSubscription<AssistantState>? stateSubscription;
+      StreamSubscription<ObserverState>? stateSubscription;
       try {
         await runtime.start().timeout(_runtimeStartTimeout);
         await tester.pumpWidget(const PovAgentApp());
@@ -56,16 +56,15 @@ void main() {
         // Start preparation while the recorded camera and real YOLO surface
         // remain active. The router's later duplicate start is intentionally
         // ignored by the Bloc.
-        runtime.assistantBloc.add(const AssistantStarted());
+        runtime.observerBloc.add(const ObserverStarted());
         await tester.pump();
 
         final readyState = await _waitForState(
-          runtime.assistantBloc,
-          (state) =>
-              state.modelStatus == AssistantModelStatus.ready || state.modelStatus == AssistantModelStatus.failure,
+          runtime.observerBloc,
+          (state) => state.modelStatus == ObserverModelStatus.ready || state.modelStatus == ObserverModelStatus.failure,
           timeout: _modelPreparationTimeout,
         );
-        if (readyState.modelStatus == AssistantModelStatus.failure) {
+        if (readyState.modelStatus == ObserverModelStatus.failure) {
           fail(
             'Qwen preparation failed: '
             '${readyState.modelFailure?.code ?? 'unknown'}.',
@@ -81,8 +80,8 @@ void main() {
         await tester.pumpAndSettle();
 
         var observedVisibleStreaming = false;
-        stateSubscription = runtime.assistantBloc.stream.listen((state) {
-          if (state.generationStatus == AssistantGenerationStatus.generating && state.draftResponse.isNotEmpty) {
+        stateSubscription = runtime.observerBloc.stream.listen((state) {
+          if (state.activeGeneration == ObserverGenerationKind.manual && state.manualDraftResponse.isNotEmpty) {
             observedVisibleStreaming = true;
           }
         });
@@ -96,16 +95,14 @@ void main() {
         await tester.pump();
 
         final completedState = await _waitForState(
-          runtime.assistantBloc,
-          (state) =>
-              state.generationStatus == AssistantGenerationStatus.failure ||
-              (state.generationStatus == AssistantGenerationStatus.idle && state.messages.length >= 2),
+          runtime.observerBloc,
+          (state) => state.manualFailure != null || state.messages.length >= 2,
           timeout: _generationTimeout,
         );
-        if (completedState.generationStatus == AssistantGenerationStatus.failure) {
+        if (completedState.manualFailure != null) {
           fail(
             'Qwen generation failed: '
-            '${completedState.generationFailure?.code ?? 'unknown'}.',
+            '${completedState.manualFailure?.code ?? 'unknown'}.',
           );
         }
         final answer = completedState.messages.last;
@@ -127,8 +124,8 @@ void main() {
         await tester.tap(find.byKey(assistantSubmitControlKey));
         await tester.pump();
         await _waitForState(
-          runtime.assistantBloc,
-          (state) => state.generationStatus == AssistantGenerationStatus.generating,
+          runtime.observerBloc,
+          (state) => state.activeGeneration == ObserverGenerationKind.manual,
           timeout: _stateTransitionTimeout,
         );
         await tester.pump();
@@ -136,8 +133,8 @@ void main() {
         await tester.pump();
 
         final cancelledState = await _waitForState(
-          runtime.assistantBloc,
-          (state) => state.generationStatus == AssistantGenerationStatus.idle && state.draftPrompt.isEmpty,
+          runtime.observerBloc,
+          (state) => state.activeGeneration != ObserverGenerationKind.manual && state.manualDraftPrompt.isEmpty,
           timeout: _stateTransitionTimeout,
         );
         expect(cancelledState.messages, hasLength(committedMessageCount));
@@ -153,8 +150,8 @@ void main() {
         );
         await tester.pump();
         await _waitForState(
-          runtime.assistantBloc,
-          (state) => state.modelStatus == AssistantModelStatus.suspended,
+          runtime.observerBloc,
+          (state) => state.modelStatus == ObserverModelStatus.suspended,
           timeout: _stateTransitionTimeout,
         );
         await _waitForSuccessfulUnload(
@@ -174,12 +171,11 @@ void main() {
         );
         await tester.pump();
         final resumedState = await _waitForState(
-          runtime.assistantBloc,
-          (state) =>
-              state.modelStatus == AssistantModelStatus.ready || state.modelStatus == AssistantModelStatus.failure,
+          runtime.observerBloc,
+          (state) => state.modelStatus == ObserverModelStatus.ready || state.modelStatus == ObserverModelStatus.failure,
           timeout: _modelResumeTimeout,
         );
-        expect(resumedState.modelStatus, AssistantModelStatus.ready);
+        expect(resumedState.modelStatus, ObserverModelStatus.ready);
         expect(resumedState.messages, hasLength(committedMessageCount));
         expect(offlineGuard.downloadCalls, downloadCallsAtReady);
       } finally {
@@ -203,16 +199,15 @@ void main() {
       try {
         await runtime.start().timeout(_runtimeStartTimeout);
         await tester.pumpWidget(const PovAgentApp());
-        runtime.assistantBloc.add(const AssistantStarted());
+        runtime.observerBloc.add(const ObserverStarted());
         await tester.pump();
 
         final readyState = await _waitForState(
-          runtime.assistantBloc,
-          (state) =>
-              state.modelStatus == AssistantModelStatus.ready || state.modelStatus == AssistantModelStatus.failure,
+          runtime.observerBloc,
+          (state) => state.modelStatus == ObserverModelStatus.ready || state.modelStatus == ObserverModelStatus.failure,
           timeout: _modelResumeTimeout,
         );
-        if (readyState.modelStatus == AssistantModelStatus.failure) {
+        if (readyState.modelStatus == ObserverModelStatus.failure) {
           fail(
             'Verified cache restart failed: '
             '${readyState.modelFailure?.code ?? 'unknown'}.',
@@ -231,16 +226,14 @@ void main() {
         await tester.pump();
 
         final completedState = await _waitForState(
-          runtime.assistantBloc,
-          (state) =>
-              state.generationStatus == AssistantGenerationStatus.failure ||
-              (state.generationStatus == AssistantGenerationStatus.idle && state.messages.length >= 2),
+          runtime.observerBloc,
+          (state) => state.manualFailure != null || state.messages.length >= 2,
           timeout: _generationTimeout,
         );
-        if (completedState.generationStatus == AssistantGenerationStatus.failure) {
+        if (completedState.manualFailure != null) {
           fail(
             'Offline generation failed: '
-            '${completedState.generationFailure?.code ?? 'unknown'}.',
+            '${completedState.manualFailure?.code ?? 'unknown'}.',
           );
         }
         expect(completedState.messages.last.content.trim(), isNotEmpty);
@@ -265,9 +258,9 @@ Future<void> _pumpUntilFound<CandidateType>(
   fail('Timed out waiting for active recorded YOLO inference.');
 }
 
-Future<AssistantState> _waitForState(
-  AssistantBloc bloc,
-  bool Function(AssistantState state) predicate, {
+Future<ObserverState> _waitForState(
+  ObserverBloc bloc,
+  bool Function(ObserverState state) predicate, {
   required Duration timeout,
 }) {
   if (predicate(bloc.state)) return Future.value(bloc.state);

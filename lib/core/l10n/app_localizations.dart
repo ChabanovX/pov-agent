@@ -247,6 +247,174 @@ abstract class AppLocalizations {
   /// **'Retry answer'**
   String get assistantRetryAnswerAction;
 
+  /// Heading for the continuous scene observer controls and transcript.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic observer'**
+  String get observerTitle;
+
+  /// Heading above the latest stable scene objects.
+  ///
+  /// In en, this message translates to:
+  /// **'Stable scene'**
+  String get observerSceneTitle;
+
+  /// Compact model status shown while observer generation is available.
+  ///
+  /// In en, this message translates to:
+  /// **'Local model ready'**
+  String get observerModelReadyStatus;
+
+  /// Message shown while the stable scene contains no objects.
+  ///
+  /// In en, this message translates to:
+  /// **'No stable objects are visible yet.'**
+  String get observerEmptySceneMessage;
+
+  /// Accessibility label for the session-only interval selector.
+  ///
+  /// In en, this message translates to:
+  /// **'Observation interval'**
+  String get observerIntervalLabel;
+
+  /// Compact label for a ten-second observer interval.
+  ///
+  /// In en, this message translates to:
+  /// **'10s'**
+  String get observerIntervalTenSecondsLabel;
+
+  /// Compact label for a thirty-second observer interval.
+  ///
+  /// In en, this message translates to:
+  /// **'30s'**
+  String get observerIntervalThirtySecondsLabel;
+
+  /// Compact label for a one-minute observer interval.
+  ///
+  /// In en, this message translates to:
+  /// **'1m'**
+  String get observerIntervalOneMinuteLabel;
+
+  /// Compact label for a two-minute observer interval.
+  ///
+  /// In en, this message translates to:
+  /// **'2m'**
+  String get observerIntervalTwoMinutesLabel;
+
+  /// Compact label for a five-minute observer interval.
+  ///
+  /// In en, this message translates to:
+  /// **'5m'**
+  String get observerIntervalFiveMinutesLabel;
+
+  /// Stable scene object label with session ID and grid region.
+  ///
+  /// In en, this message translates to:
+  /// **'{label} #{id} · {region}'**
+  String observerSceneObjectLabel(String label, int id, String region);
+
+  /// Name of the upper-left scene grid region.
+  ///
+  /// In en, this message translates to:
+  /// **'upper left'**
+  String get observerRegionUpperLeft;
+
+  /// Name of the upper-center scene grid region.
+  ///
+  /// In en, this message translates to:
+  /// **'upper center'**
+  String get observerRegionUpperCenter;
+
+  /// Name of the upper-right scene grid region.
+  ///
+  /// In en, this message translates to:
+  /// **'upper right'**
+  String get observerRegionUpperRight;
+
+  /// Name of the middle-left scene grid region.
+  ///
+  /// In en, this message translates to:
+  /// **'middle left'**
+  String get observerRegionMiddleLeft;
+
+  /// Name of the center scene grid region.
+  ///
+  /// In en, this message translates to:
+  /// **'center'**
+  String get observerRegionCenter;
+
+  /// Name of the middle-right scene grid region.
+  ///
+  /// In en, this message translates to:
+  /// **'middle right'**
+  String get observerRegionMiddleRight;
+
+  /// Name of the lower-left scene grid region.
+  ///
+  /// In en, this message translates to:
+  /// **'lower left'**
+  String get observerRegionLowerLeft;
+
+  /// Name of the lower-center scene grid region.
+  ///
+  /// In en, this message translates to:
+  /// **'lower center'**
+  String get observerRegionLowerCenter;
+
+  /// Name of the lower-right scene grid region.
+  ///
+  /// In en, this message translates to:
+  /// **'lower right'**
+  String get observerRegionLowerRight;
+
+  /// Status shown while periodic scene comments are enabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Watching every {seconds} seconds'**
+  String observerRunningStatus(int seconds);
+
+  /// Status shown while the automatic observer timer is disabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic observation is stopped.'**
+  String get observerStoppedStatus;
+
+  /// Button label for enabling periodic scene comments.
+  ///
+  /// In en, this message translates to:
+  /// **'Start observer'**
+  String get observerStartAction;
+
+  /// Button label for disabling periodic comments and cancelling active observer generation.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop observer'**
+  String get observerStopAction;
+
+  /// Accessibility label for session-only automatic comments.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic observation transcript'**
+  String get observerTranscriptLabel;
+
+  /// Role label displayed above automatic scene comments.
+  ///
+  /// In en, this message translates to:
+  /// **'Observer'**
+  String get observerRoleLabel;
+
+  /// Placeholder shown before automatic comment text begins streaming.
+  ///
+  /// In en, this message translates to:
+  /// **'Interpreting the latest scene…'**
+  String get observerThinkingMessage;
+
+  /// Recoverable automatic generation failure shown until the next timer attempt.
+  ///
+  /// In en, this message translates to:
+  /// **'The observer could not comment on this scene. It will retry on the next interval.'**
+  String get observerGenerationFailureMessage;
+
   /// Message shown when the user has manually disabled the camera.
   ///
   /// In en, this message translates to:
