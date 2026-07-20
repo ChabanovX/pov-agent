@@ -167,11 +167,24 @@ void main() {
 
         final generator = runtime.commentGenerator as LlamaCommentGenerator;
         if (_requireGpuObserver) expect(generator.loadedModelUsesGpu, isTrue);
+
+        // Preparation and the first timer tick can overlap before the soak
+        // subscribes. Quiesce that startup window so every measured failure,
+        // comment, and latency belongs to this exact ten-minute session.
+        runtime.observerBloc.add(const ObservationStopped());
+        await _waitForState(
+          runtime.observerBloc,
+          (state) => !state.observationEnabled && state.activeGeneration != ObserverGenerationKind.automatic,
+          timeout: _stateTransitionTimeout,
+        );
+        expect(runtime.observerBloc.state.automaticFailure, isNull);
+
         var automaticWasActive = false;
         Stopwatch? automaticWatch;
         var slowestComment = Duration.zero;
         var observedStreaming = false;
-        var automaticFailures = 0;
+        var automaticFailureVisible = false;
+        final automaticFailureCodes = <String>[];
         var completedDuringSoak = 0;
         var previousCommentCount = runtime.observerBloc.state.comments.length;
         observerSubscription = runtime.observerBloc.stream.listen((state) {
@@ -182,7 +195,17 @@ void main() {
           if (nowAutomatic && state.automaticDraft.isNotEmpty) {
             observedStreaming = true;
           }
-          if (state.automaticFailure != null) automaticFailures += 1;
+          final automaticFailure = state.automaticFailure;
+          if (automaticFailure != null && !automaticFailureVisible) {
+            automaticFailureCodes.add(automaticFailure.code);
+            tester.printToConsole(
+              'OBSERVER_ACCEPTANCE stage=automatic_failure '
+              'code=${automaticFailure.code} '
+              'message=${automaticFailure.message ?? 'none'} '
+              'cause=${automaticFailure.cause ?? 'none'}',
+            );
+          }
+          automaticFailureVisible = automaticFailure != null;
           if (state.comments.length > previousCommentCount) {
             automaticWatch?.stop();
             if (automaticWatch case final watch?) {
@@ -194,6 +217,14 @@ void main() {
           }
           automaticWasActive = nowAutomatic;
         });
+
+        await tester.ensureVisible(find.byKey(observerToggleButtonKey));
+        await tester.tap(find.byKey(observerToggleButtonKey));
+        await _waitForState(
+          runtime.observerBloc,
+          (state) => state.observationEnabled,
+          timeout: _stateTransitionTimeout,
+        );
 
         final baselineRss = ProcessInfo.currentRss;
         var sampledPeakRss = baselineRss;
@@ -233,7 +264,13 @@ void main() {
         soakWatch.stop();
 
         expect(generator.generationBusyRejections, 0);
-        expect(automaticFailures, 0);
+        expect(
+          automaticFailureCodes,
+          isEmpty,
+          reason:
+              'Automatic generations failed during the measured soak: '
+              '${automaticFailureCodes.join(', ')}.',
+        );
         expect(observedStreaming, isTrue);
         if (_requireGpuObserver) {
           expect(

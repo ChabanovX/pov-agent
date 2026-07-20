@@ -144,9 +144,18 @@ void main() {
       (state) => state.automaticFailure != null,
     );
     expect(failure.previousComment, isNull);
+    final latchedFailure = failure.automaticFailure;
+
+    fixture.scene.emit(_scene('backpack', id: 9));
+    final sceneChanged = await _waitForState(
+      fixture.bloc,
+      (state) => state.scene.objects.firstOrNull?.label == 'backpack',
+    );
+    expect(sceneChanged.automaticFailure, same(latchedFailure));
 
     fixture.timers.current.fire();
     await _waitForRequests(fixture.generator, 2);
+    expect(fixture.bloc.state.automaticFailure, isNull);
     retried.succeed('A person is visible in the center.');
     await _waitForState(fixture.bloc, (state) => state.comments.length == 1);
     await fixture.close();
