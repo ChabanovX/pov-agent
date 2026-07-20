@@ -19,10 +19,6 @@ if ! xcrun devicectl device info details --device "$device_id" >/dev/null; then
   exit 69
 fi
 
-flutter test integration_test/camera_hardware_test.dart \
-  -d "$device_id" \
-  --dart-define=RUN_HARDWARE_CAMERA_TEST=true
-
 flutter test integration_test/observer_native_soak_test.dart \
   -d "$device_id" \
   --dart-define=RUN_LIVE_OBSERVER_TEST=true \

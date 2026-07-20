@@ -355,9 +355,12 @@ Future<void> _expectModelReady(ObserverBloc bloc) async {
     timeout: _modelPreparationTimeout,
   );
   if (state.modelStatus == ObserverModelStatus.failure) {
+    final failure = state.modelFailure;
     fail(
       'Observer model preparation failed: '
-      '${state.modelFailure?.code ?? 'unknown'}.',
+      '${failure?.code ?? 'unknown'}; '
+      'message=${failure?.message ?? 'none'}; '
+      'cause=${failure?.cause ?? 'none'}.',
     );
   }
 }

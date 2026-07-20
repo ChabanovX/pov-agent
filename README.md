@@ -221,11 +221,14 @@ rebuilds the in-process runtime graph from verified cache with transport disable
 tool/verify_assistant_device_ios.sh <physical-device-id>
 ```
 
-The observer device lane first exercises the camera controls, then proves a
-non-empty live YOLO scene reaches a streamed and committed Metal-backed
-Observer comment and cancels a subsequent active generation. It finishes with
-the same deterministic ten-minute observer session while still requiring
-Metal-backed Qwen generation:
+The observer device lane proves a non-empty live YOLO scene reaches a streamed
+and committed Metal-backed Observer comment and cancels a subsequent active
+generation. It finishes with the same deterministic ten-minute observer
+session while still requiring Metal-backed Qwen generation. Camera control
+acceptance remains available independently in
+[`camera_hardware_test.dart`](integration_test/camera_hardware_test.dart) so
+this lane does not preload and unload the eager Qwen runtime in a redundant
+app invocation immediately before the live Observer check:
 
 ```sh
 tool/verify_observer_device_ios.sh <physical-device-id>
