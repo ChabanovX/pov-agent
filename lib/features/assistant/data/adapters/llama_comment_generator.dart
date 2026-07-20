@@ -349,6 +349,10 @@ final class _LlamaGenerationHandle implements GenerationHandle {
       await for (final chunk in decoded) {
         final visible = _filter.add(chunk);
         if (_completionPolicy == GenerationCompletionPolicy.firstSubstantiveEnglishSentence) {
+          // Short-comment completion still commits only the validated first
+          // sentence, but its reasoning-filtered prefix may be projected as a
+          // disposable UI draft while native decoding is active.
+          _publishPreview(visible);
           completedSentence = _sentenceAccumulator.add(visible);
           if (completedSentence != null) {
             // Observe cancellation immediately: leaving an await-for loop may
@@ -396,6 +400,7 @@ final class _LlamaGenerationHandle implements GenerationHandle {
       var sentence = completedSentence;
       final tail = _filter.finish();
       if (_completionPolicy == GenerationCompletionPolicy.firstSubstantiveEnglishSentence) {
+        _publishPreview(tail);
         sentence ??= _sentenceAccumulator.add(tail);
         sentence ??= _sentenceAccumulator.finish();
         if (sentence == null) {
@@ -406,7 +411,7 @@ final class _LlamaGenerationHandle implements GenerationHandle {
             ),
           );
         }
-        _publish(sentence);
+        return AppSuccess<String>(sentence);
       } else {
         _publish(tail);
       }
@@ -439,6 +444,11 @@ final class _LlamaGenerationHandle implements GenerationHandle {
   void _publish(String chunk) {
     if (chunk.isEmpty || _chunks.isClosed) return;
     _visibleAnswer.write(chunk);
+    _chunks.add(chunk);
+  }
+
+  void _publishPreview(String chunk) {
+    if (chunk.isEmpty || _chunks.isClosed) return;
     _chunks.add(chunk);
   }
 

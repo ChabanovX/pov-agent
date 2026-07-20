@@ -283,7 +283,8 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(nativeGeneration.cancelCalls, 1);
-      expect(chunks, isEmpty);
+      expect(chunks.join(), contains('A person is visible.'));
+      expect(chunks.join(), isNot(contains('private')));
       var completionSettled = false;
       unawaited(handle.completion.then((_) => completionSettled = true));
       await Future<void>.delayed(Duration.zero);
@@ -294,7 +295,7 @@ void main() {
       await chunksDone;
 
       expect(completion, isA<AppSuccess<String>>());
-      expect(chunks.join(), 'A person is visible.');
+      expect(chunks.join(), contains('A person is visible.'));
       expect(
         (completion as AppSuccess<String>).value,
         'A person is visible.',
@@ -323,7 +324,7 @@ void main() {
     final completion = await handle.completion;
     await chunksDone;
 
-    expect(chunks, isEmpty);
+    expect(chunks.join(), 'A person remains partially described');
     expect(
       completion,
       isA<AppError<String>>().having(
@@ -361,7 +362,7 @@ void main() {
       unawaited(handle.completion.then((_) => completionSettled = true));
       await Future<void>.delayed(Duration.zero);
       expect(completionSettled, isFalse);
-      expect(chunks, isEmpty);
+      expect(chunks.join(), contains('A person is visible.'));
 
       await nativeGeneration.finish();
       final completion = await handle.completion;
@@ -381,7 +382,7 @@ void main() {
               same(cancelError),
             ),
       );
-      expect(chunks, isEmpty);
+      expect(chunks.join(), contains('A person is visible.'));
     },
   );
 
