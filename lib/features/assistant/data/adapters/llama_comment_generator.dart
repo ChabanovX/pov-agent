@@ -58,7 +58,7 @@ final class LlamaCommentGenerator implements CommentGenerator {
   /// Whether the currently loaded model uses the native GPU backend.
   ///
   /// This diagnostic is `null` while no model is loaded. Physical-device
-  /// acceptance tests use it to reject a silent CPU fallback on iOS.
+  /// acceptance tests use it to reject CPU fallback on supported iOS devices.
   bool? get loadedModelUsesGpu => _loadedModelUsesGpu;
 
   /// Whether the latest requested model unload completed without native error.

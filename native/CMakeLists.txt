@@ -38,6 +38,8 @@ add_library(pov_llama SHARED
 
 target_include_directories(pov_llama PRIVATE
   ${LLAMA_CPP_DIR}/include
+  ${LLAMA_CPP_DIR}/src
+  ${LLAMA_CPP_DIR}/ggml/include
 )
 
 target_compile_options(pov_llama PRIVATE

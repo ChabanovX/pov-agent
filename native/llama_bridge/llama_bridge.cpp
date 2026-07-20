@@ -3,11 +3,14 @@
 #include <algorithm>
 #include <cstring>
 #include <exception>
+#include <mutex>
 #include <new>
 #include <string>
 #include <vector>
 
+#include "ggml-backend.h"
 #include "llama.h"
+#include "llama-ext.h"
 
 #if defined(__APPLE__)
 #include <TargetConditionals.h>
@@ -27,6 +30,102 @@ struct pov_llama_runtime {
 };
 
 namespace {
+
+constexpr std::size_t kMaxCapturedLogBytes = 16384;
+constexpr std::size_t kMaxFailureLogBytes = 1536;
+
+struct llama_log_dispatcher {
+  std::mutex capture_mutex;
+  std::mutex state_mutex;
+  std::string captured_text;
+  ggml_log_callback downstream_callback = nullptr;
+  void* downstream_user_data = nullptr;
+  bool capture_active = false;
+};
+
+void capture_llama_log(
+    enum ggml_log_level level,
+    const char* text,
+    void* user_data) {
+  auto* dispatcher = static_cast<llama_log_dispatcher*>(user_data);
+  ggml_log_callback downstream_callback = nullptr;
+  void* downstream_user_data = nullptr;
+  if (dispatcher != nullptr) {
+    std::lock_guard<std::mutex> lock(dispatcher->state_mutex);
+    if (dispatcher->capture_active && text != nullptr) {
+      dispatcher->captured_text.append(text);
+      if (dispatcher->captured_text.size() > kMaxCapturedLogBytes) {
+        dispatcher->captured_text.erase(
+            0,
+            dispatcher->captured_text.size() - kMaxCapturedLogBytes);
+      }
+    }
+    downstream_callback = dispatcher->downstream_callback;
+    downstream_user_data = dispatcher->downstream_user_data;
+  }
+  if (downstream_callback != nullptr) {
+    downstream_callback(level, text, downstream_user_data);
+  }
+}
+
+llama_log_dispatcher& installed_llama_log_dispatcher() {
+  static llama_log_dispatcher dispatcher;
+  static std::once_flag install_once;
+  std::call_once(install_once, []() {
+    // llama.cpp's callback setter is process-global and not thread-safe. The
+    // bridge therefore installs one process-lifetime dispatcher before its
+    // first backend initialization and never swaps stack-owned callback data.
+    llama_log_get(
+        &dispatcher.downstream_callback,
+        &dispatcher.downstream_user_data);
+    llama_log_set(capture_llama_log, &dispatcher);
+  });
+  return dispatcher;
+}
+
+class scoped_llama_log_capture {
+ public:
+  scoped_llama_log_capture()
+      : dispatcher_(installed_llama_log_dispatcher()),
+        capture_lock_(dispatcher_.capture_mutex) {
+    // Only one model load owns the diagnostic buffer at a time. Other llama
+    // logs may still pass through the permanent dispatcher and downstream sink.
+    std::lock_guard<std::mutex> lock(dispatcher_.state_mutex);
+    dispatcher_.captured_text.clear();
+    dispatcher_.capture_active = true;
+  }
+
+  ~scoped_llama_log_capture() {
+    std::lock_guard<std::mutex> lock(dispatcher_.state_mutex);
+    dispatcher_.capture_active = false;
+  }
+
+  std::string snapshot() {
+    std::lock_guard<std::mutex> lock(dispatcher_.state_mutex);
+    return dispatcher_.captured_text;
+  }
+
+ private:
+  llama_log_dispatcher& dispatcher_;
+  std::unique_lock<std::mutex> capture_lock_;
+};
+
+std::string load_failure_message(
+    bool requested_gpu,
+    const char* stage,
+    const std::string& native_log) {
+  std::string message = requested_gpu ? "Metal " : "CPU ";
+  message.append(stage);
+  message.append(" failed");
+  if (!native_log.empty()) {
+    message.append(": ");
+    const std::size_t first_byte = native_log.size() > kMaxFailureLogBytes
+        ? native_log.size() - kMaxFailureLogBytes
+        : 0;
+    message.append(native_log.substr(first_byte));
+  }
+  return message;
+}
 
 void copy_string(const std::string& value, char* buffer, int32_t buffer_length) {
   if (buffer == nullptr || buffer_length <= 0) {
@@ -85,17 +184,41 @@ void release_loaded_model(pov_llama_runtime* runtime) {
   runtime->vocabulary = nullptr;
 }
 
+bool model_has_gpu_weight_buffer(const llama_context* context) {
+  // Backend availability is not proof of offload: llama.cpp may move
+  // unsupported tensors to a CPU buffer. Inspect the pinned runtime's actual
+  // model-memory placement so the device diagnostic reports real GPU use.
+  for (const auto& [buffer_type, memory] :
+       llama_get_memory_breakdown(context)) {
+    if (memory.model == 0) {
+      continue;
+    }
+    ggml_backend_dev_t device = ggml_backend_buft_get_device(buffer_type);
+    if (device == nullptr) {
+      continue;
+    }
+    const auto device_type = ggml_backend_dev_type(device);
+    if (device_type == GGML_BACKEND_DEVICE_TYPE_GPU ||
+        device_type == GGML_BACKEND_DEVICE_TYPE_IGPU) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool load_model_and_context(
     pov_llama_runtime* runtime,
     const char* model_path,
     int32_t context_tokens,
     int32_t batch_tokens,
     int32_t thread_count,
-    int32_t gpu_layers) {
+    int32_t gpu_layers,
+    const char** failure_stage) {
   auto model_parameters = llama_model_default_params();
   model_parameters.n_gpu_layers = gpu_layers;
   runtime->model = llama_model_load_from_file(model_path, model_parameters);
   if (runtime->model == nullptr) {
+    *failure_stage = "model load";
     return false;
   }
 
@@ -108,13 +231,19 @@ bool load_model_and_context(
   context_parameters.no_perf = true;
   runtime->context = llama_init_from_model(runtime->model, context_parameters);
   if (runtime->context == nullptr) {
+    *failure_stage = "context creation";
     release_loaded_model(runtime);
     return false;
   }
 
   runtime->vocabulary = llama_model_get_vocab(runtime->model);
-  runtime->uses_gpu = gpu_layers > 0 && llama_supports_gpu_offload();
-  return runtime->vocabulary != nullptr;
+  runtime->uses_gpu = gpu_layers > 0 &&
+      model_has_gpu_weight_buffer(runtime->context);
+  if (runtime->vocabulary == nullptr) {
+    *failure_stage = "vocabulary access";
+    return false;
+  }
+  return true;
 }
 
 void release_sampler(pov_llama_runtime* runtime) {
@@ -247,6 +376,7 @@ pov_llama_runtime* pov_llama_create_impl(
       return nullptr;
     }
 
+    scoped_llama_log_capture native_log;
     llama_backend_init();
     backend_initialized = true;
     runtime = new (std::nothrow) pov_llama_runtime();
@@ -274,32 +404,43 @@ pov_llama_runtime* pov_llama_create_impl(
     }
 #endif
 
+    const char* failure_stage = "runtime initialization";
+    const bool requested_gpu = gpu_layers > 0;
     const bool loaded_with_requested_backend = load_model_and_context(
         runtime,
         model_path,
         context_tokens,
         runtime->batch_tokens,
         thread_count,
-        gpu_layers);
-    if (!loaded_with_requested_backend && gpu_layers > 0) {
-      release_loaded_model(runtime);
-      runtime->uses_gpu = false;
-      if (load_model_and_context(
-              runtime,
-              model_path,
-              context_tokens,
-              runtime->batch_tokens,
-              thread_count,
-              0)) {
-        return runtime;
-      }
-    } else if (loaded_with_requested_backend) {
+        gpu_layers,
+        &failure_stage);
+    if (loaded_with_requested_backend &&
+        (!requested_gpu || runtime->uses_gpu)) {
       return runtime;
     }
 
-    copy_c_string("Could not load the GGUF model or create its context",
-                  error_buffer, error_buffer_length);
+    if (requested_gpu) {
+      release_loaded_model(runtime);
+      runtime->uses_gpu = false;
+      failure_stage = "model load";
+      if (load_model_and_context(
+          runtime,
+          model_path,
+          context_tokens,
+          runtime->batch_tokens,
+          thread_count,
+          0,
+          &failure_stage)) {
+        return runtime;
+      }
+    }
+
+    const std::string diagnostic = load_failure_message(
+        false,
+        failure_stage,
+        native_log.snapshot());
     release_loaded_model(runtime);
+    copy_string(diagnostic, error_buffer, error_buffer_length);
     delete runtime;
     llama_backend_free();
     return nullptr;
