@@ -11,6 +11,7 @@ import 'package:pov_agent/app/di/assistant_build_configuration.dart';
 import 'package:pov_agent/features/assistant/application/models/model_store_state.dart';
 import 'package:pov_agent/features/assistant/application/ports/comment_generator.dart';
 import 'package:pov_agent/features/assistant/application/ports/generation_handle.dart';
+import 'package:pov_agent/features/assistant/application/services/first_complete_english_sentence_accumulator.dart';
 import 'package:pov_agent/features/assistant/application/services/qwen_prompt_builder.dart';
 import 'package:pov_agent/features/assistant/data/adapters/llama_comment_generator.dart';
 import 'package:pov_agent/features/assistant/data/datasources/model_artifact_downloader.dart';
@@ -645,15 +646,18 @@ T _successValue<T>(AppResult<T> result, String operation) {
 void _expectValidShortComment(_GenerationMeasurement measurement) {
   final answer = measurement.answer;
   final englishWords = RegExp(
-    r"\b[A-Za-z]{2,}(?:'[A-Za-z]+)?\b",
+    r"\b[A-Za-z]+(?:['’][A-Za-z]+)?\b",
   ).allMatches(answer);
   final obviousNonLatinScript = RegExp(
     r'[\u0370-\u052F\u0590-\u08FF\u0900-\u097F\u3040-\u30FF'
     r'\u3400-\u9FFF\uAC00-\uD7AF]',
   );
-  final completeSentenceEnding = RegExp(r'[.!?](?:["”)]*)$');
-
+  final completeSentenceEnding = RegExp(
+    r'''[.!?]+(?:['"”’»)\]}]*)$''',
+  );
   final trimmedAnswer = answer.trim();
+  final accumulator = FirstCompleteEnglishSentenceAccumulator();
+  final extractedSentence = accumulator.add(trimmedAnswer) ?? accumulator.finish();
   expect(trimmedAnswer, isNotEmpty);
   expect(answer, isNot(contains('<think>')));
   expect(answer, isNot(contains('</think>')));
@@ -661,10 +665,8 @@ void _expectValidShortComment(_GenerationMeasurement measurement) {
   expect(answer, isNot(matches(obviousNonLatinScript)));
   expect(
     englishWords.length,
-    inInclusiveRange(3, 10),
-    reason:
-        'A short English sentence must contain 3 to 10 English words; '
-        'answer="$trimmedAnswer".',
+    greaterThanOrEqualTo(3),
+    reason: 'A substantive English sentence must contain at least three words.',
   );
   expect(
     trimmedAnswer,
@@ -672,9 +674,12 @@ void _expectValidShortComment(_GenerationMeasurement measurement) {
     reason: 'The short-comment cap must not expose a truncated sentence.',
   );
   expect(
-    RegExp('[.!?]').allMatches(trimmedAnswer).length,
-    1,
-    reason: 'A short comment must contain exactly one sentence.',
+    extractedSentence,
+    trimmedAnswer,
+    reason:
+        'The short-comment output must be exactly one substantive English '
+        'sentence; '
+        'answer="$trimmedAnswer".',
   );
   expect(
     measurement.elapsed,

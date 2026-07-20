@@ -6,7 +6,10 @@ import 'package:pov_agent/features/assistant/domain/entities/conversation_messag
 const _chatStart = '<|im_start|>';
 const _chatEnd = '<|im_end|>';
 const _endOfText = '<|endoftext|>';
-const _shortCommentSystemInstruction = 'For this request, answer with one complete English sentence of 3 to 10 words.';
+const _shortCommentSystemInstruction =
+    'For this request, output only one brief complete English sentence of at '
+    'least three words. '
+    'Do not introduce or explain it.';
 
 /// Formats assistant requests with Qwen3's pinned ChatML conversation shape.
 ///
@@ -48,6 +51,7 @@ final class QwenPromptBuilder {
       thinkingSwitch: '/think',
       options: manualOptions,
       prefillReasoning: true,
+      completionPolicy: GenerationCompletionPolicy.modelOrTokenLimit,
     );
   }
 
@@ -63,6 +67,7 @@ final class QwenPromptBuilder {
       options: shortCommentOptions,
       prefillReasoning: false,
       systemInstruction: _shortCommentSystemInstruction,
+      completionPolicy: GenerationCompletionPolicy.firstSubstantiveEnglishSentence,
     );
   }
 
@@ -72,6 +77,7 @@ final class QwenPromptBuilder {
     required String thinkingSwitch,
     required GenerationOptions options,
     required bool prefillReasoning,
+    required GenerationCompletionPolicy completionPolicy,
     String? systemInstruction,
   }) {
     final sanitizedPrompt = _requirePrompt(prompt, 'prompt');
@@ -105,6 +111,7 @@ final class QwenPromptBuilder {
       prompt: buffer.toString(),
       options: options,
       startsInsideReasoning: prefillReasoning,
+      completionPolicy: completionPolicy,
     );
   }
 }
