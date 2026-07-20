@@ -247,21 +247,24 @@ void main() {
           lessThanOrEqualTo(_maxSampledPeakGrowthBytes),
           reason: 'Periodic active-generation samples must remain bounded.',
         );
-        tester
-          ..printToConsole(
-            'IPHONE_ACCEPTANCE stage=soak_complete '
-            'elapsed_seconds=${soakWatch.elapsed.inSeconds} '
-            'turns=$completedTurns qwen_load_yolo_frames='
-            '$yoloFramesDuringQwenPreparation concurrent_yolo_frames='
-            '$yoloFramesDuringGeneration slowest_comment_ms='
-            '${slowestComment.inMilliseconds} retained_growth_mib='
-            '${_mebibytes(retainedGrowth)} sampled_peak_growth_mib='
-            '${_mebibytes(sampledPeakGrowth)}',
-          )
-          ..printToConsole('IPHONE_ACCEPTANCE stage=lifecycle_pause_requested')
-          ..binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+        tester.printToConsole(
+          'IPHONE_ACCEPTANCE stage=soak_complete '
+          'elapsed_seconds=${soakWatch.elapsed.inSeconds} '
+          'turns=$completedTurns qwen_load_yolo_frames='
+          '$yoloFramesDuringQwenPreparation concurrent_yolo_frames='
+          '$yoloFramesDuringGeneration slowest_comment_ms='
+          '${slowestComment.inMilliseconds} retained_growth_mib='
+          '${_mebibytes(retainedGrowth)} sampled_peak_growth_mib='
+          '${_mebibytes(sampledPeakGrowth)}',
+        );
         final frameBeforeLifecycle = latestYoloFrameNumber;
-        await tester.pump();
+        tester.printToConsole(
+          'IPHONE_ACCEPTANCE stage=lifecycle_pause_requested',
+        );
+        _sendApplicationToBackground(tester.binding);
+        // A paused physical binding does not owe the test another rendered
+        // frame. Await the lifecycle-owned streams directly; pumping here can
+        // deadlock after suspension has already completed.
         await _expectModelStatus(
           runtime.assistantBloc,
           AssistantModelStatus.suspended,
@@ -287,10 +290,8 @@ void main() {
           )
           ..printToConsole(
             'IPHONE_ACCEPTANCE stage=lifecycle_resume_requested',
-          )
-          ..binding.handleAppLifecycleStateChanged(
-            AppLifecycleState.resumed,
           );
+        _sendApplicationToForeground(tester.binding);
         await tester.pump();
         await _expectModelReady(
           runtime.assistantBloc,
@@ -426,6 +427,20 @@ void main() {
   );
 }
 
+void _sendApplicationToBackground(TestWidgetsFlutterBinding binding) {
+  binding
+    ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+    ..handleAppLifecycleStateChanged(AppLifecycleState.hidden)
+    ..handleAppLifecycleStateChanged(AppLifecycleState.paused);
+}
+
+void _sendApplicationToForeground(TestWidgetsFlutterBinding binding) {
+  binding
+    ..handleAppLifecycleStateChanged(AppLifecycleState.hidden)
+    ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+    ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+}
+
 LlamaCommentGenerator _expectGpuBackedGenerator(CommentGenerator generator) {
   expect(generator, isA<LlamaCommentGenerator>());
   final llamaGenerator = generator as LlamaCommentGenerator;
@@ -449,7 +464,10 @@ Future<void> _expectModelReady(
     timeout: timeout,
   );
   if (state.modelStatus == AssistantModelStatus.failure) {
-    fail('Model $context failed: ${state.modelFailure?.code ?? 'unknown'}.');
+    fail(
+      'Model $context failed: ${state.modelFailure?.code ?? 'unknown'}; '
+      'cause=${state.modelFailure?.cause ?? 'unavailable'}.',
+    );
   }
 }
 
@@ -633,16 +651,28 @@ void _expectValidShortComment(_GenerationMeasurement measurement) {
     r'[\u0370-\u052F\u0590-\u08FF\u0900-\u097F\u3040-\u30FF'
     r'\u3400-\u9FFF\uAC00-\uD7AF]',
   );
+  final completeSentenceEnding = RegExp(r'[.!?](?:["”)]*)$');
 
-  expect(answer.trim(), isNotEmpty);
+  final trimmedAnswer = answer.trim();
+  expect(trimmedAnswer, isNotEmpty);
   expect(answer, isNot(contains('<think>')));
   expect(answer, isNot(contains('</think>')));
   expect(answer, isNot(contains('<|')));
   expect(answer, isNot(matches(obviousNonLatinScript)));
   expect(
     englishWords.length,
-    greaterThanOrEqualTo(3),
-    reason: 'A short English sentence must contain several English words.',
+    inInclusiveRange(3, 6),
+    reason: 'A short English sentence must contain 3 to 6 English words.',
+  );
+  expect(
+    trimmedAnswer,
+    matches(completeSentenceEnding),
+    reason: 'The short-comment cap must not expose a truncated sentence.',
+  );
+  expect(
+    RegExp('[.!?]').allMatches(trimmedAnswer).length,
+    1,
+    reason: 'A short comment must contain exactly one sentence.',
   );
   expect(
     measurement.elapsed,
