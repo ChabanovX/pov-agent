@@ -54,6 +54,7 @@ final class LlamaCommentGenerator implements CommentGenerator {
   bool? _lastUnloadSucceeded;
   _LlamaGenerationHandle? _activeGeneration;
   Future<void>? _closeTask;
+  var _generationBusyRejections = 0;
   var _closed = false;
 
   /// Whether the currently loaded model uses the native GPU backend.
@@ -67,6 +68,12 @@ final class LlamaCommentGenerator implements CommentGenerator {
   /// This diagnostic is `null` before an unload or after a new load starts.
   /// Product-facing lifecycle remains normalized through [CommentGenerator].
   bool? get lastUnloadSucceeded => _lastUnloadSucceeded;
+
+  /// Number of requests rejected because native generation was already active.
+  ///
+  /// Long-running acceptance lanes assert this remains zero. Product
+  /// concurrency still enters through the normalized generation result.
+  int get generationBusyRejections => _generationBusyRejections;
 
   @override
   Future<AppResult<void>> loadModel(VerifiedModelArtifact artifact) async {
@@ -194,6 +201,7 @@ final class LlamaCommentGenerator implements CommentGenerator {
     }
     if (_activeGeneration case final active?) {
       if (!active.isSettled) {
+        _generationBusyRejections += 1;
         return const AppError<GenerationHandle>(
           ValidationFailure(
             code: 'assistant_generation_busy',

@@ -206,6 +206,38 @@ void main() {
     expect(worker.closeCalls, 2);
   });
 
+  test('counts generation requests rejected by the native single-flight slot', () async {
+    await generator.loadModel(artifact);
+    final active = _successHandle(
+      await generator.generate(
+        CommentGenerationRequest(
+          prompt: 'first prompt',
+          options: _testGenerationOptions,
+          completionPolicy: GenerationCompletionPolicy.modelOrTokenLimit,
+        ),
+      ),
+    );
+
+    final rejected = await generator.generate(
+      CommentGenerationRequest(
+        prompt: 'overlapping prompt',
+        options: _testGenerationOptions,
+        completionPolicy: GenerationCompletionPolicy.modelOrTokenLimit,
+      ),
+    );
+
+    expect(
+      rejected,
+      isA<AppError<GenerationHandle>>().having(
+        (result) => result.failure.code,
+        'code',
+        'assistant_generation_busy',
+      ),
+    );
+    expect(generator.generationBusyRejections, 1);
+    await active.cancel();
+  });
+
   test(
     'decodes split UTF-8 and never publishes prompt-prefilled reasoning',
     () async {
