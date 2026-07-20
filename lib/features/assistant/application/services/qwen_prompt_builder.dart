@@ -6,6 +6,7 @@ import 'package:pov_agent/features/assistant/domain/entities/conversation_messag
 const _chatStart = '<|im_start|>';
 const _chatEnd = '<|im_end|>';
 const _endOfText = '<|endoftext|>';
+const _shortCommentSystemInstruction = 'For this request, answer with one complete English sentence of 3 to 6 words.';
 
 /// Formats assistant requests with Qwen3's pinned ChatML conversation shape.
 ///
@@ -61,6 +62,7 @@ final class QwenPromptBuilder {
       thinkingSwitch: '/no_think',
       options: shortCommentOptions,
       prefillReasoning: false,
+      systemInstruction: _shortCommentSystemInstruction,
     );
   }
 
@@ -70,12 +72,18 @@ final class QwenPromptBuilder {
     required String thinkingSwitch,
     required GenerationOptions options,
     required bool prefillReasoning,
+    String? systemInstruction,
   }) {
     final sanitizedPrompt = _requirePrompt(prompt, 'prompt');
     final buffer = StringBuffer()
       ..write('${_chatStart}system\n')
-      ..write(_systemPrompt)
-      ..write('$_chatEnd\n');
+      ..write(_systemPrompt);
+    if (systemInstruction != null) {
+      buffer
+        ..write('\n')
+        ..write(systemInstruction);
+    }
+    buffer.write('$_chatEnd\n');
 
     for (final message in history) {
       final content = _sanitizeHistoryMessage(message);

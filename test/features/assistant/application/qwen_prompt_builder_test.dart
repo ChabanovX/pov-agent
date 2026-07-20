@@ -69,7 +69,9 @@ void main() {
     expect(
       request.prompt,
       '<|im_start|>system\n'
-      'Always answer in English.<|im_end|>\n'
+      'Always answer in English.\n'
+      'For this request, answer with one complete English sentence of 3 to 6 '
+      'words.<|im_end|>\n'
       '<|im_start|>user\n'
       'Describe the stable scene. /think\n'
       '/no_think<|im_end|>\n'
@@ -77,6 +79,12 @@ void main() {
     );
     expect(request.options, _shortCommentOptions);
     expect(request.startsInsideReasoning, isFalse);
+  });
+
+  test('keeps the short output bound out of manual dialogue', () {
+    final request = builder.manualDialogue(prompt: 'Explain the scene.');
+
+    expect(request.prompt, isNot(contains('3 to 6 words')));
   });
 
   test('accepts injected policies instead of reading shared constants', () {
