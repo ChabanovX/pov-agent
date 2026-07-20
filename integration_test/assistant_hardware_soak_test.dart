@@ -661,8 +661,10 @@ void _expectValidShortComment(_GenerationMeasurement measurement) {
   expect(answer, isNot(matches(obviousNonLatinScript)));
   expect(
     englishWords.length,
-    inInclusiveRange(3, 6),
-    reason: 'A short English sentence must contain 3 to 6 English words.',
+    inInclusiveRange(3, 10),
+    reason:
+        'A short English sentence must contain 3 to 10 English words; '
+        'answer="$trimmedAnswer".',
   );
   expect(
     trimmedAnswer,

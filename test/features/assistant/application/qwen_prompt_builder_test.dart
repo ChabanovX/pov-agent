@@ -70,7 +70,7 @@ void main() {
       request.prompt,
       '<|im_start|>system\n'
       'Always answer in English.\n'
-      'For this request, answer with one complete English sentence of 3 to 6 '
+      'For this request, answer with one complete English sentence of 3 to 10 '
       'words.<|im_end|>\n'
       '<|im_start|>user\n'
       'Describe the stable scene. /think\n'
@@ -84,7 +84,7 @@ void main() {
   test('keeps the short output bound out of manual dialogue', () {
     final request = builder.manualDialogue(prompt: 'Explain the scene.');
 
-    expect(request.prompt, isNot(contains('3 to 6 words')));
+    expect(request.prompt, isNot(contains('3 to 10 words')));
   });
 
   test('accepts injected policies instead of reading shared constants', () {

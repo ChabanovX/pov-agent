@@ -6,7 +6,7 @@ import 'package:pov_agent/features/assistant/domain/entities/conversation_messag
 const _chatStart = '<|im_start|>';
 const _chatEnd = '<|im_end|>';
 const _endOfText = '<|endoftext|>';
-const _shortCommentSystemInstruction = 'For this request, answer with one complete English sentence of 3 to 6 words.';
+const _shortCommentSystemInstruction = 'For this request, answer with one complete English sentence of 3 to 10 words.';
 
 /// Formats assistant requests with Qwen3's pinned ChatML conversation shape.
 ///
