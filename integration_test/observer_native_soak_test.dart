@@ -74,6 +74,7 @@ void main() {
           (state) => !state.observationEnabled && state.activeGeneration != ObserverGenerationKind.automatic,
           timeout: _stateTransitionTimeout,
         );
+        await tester.pump();
         final initialCommentCount = runtime.observerBloc.state.comments.length;
         observerSubscription = runtime.observerBloc.stream.listen((state) {
           if (state.activeGeneration != ObserverGenerationKind.automatic) {
@@ -177,6 +178,7 @@ void main() {
           (state) => !state.observationEnabled && state.activeGeneration != ObserverGenerationKind.automatic,
           timeout: _stateTransitionTimeout,
         );
+        await tester.pump();
         expect(runtime.observerBloc.state.automaticFailure, isNull);
 
         var automaticWasActive = false;
