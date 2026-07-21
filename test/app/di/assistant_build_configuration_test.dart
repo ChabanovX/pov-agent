@@ -25,7 +25,7 @@ void main() {
     expect(configuration.manualOptions.temperature, 0.6);
     expect(configuration.manualOptions.topP, 0.95);
     expect(configuration.manualOptions.topK, 20);
-    expect(configuration.commentOptions.maxTokens, 32);
+    expect(configuration.commentOptions.maxTokens, 40);
     expect(configuration.commentOptions.temperature, 0.7);
     expect(configuration.commentOptions.topP, 0.8);
     expect(configuration.commentOptions.topK, 20);

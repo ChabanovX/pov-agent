@@ -162,7 +162,7 @@ final class AssistantBuildConfiguration {
   /// Sampling policy for short `/no_think` comments.
   final GenerationOptions commentOptions;
 
-  /// Unsigned llama.cpp distribution-sampler seed.
+  /// Unsigned sampler base seed interpreted by the generation adapter.
   final int randomSeed;
 
   /// Shared Qwen system instruction.

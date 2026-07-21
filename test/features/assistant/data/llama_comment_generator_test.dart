@@ -357,6 +357,210 @@ void main() {
     },
   );
 
+  test('sequences explicit seeds only across short generations', () async {
+    await generator.loadModel(artifact);
+
+    for (final completionPolicy in [
+      GenerationCompletionPolicy.firstSubstantiveEnglishSentence,
+      GenerationCompletionPolicy.firstSubstantiveEnglishSentence,
+      GenerationCompletionPolicy.modelOrTokenLimit,
+    ]) {
+      final nativeGeneration = _FakeWorkerGeneration();
+      worker.nextGeneration = nativeGeneration;
+      final handle = _successHandle(
+        await generator.generate(
+          CommentGenerationRequest(
+            prompt: 'prompt',
+            options: _testGenerationOptions,
+            completionPolicy: completionPolicy,
+          ),
+        ),
+      );
+      nativeGeneration.addText(
+        completionPolicy == GenerationCompletionPolicy.firstSubstantiveEnglishSentence
+            ? 'A person is visible.'
+            : 'A manual answer',
+      );
+      await nativeGeneration.finish();
+      expect(await handle.completion, isA<AppSuccess<String>>());
+    }
+
+    expect(
+      worker.samplings.map((configuration) => configuration.seed),
+      [42, 43, 42],
+    );
+  });
+
+  test('preserves the llama random-seed sentinel for every request', () async {
+    final randomWorker = _FakeLlamaWorker();
+    final randomGenerator = LlamaCommentGenerator(
+      createWorker: () async => randomWorker,
+      runtimeConfiguration: runtimeConfiguration,
+      randomSeed: 0xFFFFFFFF,
+    );
+    addTearDown(randomGenerator.close);
+    await randomGenerator.loadModel(artifact);
+
+    for (var generation = 0; generation < 2; generation += 1) {
+      final nativeGeneration = _FakeWorkerGeneration();
+      randomWorker.nextGeneration = nativeGeneration;
+      final handle = _successHandle(
+        await randomGenerator.generate(
+          CommentGenerationRequest(
+            prompt: 'short prompt',
+            options: _testGenerationOptions,
+            completionPolicy: GenerationCompletionPolicy.firstSubstantiveEnglishSentence,
+          ),
+        ),
+      );
+      nativeGeneration.addText('A person is visible.');
+      await nativeGeneration.finish();
+      expect(await handle.completion, isA<AppSuccess<String>>());
+    }
+
+    expect(
+      randomWorker.samplings.map((configuration) => configuration.seed),
+      [0xFFFFFFFF, 0xFFFFFFFF],
+    );
+  });
+
+  test('advances the short seed after incomplete output and cancellation', () async {
+    await generator.loadModel(artifact);
+
+    final incompleteGeneration = _FakeWorkerGeneration();
+    worker.nextGeneration = incompleteGeneration;
+    final incompleteHandle = _successHandle(
+      await generator.generate(
+        CommentGenerationRequest(
+          prompt: 'first short prompt',
+          options: _testGenerationOptions,
+          completionPolicy: GenerationCompletionPolicy.firstSubstantiveEnglishSentence,
+        ),
+      ),
+    );
+    incompleteGeneration.addText('A sentence without its boundary');
+    await incompleteGeneration.finish();
+    expect(
+      await incompleteHandle.completion,
+      isA<AppError<String>>().having(
+        (result) => result.failure.code,
+        'code',
+        'assistant_sentence_incomplete',
+      ),
+    );
+
+    final cancelledGeneration = _FakeWorkerGeneration();
+    worker.nextGeneration = cancelledGeneration;
+    final cancelledHandle = _successHandle(
+      await generator.generate(
+        CommentGenerationRequest(
+          prompt: 'second short prompt',
+          options: _testGenerationOptions,
+          completionPolicy: GenerationCompletionPolicy.firstSubstantiveEnglishSentence,
+        ),
+      ),
+    );
+    await cancelledHandle.cancel();
+
+    final completedGeneration = _FakeWorkerGeneration();
+    worker.nextGeneration = completedGeneration;
+    final completedHandle = _successHandle(
+      await generator.generate(
+        CommentGenerationRequest(
+          prompt: 'third short prompt',
+          options: _testGenerationOptions,
+          completionPolicy: GenerationCompletionPolicy.firstSubstantiveEnglishSentence,
+        ),
+      ),
+    );
+    completedGeneration.addText('A person is visible.');
+    await completedGeneration.finish();
+    expect(await completedHandle.completion, isA<AppSuccess<String>>());
+
+    expect(
+      worker.samplings.map((configuration) => configuration.seed),
+      [42, 43, 44],
+    );
+  });
+
+  test('does not advance the short seed when native start fails', () async {
+    await generator.loadModel(artifact);
+    worker.generateError = const LlamaWorkerException(
+      status: -7,
+      message: 'generation did not start',
+    );
+
+    final failedStart = await generator.generate(
+      CommentGenerationRequest(
+        prompt: 'failed short prompt',
+        options: _testGenerationOptions,
+        completionPolicy: GenerationCompletionPolicy.firstSubstantiveEnglishSentence,
+      ),
+    );
+    expect(
+      failedStart,
+      isA<AppError<GenerationHandle>>().having(
+        (result) => result.failure.code,
+        'code',
+        'assistant_generation_start',
+      ),
+    );
+
+    worker.generateError = null;
+    final nativeGeneration = _FakeWorkerGeneration();
+    worker.nextGeneration = nativeGeneration;
+    final handle = _successHandle(
+      await generator.generate(
+        CommentGenerationRequest(
+          prompt: 'successful short prompt',
+          options: _testGenerationOptions,
+          completionPolicy: GenerationCompletionPolicy.firstSubstantiveEnglishSentence,
+        ),
+      ),
+    );
+    nativeGeneration.addText('A person is visible.');
+    await nativeGeneration.finish();
+    expect(await handle.completion, isA<AppSuccess<String>>());
+
+    expect(
+      worker.samplings.map((configuration) => configuration.seed),
+      [42, 42],
+    );
+  });
+
+  test('wraps an explicit short seed without emitting the random sentinel', () async {
+    final wrappingWorker = _FakeLlamaWorker();
+    final wrappingGenerator = LlamaCommentGenerator(
+      createWorker: () async => wrappingWorker,
+      runtimeConfiguration: runtimeConfiguration,
+      randomSeed: 0xFFFFFFFE,
+    );
+    addTearDown(wrappingGenerator.close);
+    await wrappingGenerator.loadModel(artifact);
+
+    for (var generation = 0; generation < 2; generation += 1) {
+      final nativeGeneration = _FakeWorkerGeneration();
+      wrappingWorker.nextGeneration = nativeGeneration;
+      final handle = _successHandle(
+        await wrappingGenerator.generate(
+          CommentGenerationRequest(
+            prompt: 'short prompt',
+            options: _testGenerationOptions,
+            completionPolicy: GenerationCompletionPolicy.firstSubstantiveEnglishSentence,
+          ),
+        ),
+      );
+      nativeGeneration.addText('A person is visible.');
+      await nativeGeneration.finish();
+      expect(await handle.completion, isA<AppSuccess<String>>());
+    }
+
+    expect(
+      wrappingWorker.samplings.map((configuration) => configuration.seed),
+      [0xFFFFFFFE, 0],
+    );
+  });
+
   test('rejects a short comment that reaches model end mid-sentence', () async {
     await generator.loadModel(artifact);
     final nativeGeneration = _FakeWorkerGeneration();
@@ -560,12 +764,14 @@ final class _FakeLlamaWorker implements LlamaInferenceWorker {
   String? loadedPath;
   LlamaRuntimeConfiguration? runtimeConfiguration;
   Exception? loadError;
+  Exception? generateError;
   Exception? unloadError;
   Completer<void>? closeGate;
   final List<Exception> closeErrors = [];
   _FakeWorkerGeneration? nextGeneration;
   String? generatedPrompt;
   LlamaSamplingConfiguration? sampling;
+  final List<LlamaSamplingConfiguration> samplings = [];
   bool usesGpu = false;
   String? backendDiagnostic;
 
@@ -592,6 +798,9 @@ final class _FakeLlamaWorker implements LlamaInferenceWorker {
   ) async {
     generatedPrompt = prompt;
     sampling = configuration;
+    samplings.add(configuration);
+    final error = generateError;
+    if (error != null) throw error;
     return nextGeneration ??= _FakeWorkerGeneration();
   }
 

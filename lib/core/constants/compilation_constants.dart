@@ -86,7 +86,10 @@ abstract final class CompilationConstants {
     defaultValue: '99',
   );
 
-  /// Sampler seed; `2^32 - 1` asks llama.cpp to choose a random seed.
+  /// Sampler base seed; fixed values sequence short comments deterministically.
+  ///
+  /// Manual requests use the value directly. `2^32 - 1` asks llama.cpp to
+  /// choose a random seed for every request instead of deriving a sequence.
   static const String qwenRandomSeed = String.fromEnvironment(
     'QWEN_RANDOM_SEED',
     defaultValue: '4294967295',
@@ -133,7 +136,7 @@ abstract final class CompilationConstants {
   /// Maximum generated tokens for a short `/no_think` comment.
   static const String qwenCommentMaxTokens = String.fromEnvironment(
     'QWEN_COMMENT_MAX_TOKENS',
-    defaultValue: '32',
+    defaultValue: '40',
   );
 
   /// Temperature for a short `/no_think` comment.

@@ -13,6 +13,8 @@ import 'package:pov_agent/features/assistant/data/ffi/llama_native_runtime.dart'
 import 'package:pov_agent/shared/domain/app_failure.dart';
 import 'package:pov_agent/shared/domain/app_result.dart';
 
+const _llamaRandomSeedSentinel = 0xFFFFFFFF;
+
 /// Owns the lazy llama.cpp worker and its currently loaded model.
 ///
 /// Equivalent loads share one task. A new load first joins cancellation of the
@@ -38,13 +40,14 @@ final class LlamaCommentGenerator implements CommentGenerator {
     this._createWorker,
     this._runtimeConfiguration,
     this._randomSeed,
-  );
+  ) : _nextShortGenerationSeed = _randomSeed;
 
   static final AppLogger _logger = AppLogger('LlamaCommentGenerator');
 
   final Future<LlamaInferenceWorker> Function() _createWorker;
   final LlamaRuntimeConfiguration _runtimeConfiguration;
   final int _randomSeed;
+  int _nextShortGenerationSeed;
 
   Future<LlamaInferenceWorker>? _workerTask;
   Future<AppResult<void>>? _loadTask;
@@ -223,6 +226,7 @@ final class LlamaCommentGenerator implements CommentGenerator {
 
     try {
       final worker = await _obtainWorker();
+      final seed = _seedFor(request.completionPolicy);
       final nativeGeneration = await worker.generate(
         request.prompt,
         LlamaSamplingConfiguration(
@@ -231,9 +235,10 @@ final class LlamaCommentGenerator implements CommentGenerator {
           topP: request.options.topP,
           topK: request.options.topK,
           minP: request.options.minP,
-          seed: _randomSeed,
+          seed: seed,
         ),
       );
+      _advanceSeedAfterAcceptedStart(request.completionPolicy);
       late final _LlamaGenerationHandle handle;
       handle = _LlamaGenerationHandle(
         nativeGeneration,
@@ -259,6 +264,29 @@ final class LlamaCommentGenerator implements CommentGenerator {
         ),
       );
     }
+  }
+
+  int _seedFor(GenerationCompletionPolicy completionPolicy) {
+    if (completionPolicy != GenerationCompletionPolicy.firstSubstantiveEnglishSentence ||
+        _randomSeed == _llamaRandomSeedSentinel) {
+      return _randomSeed;
+    }
+    return _nextShortGenerationSeed;
+  }
+
+  void _advanceSeedAfterAcceptedStart(
+    GenerationCompletionPolicy completionPolicy,
+  ) {
+    if (completionPolicy != GenerationCompletionPolicy.firstSubstantiveEnglishSentence ||
+        _randomSeed == _llamaRandomSeedSentinel) {
+      return;
+    }
+    // Reusing one explicit seed with an unchanged prompt can reproduce a
+    // token-limit failure forever. A deterministic sequence preserves replay
+    // while ensuring the next periodic short comment explores another sample.
+    _nextShortGenerationSeed = _nextShortGenerationSeed == _llamaRandomSeedSentinel - 1
+        ? 0
+        : _nextShortGenerationSeed + 1;
   }
 
   @override
