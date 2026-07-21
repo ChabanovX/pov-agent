@@ -19,6 +19,9 @@ final class AssistantConversation extends StatelessWidget {
     required this.onIntervalSelected,
     required this.onObservationStart,
     required this.onObservationStop,
+    required this.onSpeechMutedChanged,
+    required this.onCommentReplay,
+    required this.onSpeechStop,
     super.key,
   });
 
@@ -43,6 +46,15 @@ final class AssistantConversation extends StatelessWidget {
   /// Disables periodic comments and cancels automatic generation.
   final VoidCallback onObservationStop;
 
+  /// Changes whether future completed comments may be spoken automatically.
+  final ValueChanged<bool> onSpeechMutedChanged;
+
+  /// Replays the committed comment at an append-only transcript index.
+  final ValueChanged<int> onCommentReplay;
+
+  /// Stops the comment currently being spoken.
+  final VoidCallback onSpeechStop;
+
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context);
@@ -52,6 +64,9 @@ final class AssistantConversation extends StatelessWidget {
         onIntervalSelected: onIntervalSelected,
         onStart: onObservationStart,
         onStop: onObservationStop,
+        onSpeechMutedChanged: onSpeechMutedChanged,
+        onCommentReplay: onCommentReplay,
+        onSpeechStop: onSpeechStop,
       ),
       if (state.modelStatus != ObserverModelStatus.ready) AssistantModelStatusView(state: state, onRetry: onModelRetry),
       if (state.modelStatus == ObserverModelStatus.ready && state.messages.isEmpty && state.manualDraftPrompt.isEmpty)

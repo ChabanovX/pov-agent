@@ -31,6 +31,8 @@ dependencies:
   # Supplies Flutter's localization delegates to generated AppLocalizations.
   flutter_localizations:
     sdk: flutter
+  # Provides foreground system speech synthesis on iOS and Android.
+  flutter_tts: 4.2.5
   # Owns the composition registry; service-locator access stays inside app/di.
   get_it: ^9.2.1
   # Reserved by the router-authority contract for navigation beyond the tab shell.

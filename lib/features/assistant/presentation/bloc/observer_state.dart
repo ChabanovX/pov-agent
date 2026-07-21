@@ -37,12 +37,13 @@ enum ObserverGenerationKind {
   manual,
 }
 
-/// The observer's model, scene, timer, transcript, and generation projection.
+/// The observer's model, scene, timer, transcript, generation, and speech state.
 ///
 /// Automatic comments and manual dialogue are stored separately so a previous
 /// scene comment cannot accidentally count as one of the four dialogue pairs.
 /// Drafts are never committed: cancellation can discard them without leaking
-/// incomplete output into subsequent Qwen context.
+/// incomplete output into subsequent Qwen context. Speech targets only an
+/// append-only committed comment index, so streaming output is never audible.
 final class ObserverState {
   /// Creates the idle observer state.
   ObserverState({
@@ -53,6 +54,8 @@ final class ObserverState {
     this.scene = const SceneSnapshot.empty(),
     this.modelStatus = ObserverModelStatus.idle,
     this.activeGeneration,
+    this.speechMuted = false,
+    this.activeSpeechCommentIndex,
     List<ObserverComment> comments = const [],
     List<ConversationMessage> messages = const [],
     this.modelDownloadProgress,
@@ -62,6 +65,7 @@ final class ObserverState {
     this.modelFailure,
     this.manualFailure,
     this.automaticFailure,
+    this.speechFailure,
   }) : comments = List.unmodifiable(comments),
        messages = List.unmodifiable(messages);
 
@@ -85,6 +89,12 @@ final class ObserverState {
 
   /// The active generation origin, or `null` while the runner is idle.
   final ObserverGenerationKind? activeGeneration;
+
+  /// Whether automatic comment speech is disabled for this runtime session.
+  final bool speechMuted;
+
+  /// Append-only index of the comment currently being spoken.
+  final int? activeSpeechCommentIndex;
 
   /// Completed automatic comments in session order.
   final List<ObserverComment> comments;
@@ -113,8 +123,14 @@ final class ObserverState {
   /// The latest automatic-generation failure.
   final AppFailure? automaticFailure;
 
+  /// The latest recoverable speech start, playback, or stop failure.
+  final AppFailure? speechFailure;
+
   /// Whether either automatic or manual generation owns the runner.
   bool get isGenerating => activeGeneration != null;
+
+  /// Whether one committed automatic comment owns the speech session.
+  bool get isSpeaking => activeSpeechCommentIndex != null;
 
   /// The latest successfully committed automatic comment.
   String? get previousComment => comments.isEmpty ? null : comments.last.text;
@@ -143,6 +159,8 @@ final class ObserverState {
     SceneSnapshot? scene,
     ObserverModelStatus? modelStatus,
     ObserverGenerationKind? Function()? activeGeneration,
+    bool? speechMuted,
+    int? Function()? activeSpeechCommentIndex,
     List<ObserverComment>? comments,
     List<ConversationMessage>? messages,
     double? Function()? modelDownloadProgress,
@@ -152,6 +170,7 @@ final class ObserverState {
     AppFailure? Function()? modelFailure,
     AppFailure? Function()? manualFailure,
     AppFailure? Function()? automaticFailure,
+    AppFailure? Function()? speechFailure,
   }) {
     return ObserverState(
       started: started ?? this.started,
@@ -161,6 +180,10 @@ final class ObserverState {
       scene: scene ?? this.scene,
       modelStatus: modelStatus ?? this.modelStatus,
       activeGeneration: activeGeneration == null ? this.activeGeneration : activeGeneration(),
+      speechMuted: speechMuted ?? this.speechMuted,
+      activeSpeechCommentIndex: activeSpeechCommentIndex == null
+          ? this.activeSpeechCommentIndex
+          : activeSpeechCommentIndex(),
       comments: comments ?? this.comments,
       messages: messages ?? this.messages,
       modelDownloadProgress: modelDownloadProgress == null ? this.modelDownloadProgress : modelDownloadProgress(),
@@ -170,6 +193,7 @@ final class ObserverState {
       modelFailure: modelFailure == null ? this.modelFailure : modelFailure(),
       manualFailure: manualFailure == null ? this.manualFailure : manualFailure(),
       automaticFailure: automaticFailure == null ? this.automaticFailure : automaticFailure(),
+      speechFailure: speechFailure == null ? this.speechFailure : speechFailure(),
     );
   }
 }

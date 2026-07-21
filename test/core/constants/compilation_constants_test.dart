@@ -17,4 +17,8 @@ void main() {
     }
     expect(CompilationConstants.usesRecordedVideo, _expectedRecordedVideo);
   });
+
+  test('defaults system speech to the milestone locale', () {
+    expect(CompilationConstants.systemSpeechLanguage, 'en-US');
+  });
 }

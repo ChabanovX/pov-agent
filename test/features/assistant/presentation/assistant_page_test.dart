@@ -286,6 +286,7 @@ void main() {
     );
     expect(find.byKey(assistantAnswerRetryButtonKey), findsOneWidget);
 
+    await tester.ensureVisible(find.byKey(assistantAnswerRetryButtonKey));
     await tester.tap(find.byKey(assistantAnswerRetryButtonKey));
     await _pumpUntil(tester, () => generator.requests.length == 2);
     await tester.runAsync(() async {
@@ -375,6 +376,183 @@ void main() {
     await _disposeFixture(tester, bloc, store);
     await scene.close();
   });
+
+  testWidgets('stops, replays, and mutes completed observer speech', (
+    tester,
+  ) async {
+    final store = FakeAssistantModelStore();
+    final generator = FakeCommentGenerator();
+    final handle = FakeGenerationHandle();
+    final speech = FakeSpeechSynthesizer();
+    final automaticSpeech = FakeSpeechAttempt();
+    late void Function() fireTick;
+    speech.enqueueAttempt(automaticSpeech);
+    generator.enqueueHandle(handle);
+    final bloc = _createBloc(
+      store,
+      generator,
+      speechSynthesizer: speech,
+      periodicTimerFactory: (_, onTick) {
+        fireTick = onTick;
+        return _DormantTimer();
+      },
+    )..add(const ObserverStarted());
+    await _pumpUntilState(
+      tester,
+      bloc,
+      (state) => state.modelStatus == ObserverModelStatus.ready,
+    );
+    await tester.pumpWidget(_TestAssistantApp(bloc: bloc));
+
+    fireTick();
+    await _pumpUntil(tester, () => generator.requests.length == 1);
+    await tester.runAsync(() async {
+      handle.succeed('A completed spoken comment.');
+      await Future<void>.delayed(Duration.zero);
+    });
+    await _pumpUntilState(
+      tester,
+      bloc,
+      (state) => state.comments.length == 1 && state.isSpeaking,
+    );
+
+    expect(speech.spokenTexts, ['A completed spoken comment.']);
+    final commentControl = find.byKey(observerCommentSpeechButtonKey(0));
+    await tester.ensureVisible(commentControl);
+    expect(find.descendant(of: commentControl, matching: find.text('Stop')), findsOneWidget);
+
+    await tester.tap(commentControl);
+    await _pumpUntilState(tester, bloc, (state) => !state.isSpeaking);
+    expect(speech.stopCalls, 1);
+    expect(find.descendant(of: commentControl, matching: find.text('Replay')), findsOneWidget);
+
+    final replaySpeech = FakeSpeechAttempt();
+    speech.enqueueAttempt(replaySpeech);
+    await tester.tap(commentControl);
+    await _pumpUntilState(tester, bloc, (state) => state.isSpeaking);
+    expect(speech.spokenTexts, [
+      'A completed spoken comment.',
+      'A completed spoken comment.',
+    ]);
+
+    final muteControl = find.byKey(observerSpeechMuteButtonKey);
+    await tester.ensureVisible(muteControl);
+    await tester.tap(muteControl);
+    await _pumpUntilState(
+      tester,
+      bloc,
+      (state) => state.speechMuted && !state.isSpeaking,
+    );
+    expect(speech.stopCalls, 2);
+
+    await tester.tap(muteControl);
+    await _pumpUntilState(tester, bloc, (state) => !state.speechMuted);
+    expect(speech.spokenTexts, hasLength(2));
+
+    await _disposeFixture(tester, bloc, store);
+  });
+
+  testWidgets('keeps a prompt when speech preemption needs recovery', (
+    tester,
+  ) async {
+    final store = FakeAssistantModelStore();
+    final generator = FakeCommentGenerator();
+    final automatic = FakeGenerationHandle();
+    final manual = FakeGenerationHandle();
+    final speech = FakeSpeechSynthesizer();
+    final speechAttempt = FakeSpeechAttempt();
+    late void Function() fireTick;
+    var stopAttempt = 0;
+    generator
+      ..enqueueHandle(automatic)
+      ..enqueueHandle(manual);
+    speech
+      ..enqueueAttempt(speechAttempt)
+      ..onStop = () async {
+        stopAttempt += 1;
+        if (stopAttempt == 1) {
+          return const AppError<void>(
+            DeviceUnavailableFailure(code: 'speech_stop_failed'),
+          );
+        }
+        return const AppSuccess<void>(null);
+      };
+    final bloc = _createBloc(
+      store,
+      generator,
+      speechSynthesizer: speech,
+      periodicTimerFactory: (_, onTick) {
+        fireTick = onTick;
+        return _DormantTimer();
+      },
+    )..add(const ObserverStarted());
+    await _pumpUntilState(
+      tester,
+      bloc,
+      (state) => state.modelStatus == ObserverModelStatus.ready,
+    );
+    await tester.pumpWidget(_TestAssistantApp(bloc: bloc));
+
+    fireTick();
+    await _pumpUntil(tester, () => generator.requests.length == 1);
+    await tester.runAsync(() async {
+      automatic.succeed('Speech must stop before the manual request.');
+      await Future<void>.delayed(Duration.zero);
+    });
+    await _pumpUntilState(tester, bloc, (state) => state.isSpeaking);
+
+    await tester.enterText(
+      find.byKey(assistantPromptFieldKey),
+      'Do not lose this prompt',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(assistantSubmitControlKey));
+    await _pumpUntilState(
+      tester,
+      bloc,
+      (state) => state.speechFailure != null,
+    );
+
+    final promptField = tester.widget<CupertinoTextField>(
+      find.byKey(assistantPromptFieldKey),
+    );
+    expect(promptField.controller?.text, 'Do not lose this prompt');
+    expect(generator.requests, hasLength(1));
+    expect(
+      find.text(
+        "Speech playback failed. Use the comment's speech control to recover.",
+      ),
+      findsOneWidget,
+    );
+    final commentControl = find.byKey(observerCommentSpeechButtonKey(0));
+    await tester.ensureVisible(commentControl);
+    expect(
+      find.descendant(of: commentControl, matching: find.text('Stop')),
+      findsOneWidget,
+    );
+
+    await tester.tap(commentControl);
+    await _pumpUntilState(
+      tester,
+      bloc,
+      (state) => !state.isSpeaking && state.speechFailure == null,
+    );
+    await tester.tap(find.byKey(assistantSubmitControlKey));
+    await _pumpUntilState(
+      tester,
+      bloc,
+      (state) => state.activeGeneration == ObserverGenerationKind.manual,
+    );
+
+    expect(generator.requests, hasLength(2));
+    expect(promptField.controller?.text, isEmpty);
+    await tester.runAsync(() async {
+      manual.succeed('The preserved prompt was accepted.');
+      await Future<void>.delayed(Duration.zero);
+    });
+    await _pumpUntilState(tester, bloc, (state) => state.messages.length == 2);
+    await _disposeFixture(tester, bloc, store);
+  });
 }
 
 final class _TestAssistantApp extends StatelessWidget {
@@ -400,12 +578,14 @@ ObserverBloc _createBloc(
   FakeAssistantModelStore store,
   FakeCommentGenerator generator, {
   FakeSceneSource? sceneSource,
+  FakeSpeechSynthesizer? speechSynthesizer,
   ObserverPeriodicTimerFactory? periodicTimerFactory,
 }) {
   return ObserverBloc(
     sceneSource: sceneSource ?? FakeSceneSource(),
     modelStore: store,
     commentGenerator: generator,
+    speechSynthesizer: speechSynthesizer ?? FakeSpeechSynthesizer(),
     requestBuilder: ObserverRequestBuilder(
       qwenPromptBuilder: QwenPromptBuilder(
         systemPrompt: 'You are a concise local assistant.',

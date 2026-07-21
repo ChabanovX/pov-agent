@@ -60,6 +60,30 @@ final class ObserverAnswerRetryRequested extends ObserverEvent {
   const ObserverAnswerRetryRequested();
 }
 
+/// Changes the session-only automatic speech mute preference.
+final class ObserverSpeechMutedChanged extends ObserverEvent {
+  /// Sets whether completed automatic comments may be spoken.
+  const ObserverSpeechMutedChanged({required this.muted});
+
+  /// Whether automatic speech is disabled for this runtime session.
+  final bool muted;
+}
+
+/// Stops the active utterance without muting future automatic comments.
+final class ObserverSpeechStopped extends ObserverEvent {
+  /// Requests cooperative stop of the current utterance.
+  const ObserverSpeechStopped();
+}
+
+/// Replays one committed automatic comment by append-only index.
+final class ObserverCommentReplayRequested extends ObserverEvent {
+  /// Requests speech for [commentIndex] when generation and speech are idle.
+  const ObserverCommentReplayRequested(this.commentIndex);
+
+  /// Index in the current session's append-only comment transcript.
+  final int commentIndex;
+}
+
 /// Quiesces ticks and generation before camera foreground teardown.
 final class ObserverForegroundDeactivated extends ObserverEvent {
   /// Begins the foreground quiescence handshake.
@@ -98,4 +122,10 @@ final class _GenerationUpdateReceived extends ObserverEvent {
   const _GenerationUpdateReceived(this.update);
 
   final ObserverGenerationUpdate update;
+}
+
+final class _SpeechUpdateReceived extends ObserverEvent {
+  const _SpeechUpdateReceived(this.update);
+
+  final ObserverSpeechCompleted update;
 }

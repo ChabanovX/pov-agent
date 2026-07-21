@@ -22,6 +22,7 @@ Future<AppRuntime> startTestAppRuntime(
     observerBloc: assistant.observerBloc,
     modelStore: assistant.modelStore,
     commentGenerator: assistant.commentGenerator,
+    speechSynthesizer: assistant.speechSynthesizer,
   );
   appDependencies
     ..registerSingleton<SceneSource>(sceneSession)

@@ -5,8 +5,10 @@ import 'package:pov_agent/app/di/assistant_build_configuration.dart';
 import 'package:pov_agent/core/constants/compilation_constants.dart';
 import 'package:pov_agent/features/assistant/application/ports/comment_generator.dart';
 import 'package:pov_agent/features/assistant/application/ports/model_store.dart';
+import 'package:pov_agent/features/assistant/application/ports/speech_synthesizer.dart';
 import 'package:pov_agent/features/assistant/application/services/observer_request_builder.dart';
 import 'package:pov_agent/features/assistant/application/services/qwen_prompt_builder.dart';
+import 'package:pov_agent/features/assistant/data/adapters/flutter_tts_speech_synthesizer.dart';
 import 'package:pov_agent/features/assistant/data/adapters/llama_comment_generator.dart';
 import 'package:pov_agent/features/assistant/data/datasources/model_artifact_downloader.dart';
 import 'package:pov_agent/features/assistant/data/datasources/model_checksum_verifier.dart';
@@ -40,12 +42,17 @@ AppRuntime configureDependencies() => _configureDependencies();
 @visibleForTesting
 AppRuntime configureDependenciesForTesting({
   required ModelArtifactDownloader modelArtifactDownloader,
+  SpeechSynthesizer? speechSynthesizer,
 }) {
-  return _configureDependencies(modelArtifactDownloader: modelArtifactDownloader);
+  return _configureDependencies(
+    modelArtifactDownloader: modelArtifactDownloader,
+    speechSynthesizer: speechSynthesizer,
+  );
 }
 
 AppRuntime _configureDependencies({
   ModelArtifactDownloader? modelArtifactDownloader,
+  SpeechSynthesizer? speechSynthesizer,
 }) {
   final assistantConfiguration = AssistantBuildConfiguration.fromEnvironment();
   final controller = CompilationConstants.usesRecordedVideo
@@ -68,10 +75,16 @@ AppRuntime _configureDependencies({
     checksumVerifier: const IsolateModelChecksumVerifier(),
     commentGenerator: commentGenerator,
   );
+  final systemSpeechSynthesizer =
+      speechSynthesizer ??
+      FlutterTtsSpeechSynthesizer(
+        preferredLanguage: CompilationConstants.systemSpeechLanguage,
+      );
   final observerBloc = ObserverBloc(
     sceneSource: sceneSession,
     modelStore: modelStore,
     commentGenerator: commentGenerator,
+    speechSynthesizer: systemSpeechSynthesizer,
     requestBuilder: ObserverRequestBuilder(
       qwenPromptBuilder: QwenPromptBuilder(
         systemPrompt: assistantConfiguration.systemPrompt,
@@ -86,6 +99,7 @@ AppRuntime _configureDependencies({
     observerBloc: observerBloc,
     modelStore: modelStore,
     commentGenerator: commentGenerator,
+    speechSynthesizer: systemSpeechSynthesizer,
   );
 
   appDependencies
@@ -93,6 +107,7 @@ AppRuntime _configureDependencies({
     ..registerSingleton<SceneSource>(sceneSession)
     ..registerSingleton<CommentGenerator>(commentGenerator)
     ..registerSingleton<ModelStore>(modelStore)
+    ..registerSingleton<SpeechSynthesizer>(systemSpeechSynthesizer)
     ..registerSingleton<ObserverBloc>(observerBloc)
     ..registerSingleton<AppRuntime>(runtime);
   return runtime;

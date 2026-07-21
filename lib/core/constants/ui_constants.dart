@@ -33,6 +33,12 @@ const observerSceneKey = Key('observer-scene');
 /// Stable key for the automatic observation transcript.
 const observerTranscriptKey = Key('observer-transcript');
 
+/// Stable key for the session-wide speech mute control.
+const observerSpeechMuteButtonKey = Key('observer-speech-mute-button');
+
+/// Returns the stable speech control key for a committed observer comment.
+Key observerCommentSpeechButtonKey(int commentIndex) => Key('observer-comment-speech-$commentIndex');
+
 /// The light theme's primary ARGB color value.
 const int kColorPrimaryLightValue = 0xFF1C6E5C;
 
