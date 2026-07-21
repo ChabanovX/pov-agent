@@ -18,7 +18,10 @@ class MainActivity : FlutterActivity() {
                 FlutterInjector.instance().flutterLoader().getLookupKeyForAsset(assetPath)
             },
         )
-        modelDiskCapacityChannel = ModelDiskCapacityChannel(messenger)
+        modelDiskCapacityChannel = ModelDiskCapacityChannel(
+            context = applicationContext,
+            messenger = messenger,
+        )
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {

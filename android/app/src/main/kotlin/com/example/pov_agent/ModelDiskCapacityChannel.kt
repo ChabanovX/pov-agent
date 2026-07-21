@@ -1,5 +1,6 @@
 package com.example.pov_agent
 
+import android.content.Context
 import android.os.StatFs
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
@@ -8,8 +9,11 @@ import java.io.File
 
 private const val MODEL_STORAGE_CHANNEL_NAME = "pov_agent/model_storage"
 
-/** Reports free bytes for the filesystem that owns the model cache. */
-class ModelDiskCapacityChannel(messenger: BinaryMessenger) : MethodChannel.MethodCallHandler {
+/** Resolves no-backup model storage and reports its filesystem capacity. */
+class ModelDiskCapacityChannel(
+    private val context: Context,
+    messenger: BinaryMessenger,
+) : MethodChannel.MethodCallHandler {
     private val channel = MethodChannel(messenger, MODEL_STORAGE_CHANNEL_NAME)
 
     init {
@@ -17,11 +21,27 @@ class ModelDiskCapacityChannel(messenger: BinaryMessenger) : MethodChannel.Metho
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
-        if (call.method != "availableBytes") {
-            result.notImplemented()
+        when (call.method) {
+            "resolveDirectory" -> resolveDirectory(result)
+            "availableBytes" -> reportAvailableBytes(call, result)
+            else -> result.notImplemented()
+        }
+    }
+
+    private fun resolveDirectory(result: MethodChannel.Result) {
+        val directory = File(context.noBackupFilesDir, "models")
+        if ((!directory.exists() && !directory.mkdirs()) || !directory.isDirectory) {
+            result.error(
+                "MODEL_STORAGE_DIRECTORY_FAILED",
+                "The no-backup model directory could not be created.",
+                null,
+            )
             return
         }
+        result.success(directory.absolutePath)
+    }
 
+    private fun reportAvailableBytes(call: MethodCall, result: MethodChannel.Result) {
         val directoryPath = call.argument<String>("directoryPath")
         if (directoryPath.isNullOrBlank()) {
             result.error(
