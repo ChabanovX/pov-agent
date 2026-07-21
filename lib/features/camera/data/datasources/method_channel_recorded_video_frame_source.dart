@@ -7,7 +7,7 @@ import 'package:pov_agent/shared/domain/app_result.dart';
 
 const _recordedVideoChannelName = 'pov_agent/recorded_video';
 
-/// A bundled-video decoder backed by the app-owned iOS platform channel.
+/// A bundled-video decoder backed by the app-owned platform channel.
 final class MethodChannelRecordedVideoFrameSource implements RecordedVideoFrameSource {
   /// Creates a source using the production recorded-video platform channel.
   factory MethodChannelRecordedVideoFrameSource({

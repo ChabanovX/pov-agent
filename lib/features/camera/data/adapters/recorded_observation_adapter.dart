@@ -158,7 +158,7 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
     _requestedEnabled = false;
     _stopReplay();
     // Invalidation rejects the result immediately; joining the captured task
-    // additionally guarantees that another Metal runtime is not torn down
+    // additionally guarantees that another native runtime is not torn down
     // while this detector still owns an inference command buffer.
     await _activeReplayTask;
     if (_closed) return _closedResult();

@@ -150,9 +150,9 @@ final class AppRuntime with WidgetsBindingObserver {
           assistantBloc.isClosed) {
         return;
       }
-      // Both runtimes can submit Metal work. Let the camera controller settle
-      // before freeing llama.cpp so background teardown never races a final
-      // camera inference command buffer.
+      // Both runtimes can submit native accelerator work. Let the camera
+      // controller settle before freeing llama.cpp so background teardown
+      // never races a final camera inference command buffer.
       assistantBloc.add(const AssistantSuspended());
     } on Object catch (error, stackTrace) {
       if (_phase == _AppRuntimePhase.closing || _phase == _AppRuntimePhase.closed) {

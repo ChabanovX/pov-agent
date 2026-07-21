@@ -8,9 +8,9 @@ Future<void> main(List<String> arguments) async {
     if (!input.config.buildCodeAssets) return;
 
     final code = input.config.code;
-    if (code.targetOS != OS.iOS && code.targetOS != OS.macOS) {
+    if (code.targetOS != OS.iOS && code.targetOS != OS.macOS && code.targetOS != OS.android) {
       throw UnsupportedError(
-        'The POV llama.cpp runtime supports Apple targets only.',
+        'The POV llama.cpp runtime supports iOS, macOS, and Android only.',
       );
     }
 
@@ -46,12 +46,9 @@ Future<void> main(List<String> arguments) async {
       '-DGGML_BACKEND_DL=OFF',
       '-DGGML_NATIVE=OFF',
       '-DGGML_OPENMP=OFF',
-      '-DGGML_ACCELERATE=ON',
       '-DGGML_BLAS=OFF',
-      '-DGGML_METAL=ON',
-      '-DGGML_METAL_EMBED_LIBRARY=ON',
-      '-DGGML_METAL_NDEBUG=ON',
-      ..._appleTargetArguments(code),
+      ..._backendArguments(code.targetOS),
+      ..._targetArguments(code),
     ];
 
     await _runChecked(
@@ -73,9 +70,13 @@ Future<void> main(List<String> arguments) async {
       operation: 'build llama.cpp',
     );
 
-    final dylib = Uri.file('${buildDirectory.path}/out/libpov_llama.dylib');
-    if (!File.fromUri(dylib).existsSync()) {
-      throw StateError('The llama.cpp build did not produce ${dylib.path}.');
+    final library = Uri.file(
+      '${buildDirectory.path}/out/${_libraryFilename(code.targetOS)}',
+    );
+    if (!File.fromUri(library).existsSync()) {
+      throw StateError(
+        'The llama.cpp build did not produce ${library.path}.',
+      );
     }
 
     output.assets.code.add(
@@ -83,7 +84,7 @@ Future<void> main(List<String> arguments) async {
         package: input.packageName,
         name: 'features/assistant/data/ffi/llama_bridge_bindings.dart',
         linkMode: DynamicLoadingBundled(),
-        file: dylib,
+        file: library,
       ),
     );
     output.dependencies.addAll([
@@ -130,6 +131,30 @@ Iterable<Uri> _llamaSourceDependencies(String llamaDirectory) sync* {
   yield* dependencies;
 }
 
+List<String> _backendArguments(OS targetOS) {
+  if (targetOS == OS.android) {
+    return const [
+      '-DGGML_ACCELERATE=OFF',
+      '-DGGML_LLAMAFILE=OFF',
+      '-DGGML_METAL=OFF',
+      '-DGGML_METAL_EMBED_LIBRARY=OFF',
+    ];
+  }
+  return const [
+    '-DGGML_ACCELERATE=ON',
+    '-DGGML_METAL=ON',
+    '-DGGML_METAL_EMBED_LIBRARY=ON',
+    '-DGGML_METAL_NDEBUG=ON',
+  ];
+}
+
+List<String> _targetArguments(CodeConfig code) {
+  if (code.targetOS == OS.android) {
+    return _androidTargetArguments(code);
+  }
+  return _appleTargetArguments(code);
+}
+
 List<String> _appleTargetArguments(CodeConfig code) {
   final architecture = switch (code.targetArchitecture) {
     Architecture.arm64 => 'arm64',
@@ -161,6 +186,76 @@ List<String> _appleTargetArguments(CodeConfig code) {
     '-DCMAKE_OSX_DEPLOYMENT_TARGET=${code.macOS.targetVersion}',
   ];
 }
+
+List<String> _androidTargetArguments(CodeConfig code) {
+  final ndkDirectory = _androidNdkDirectory();
+  final toolchain = File(
+    '${ndkDirectory.path}/build/cmake/android.toolchain.cmake',
+  );
+  return [
+    '-DCMAKE_TOOLCHAIN_FILE=${toolchain.path}',
+    '-DANDROID_ABI=${_androidAbi(code.targetArchitecture)}',
+    '-DANDROID_PLATFORM=android-${code.android.targetNdkApi}',
+    '-DANDROID_STL=c++_static',
+  ];
+}
+
+Directory _androidNdkDirectory() {
+  for (final variable in const [
+    'ANDROID_NDK',
+    'ANDROID_NDK_HOME',
+    'ANDROID_NDK_LATEST_HOME',
+    'ANDROID_NDK_ROOT',
+  ]) {
+    final path = Platform.environment[variable];
+    if (path != null && _isPinnedAndroidNdk(Directory(path))) {
+      return Directory(path);
+    }
+  }
+
+  for (final variable in const ['ANDROID_HOME', 'ANDROID_SDK_ROOT']) {
+    final sdkPath = Platform.environment[variable];
+    if (sdkPath != null) {
+      final pinnedNdk = Directory('$sdkPath/ndk/$_androidNdkVersion');
+      if (_isPinnedAndroidNdk(pinnedNdk)) return pinnedNdk;
+    }
+  }
+
+  throw StateError(
+    'Android NDK $_androidNdkVersion is required. Install that version under '
+    'ANDROID_HOME/ndk, ANDROID_SDK_ROOT/ndk, or point an ANDROID_NDK '
+    'environment variable at that exact revision.',
+  );
+}
+
+bool _isPinnedAndroidNdk(Directory directory) {
+  final toolchainExists = File(
+    '${directory.path}/build/cmake/android.toolchain.cmake',
+  ).existsSync();
+  final properties = File('${directory.path}/source.properties');
+  if (!toolchainExists || !properties.existsSync()) return false;
+  return properties.readAsLinesSync().any(
+    (line) => line.trim() == 'Pkg.Revision = $_androidNdkVersion',
+  );
+}
+
+String _androidAbi(Architecture architecture) {
+  return switch (architecture) {
+    Architecture.arm => 'armeabi-v7a',
+    Architecture.arm64 => 'arm64-v8a',
+    Architecture.ia32 => 'x86',
+    Architecture.x64 => 'x86_64',
+    final unsupported => throw UnsupportedError(
+      'Unsupported Android architecture: ${unsupported.name}.',
+    ),
+  };
+}
+
+String _libraryFilename(OS targetOS) {
+  return targetOS == OS.android ? 'libpov_llama.so' : 'libpov_llama.dylib';
+}
+
+const _androidNdkVersion = '28.2.13676358';
 
 Future<void> _runChecked(
   String executable,
