@@ -127,6 +127,22 @@ std::string load_failure_message(
   return message;
 }
 
+std::string no_gpu_buffer_message(
+    int32_t requested_gpu_layers,
+    const std::string& native_log) {
+  std::string message = "Metal offload verification failed: requested ";
+  message.append(std::to_string(requested_gpu_layers));
+  message.append(" GPU layers, but llama.cpp allocated no GPU model buffer");
+  if (!native_log.empty()) {
+    message.append(": ");
+    const std::size_t first_byte = native_log.size() > kMaxFailureLogBytes
+        ? native_log.size() - kMaxFailureLogBytes
+        : 0;
+    message.append(native_log.substr(first_byte));
+  }
+  return message;
+}
+
 void copy_string(const std::string& value, char* buffer, int32_t buffer_length) {
   if (buffer == nullptr || buffer_length <= 0) {
     return;
@@ -388,9 +404,17 @@ pov_llama_runtime* pov_llama_create_impl(
     }
     runtime->batch_tokens = std::min(batch_tokens, context_tokens);
 
+    const int32_t requested_gpu_layers = gpu_layers;
+    std::string backend_diagnostic;
+
 #if defined(TARGET_OS_SIMULATOR) && TARGET_OS_SIMULATOR
     // Simulator Metal does not model iPhone memory or command scheduling. Keep
     // its acceptance lane deterministic and reserve Metal validation for device.
+    if (gpu_layers > 0) {
+      backend_diagnostic = "Metal disabled by iOS Simulator policy; requested ";
+      backend_diagnostic.append(std::to_string(gpu_layers));
+      backend_diagnostic.append(" GPU layers");
+    }
     gpu_layers = 0;
 #elif defined(TARGET_OS_IOS) && TARGET_OS_IOS
     // This pinned Metal backend synchronizes with an API introduced in iOS 15.
@@ -400,6 +424,10 @@ pov_llama_runtime* pov_llama_create_impl(
       metal_runtime_available = true;
     }
     if (!metal_runtime_available) {
+      if (gpu_layers > 0) {
+        backend_diagnostic =
+            "Metal disabled because the runtime requires iOS 15 or newer";
+      }
       gpu_layers = 0;
     }
 #endif
@@ -416,10 +444,22 @@ pov_llama_runtime* pov_llama_create_impl(
         &failure_stage);
     if (loaded_with_requested_backend &&
         (!requested_gpu || runtime->uses_gpu)) {
+      copy_string(backend_diagnostic, error_buffer, error_buffer_length);
       return runtime;
     }
 
     if (requested_gpu) {
+      const std::string metal_log = native_log.snapshot();
+      if (loaded_with_requested_backend) {
+        backend_diagnostic =
+            no_gpu_buffer_message(requested_gpu_layers, metal_log);
+      } else {
+        backend_diagnostic = "Requested ";
+        backend_diagnostic.append(std::to_string(requested_gpu_layers));
+        backend_diagnostic.append(" GPU layers; ");
+        backend_diagnostic.append(
+            load_failure_message(true, failure_stage, metal_log));
+      }
       release_loaded_model(runtime);
       runtime->uses_gpu = false;
       failure_stage = "model load";
@@ -431,14 +471,19 @@ pov_llama_runtime* pov_llama_create_impl(
           thread_count,
           0,
           &failure_stage)) {
+        copy_string(backend_diagnostic, error_buffer, error_buffer_length);
         return runtime;
       }
     }
 
-    const std::string diagnostic = load_failure_message(
+    std::string diagnostic = load_failure_message(
         false,
         failure_stage,
         native_log.snapshot());
+    if (!backend_diagnostic.empty()) {
+      diagnostic.insert(0, "; ");
+      diagnostic.insert(0, backend_diagnostic);
+    }
     release_loaded_model(runtime);
     copy_string(diagnostic, error_buffer, error_buffer_length);
     delete runtime;

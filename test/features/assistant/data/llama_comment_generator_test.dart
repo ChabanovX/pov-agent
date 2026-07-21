@@ -66,14 +66,33 @@ void main() {
     worker.usesGpu = true;
 
     expect(generator.loadedModelUsesGpu, isNull);
+    expect(generator.loadedModelBackendDiagnostic, isNull);
     expect(generator.lastUnloadSucceeded, isNull);
     expect(await generator.loadModel(artifact), isA<AppSuccess<void>>());
     expect(generator.loadedModelUsesGpu, isTrue);
+    expect(generator.loadedModelBackendDiagnostic, isNull);
 
     await generator.unload();
 
     expect(generator.loadedModelUsesGpu, isNull);
+    expect(generator.loadedModelBackendDiagnostic, isNull);
     expect(generator.lastUnloadSucceeded, isTrue);
+  });
+
+  test('retains a CPU fallback diagnostic only while its model is loaded', () async {
+    worker.backendDiagnostic = 'Metal context creation failed; selected CPU fallback.';
+
+    expect(await generator.loadModel(artifact), isA<AppSuccess<void>>());
+    expect(generator.loadedModelUsesGpu, isFalse);
+    expect(
+      generator.loadedModelBackendDiagnostic,
+      'Metal context creation failed; selected CPU fallback.',
+    );
+
+    await generator.unload();
+
+    expect(generator.loadedModelUsesGpu, isNull);
+    expect(generator.loadedModelBackendDiagnostic, isNull);
   });
 
   test('records a propagated native cleanup failure for diagnostics', () async {
@@ -90,10 +109,12 @@ void main() {
   });
 
   test('normalizes native model load failures', () async {
-    worker.loadError = const LlamaWorkerException(
-      status: -2,
-      message: 'bad gguf',
-    );
+    worker
+      ..backendDiagnostic = 'stale fallback'
+      ..loadError = const LlamaWorkerException(
+        status: -2,
+        message: 'bad gguf',
+      );
 
     final result = await generator.loadModel(artifact);
 
@@ -110,6 +131,7 @@ void main() {
       ),
     );
     expect(generator.loadedModelUsesGpu, isNull);
+    expect(generator.loadedModelBackendDiagnostic, isNull);
   });
 
   test('recreates the worker after its initial spawn fails', () async {
@@ -545,6 +567,7 @@ final class _FakeLlamaWorker implements LlamaInferenceWorker {
   String? generatedPrompt;
   LlamaSamplingConfiguration? sampling;
   bool usesGpu = false;
+  String? backendDiagnostic;
 
   @override
   Future<LlamaWorkerLoadResult> load(
@@ -556,7 +579,10 @@ final class _FakeLlamaWorker implements LlamaInferenceWorker {
     runtimeConfiguration = configuration;
     final error = loadError;
     if (error != null) throw error;
-    return LlamaWorkerLoadResult(usesGpu: usesGpu);
+    return LlamaWorkerLoadResult(
+      usesGpu: usesGpu,
+      backendDiagnostic: backendDiagnostic,
+    );
   }
 
   @override

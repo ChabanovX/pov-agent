@@ -106,6 +106,7 @@ final class LlamaNativeRuntime {
   LlamaNativeRuntime._(
     this._runtime,
     this.usesGpu,
+    this.backendDiagnostic,
     this._tokenBuffer,
     this._tokenLength,
     this._errorBuffer,
@@ -138,9 +139,14 @@ final class LlamaNativeRuntime {
           message.isEmpty ? 'The native runtime could not load the model.' : message,
         );
       }
+      final backendDiagnostic = _decodeNullTerminated(
+        errorBuffer,
+        _errorBufferLength,
+      );
       return LlamaNativeRuntime._(
         runtime,
         LlamaBridgeBindings.usesGpu(runtime),
+        backendDiagnostic.isEmpty ? null : backendDiagnostic,
         tokenBuffer,
         tokenLength,
         errorBuffer,
@@ -164,6 +170,12 @@ final class LlamaNativeRuntime {
 
   /// Whether the loaded model is currently offloaded to Metal.
   final bool usesGpu;
+
+  /// Native explanation when the requested backend was changed or rejected.
+  ///
+  /// A non-null value accompanies a usable runtime, for example after the
+  /// bridge deliberately falls back from Metal to CPU.
+  final String? backendDiagnostic;
 
   /// Starts a fresh generation after clearing previous native state.
   void begin(String prompt, LlamaSamplingConfiguration sampling) {

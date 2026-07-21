@@ -51,6 +51,7 @@ final class LlamaCommentGenerator implements CommentGenerator {
   VerifiedModelArtifact? _loadingArtifact;
   VerifiedModelArtifact? _loadedArtifact;
   bool? _loadedModelUsesGpu;
+  String? _loadedModelBackendDiagnostic;
   bool? _lastUnloadSucceeded;
   _LlamaGenerationHandle? _activeGeneration;
   Future<void>? _closeTask;
@@ -62,6 +63,12 @@ final class LlamaCommentGenerator implements CommentGenerator {
   /// This diagnostic is `null` while no model is loaded. Physical-device
   /// acceptance tests use it to reject CPU fallback on supported iOS devices.
   bool? get loadedModelUsesGpu => _loadedModelUsesGpu;
+
+  /// Native explanation when loading selected a different execution backend.
+  ///
+  /// This stays null for an unmodified successful load and is cleared with the
+  /// loaded model. It is diagnostic context rather than presentation copy.
+  String? get loadedModelBackendDiagnostic => _loadedModelBackendDiagnostic;
 
   /// Whether the latest requested model unload completed without native error.
   ///
@@ -115,6 +122,7 @@ final class LlamaCommentGenerator implements CommentGenerator {
       await _activeGeneration?.cancel();
       _activeGeneration = null;
       _loadedModelUsesGpu = null;
+      _loadedModelBackendDiagnostic = null;
       _lastUnloadSucceeded = null;
       worker = await _obtainWorker();
       final loadResult = await worker.load(
@@ -132,10 +140,12 @@ final class LlamaCommentGenerator implements CommentGenerator {
       }
       _loadedArtifact = artifact;
       _loadedModelUsesGpu = loadResult.usesGpu;
+      _loadedModelBackendDiagnostic = loadResult.backendDiagnostic;
       return const AppSuccess<void>(null);
     } on Object catch (error, stackTrace) {
       _loadedArtifact = null;
       _loadedModelUsesGpu = null;
+      _loadedModelBackendDiagnostic = null;
       if (worker != null) await _retireWorkerAfterLoadFailure(worker);
       return AppError<void>(
         _nativeFailure(
@@ -262,10 +272,12 @@ final class LlamaCommentGenerator implements CommentGenerator {
       if (workerTask != null) await (await workerTask).unload();
       _loadedArtifact = null;
       _loadedModelUsesGpu = null;
+      _loadedModelBackendDiagnostic = null;
       _lastUnloadSucceeded = true;
     } on Object catch (error, stackTrace) {
       _loadedArtifact = null;
       _loadedModelUsesGpu = null;
+      _loadedModelBackendDiagnostic = null;
       _lastUnloadSucceeded = false;
       _logger.e(
         'Failed to unload the native model.',
@@ -313,6 +325,7 @@ final class LlamaCommentGenerator implements CommentGenerator {
     } finally {
       _loadedArtifact = null;
       _loadedModelUsesGpu = null;
+      _loadedModelBackendDiagnostic = null;
     }
   }
 }
