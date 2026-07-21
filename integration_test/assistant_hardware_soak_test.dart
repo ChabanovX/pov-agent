@@ -121,7 +121,7 @@ void main() {
         final configuration = AssistantBuildConfiguration.fromEnvironment();
         final promptBuilder = QwenPromptBuilder(
           systemPrompt: configuration.systemPrompt,
-          manualOptions: configuration.manualOptions,
+          dialogueOptions: configuration.dialogueOptions,
           shortCommentOptions: configuration.commentOptions,
         );
 

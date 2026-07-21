@@ -5,6 +5,7 @@
 abstract final class AssistantAcceptanceDurations {
   static const modelPreparation = Duration(minutes: 15);
   static const modelReload = Duration(minutes: 5);
+  static const Duration liveQuestion = modelReload;
   static const runtimeStart = Duration(minutes: 5);
   static const generation = Duration(minutes: 10);
   static const shortComment = Duration(seconds: 10);

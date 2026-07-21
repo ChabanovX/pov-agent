@@ -206,16 +206,25 @@ void main() {
         ..enqueueHandle(firstGeneration)
         ..enqueueHandle(mutedGeneration);
       final bloc = ObserverBloc(
-        sceneSource: scene,
-        modelStore: store,
-        commentGenerator: generator,
-        speechSynthesizer: synthesizer,
-        requestBuilder: ObserverRequestBuilder(
-          qwenPromptBuilder: QwenPromptBuilder(
-            systemPrompt: 'Describe the stable scene briefly.',
-            manualOptions: _integrationOptions,
-            shortCommentOptions: _integrationOptions,
+        generation: ObserverGenerationDependencies(
+          sceneSource: scene,
+          qwenModelStore: store,
+          commentGenerator: generator,
+          requestBuilder: ObserverRequestBuilder(
+            qwenPromptBuilder: QwenPromptBuilder(
+              systemPrompt: 'Describe the stable scene briefly.',
+              dialogueOptions: _integrationOptions,
+              shortCommentOptions: _integrationOptions,
+            ),
           ),
+        ),
+        voice: ObserverVoiceDependencies(
+          asrModelStore: FakeAsrModelStore(),
+          microphonePermissionGateway: FakeMicrophonePermissionGateway(),
+          speechRecognizer: FakeSpeechRecognizer(),
+          speechSynthesizer: synthesizer,
+          wakePhrase: 'assistant',
+          questionDeadline: testVoiceQuestionDeadline,
         ),
         periodicTimerFactory: (_, onTick) {
           fireTick = onTick;
