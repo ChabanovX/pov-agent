@@ -15,6 +15,47 @@ application-owned speech transport. Voice availability and any engine-level
 network behavior remain device capabilities; the adapter validates an
 installed English locale before speaking.
 
+## sherpa-onnx
+
+- Upstream: <https://github.com/k2-fsa/sherpa-onnx/tree/v1.13.4>
+- Dart package: [`sherpa_onnx` 1.13.4](https://pub.dev/packages/sherpa_onnx/versions/1.13.4)
+- Pub package SHA-256: `889c03cf7a8788795e3a6d35bf9f20b66d1862ea7a73a1b6aaf6e450715c870a`
+- License: Apache-2.0, retained in the package and
+  [pinned upstream tag](https://github.com/k2-fsa/sherpa-onnx/blob/v1.13.4/LICENSE)
+
+The application uses the package's platform FFI libraries for offline
+VITS/Piper synthesis. Native model creation, generation, and destruction stay
+on one worker isolate; the runtime is freed before the generated PCM is played.
+The Apache-2.0 license recorded here applies to sherpa-onnx itself, not
+automatically to every model or phonemizer component used with it.
+
+## Piper LJSpeech medium-int8 voice bundle
+
+- Archive:
+  [`vits-piper-en_US-ljspeech-medium-int8.tar.bz2`](https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-ljspeech-medium-int8.tar.bz2)
+- Exact archive size: `21090429` bytes
+- Archive SHA-256: `24dc3bd77dd48c291e52c297878d3437c9492f245d823d7f6a06c4bbb67f4b6b`
+- Exact expanded tar size: `37662720` bytes
+- Extracted regular-file size: `37347875` bytes across `359` files
+- Extracted tree SHA-256: `a38256a8fada764a1e7b450c5f307b7b5de159e137af1a6aae0b2326f355bc3b`
+- Voice provenance:
+  [Piper `en_US-ljspeech-medium` model card](https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/ljspeech/medium/MODEL_CARD)
+- Voice/dataset license record: public domain
+
+The expanded tar is staged beside the cache and removed after every extraction
+attempt; its exact size is included in the preflight free-space calculation.
+The extracted-tree digest hashes sorted
+`<file-sha256>  <relative-path>\n` records. Runtime acquisition verifies both
+the compressed archive and this complete extracted tree before atomically
+publishing the cache. The values are mirrored in [`.env.example`](.env.example).
+
+The bundle also contains `espeak-ng-data`, which sherpa-onnx uses to phonemize
+Piper input. [eSpeak NG is GPL-3.0-or-later](https://github.com/espeak-ng/espeak-ng#license-information).
+That obligation is separate from the public-domain voice provenance and from
+sherpa-onnx's Apache-2.0 license. Distribution of an application binary or
+model bundle containing the eSpeak NG runtime or data therefore requires a
+specific GPL compliance review.
+
 ## llama.cpp
 
 - Upstream: <https://github.com/ggml-org/llama.cpp>

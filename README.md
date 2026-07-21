@@ -6,8 +6,10 @@ as context.
 
 > **Project status:** early prototype. Live and recorded camera input,
 > on-device YOLO detection, stable scene tracking, and manual conversation with
-> a local Qwen model work today. Automatic scene observation and system-spoken
-> observer comments also work; speech recognition remains on the roadmap.
+> a local Qwen model work today. Automatic scene observation and spoken
+> observer comments also work. Milestone 6 now selects local Piper as the
+> primary English speech runtime. Its iOS Simulator, Android Emulator, and
+> iPhone 11 end-to-end gates pass. Speech recognition remains on the roadmap.
 
 <p align="center">
   <img
@@ -49,13 +51,23 @@ be persisted between launches.
 - A foreground automatic observer that samples the latest stable scene every
   10 seconds by default, streams local Qwen comments, retains session-only
   context, and supports 10/30/60/120/300-second cadences.
-- Foreground system speech for completed automatic comments, with mute, stop,
-  replay, lifecycle cancellation, and stale-utterance suppression.
+- Foreground speech for completed automatic comments, with mute, stop, replay,
+  lifecycle cancellation, and stale-utterance suppression. Composition now
+  selects an offline Piper voice first and retains system TTS only as a
+  technical fallback before local playback starts.
 - Unit, widget, and repository-boundary tests enforced by the checked-in
   Flutter Agentic Harness, plus explicit device integration lanes.
 
-The repository does not yet capture microphone audio. System speech is limited
-to completed automatic observer comments; manual answers are text-only.
+The Piper path uses the pinned `vits-piper-en_US-ljspeech-medium-int8` voice
+through `sherpa_onnx`. The roughly 21 MB archive expands to a temporary 38 MB
+tar and a 37 MB extracted bundle. All three exact sizes participate in storage
+preflight, and the archive and final tree are verified before publication to
+the local cache. Synthesis runs away from the UI isolate, releases the native
+TTS runtime before playback, and plays the generated PCM from memory rather
+than persisting utterance audio.
+
+The repository does not yet capture microphone audio. Speech is limited to
+completed automatic observer comments; manual answers are text-only.
 
 ## Target interaction
 
@@ -67,7 +79,7 @@ flowchart LR
     Scene --> LLM["Automatic scene prompt<br/>working"]
     UserText --> LLM["Local Qwen language model<br/>working"]
     ASR -.-> LLM
-    LLM --> TTS["System text-to-speech<br/>working"]
+    LLM --> TTS["Local Piper speech<br/>device-verified"]
     TTS --> Speaker
 ```
 
@@ -81,7 +93,7 @@ planned local agent loop.
 - [x] Local Qwen language model and manual text conversation.
 - [x] Periodic scene-aware observations.
 - [x] System text-to-speech for automatic observer comments.
-- [ ] Local Piper speech independent of an installed system voice.
+- [x] Local Piper speech independent of an installed system voice.
 - [ ] Wake phrase and local streaming speech recognition.
 - [ ] End-to-end hands-free question and answer flow.
 - [ ] Long-running device, memory, and thermal validation.
@@ -128,9 +140,10 @@ xcrun --find metal
 xcrun --find metallib
 ```
 
-All Qwen artifact, context, sampling, decoding, and preferred system-speech
-locale policy is compile-time configuration. Run the app with the checked
-example values (or a reviewed copy):
+All Qwen and Piper artifact, integrity, runtime, sampling/decoding, and
+preferred system-speech locale policy is compile-time configuration in
+[`.env.example`](.env.example). Run the app with the checked example values (or
+a reviewed copy):
 
 ```sh
 flutter run -d <device-id> --dart-define-from-file=.env
@@ -142,6 +155,15 @@ network access and enough free space for the download plus the configured
 reserve. The app writes a staging file, verifies the exact byte length and
 SHA-256, and only then makes the cache loadable. Later launches can use the
 verified cache without network access.
+
+Piper is acquired lazily when an automatic comment is first spoken. Its pinned
+archive is about 21 MB, its temporary expanded tar is about 38 MB, and its
+extracted cache is about 37 MB. The store checks the archive length and SHA-256,
+owns and removes the temporary tar, then verifies the complete extracted file
+tree before publishing it atomically. A verified cache supports later offline
+speech and replay without downloading the model again. `.env` also selects the
+provider, thread count, speaker, VITS noise and length scales, speaking speed,
+silence scale, sentence limit, and native debug policy at compile time.
 
 The iOS Simulator uses CPU inference intentionally. On iOS 15 and newer, a
 physical iPhone requests Metal offload and falls back to CPU if native
@@ -193,6 +215,11 @@ Flutter plugins and native DTOs stop at the data or app-composition boundary.
 Presentation consumes application contracts and domain values rather than
 calling camera or inference plugins directly. The complete contract is in the
 [architecture overview](tool/flutter_agentic_harness/docs/architecture/overview.md).
+
+Piper follows the same boundary: the shared typed `ModelStore` contract owns
+bundle readiness, the data layer owns sherpa-onnx synthesis and in-memory audio
+playback, and app composition chooses Piper plus the narrowly scoped system
+fallback behind the existing `SpeechSynthesizer` port.
 
 ## Verification
 
@@ -299,7 +326,9 @@ per-minute resident-memory samples and final growth limits.
 - The application does not intentionally save camera frames, recorded audio,
   transcripts, or conversation history.
 - Camera and model runtimes are scoped to foreground use. The verified GGUF is
-  cached, while prompts, generated answers, and reasoning remain session-only.
+  cached alongside the verified Piper archive and extracted voice bundle,
+  while prompts, generated answers, reasoning, and synthesized utterance audio
+  remain session-only.
 - The current codebase contains no microphone or cloud-LLM transport.
 - The pinned Core ML and LiteRT YOLO models are bundled for deterministic iOS
   and Android startup; the plugin retains its download-and-cache fallback for
@@ -318,6 +347,12 @@ The bundled YOLO model and recorded fixture retain their upstream terms:
   distributed under Apache-2.0.
 - Pinned llama.cpp and Qwen model provenance, checksums, build flags, and
   license details are recorded in [THIRD_PARTY.md](THIRD_PARTY.md).
+- The selected
+  [LJSpeech Piper voice model](https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/ljspeech/medium/MODEL_CARD)
+  records its dataset as public domain. Its bundle also contains eSpeak NG data
+  for phonemization; [eSpeak NG is GPL-3.0-or-later](https://github.com/espeak-ng/espeak-ng#license-information),
+  so binary distribution needs a separate GPL compliance review rather than
+  inheriting the voice model's public-domain status.
 
 ## License
 
