@@ -300,30 +300,47 @@ Milestone 7.
 проходит на iOS Simulator и iPhone 11; отдельный iPhone 11 smoke подтверждает
 живой микрофон, wake phrase, streaming ASR, scene-aware Qwen и Piper playback.
 
-## 8. Стабилизация iOS и Android MVP
+## 8. Product UI и цельный iOS user flow
 
-Подготовить полный стек к длительной работе на реальном устройстве.
+Полностью заменить прототипный UI на канонический тёмный iOS-дизайн и
+связать уже готовые camera, observer, Qwen, Piper и ASR runtime в один
+пользовательский поток. Канонические спецификации хранятся в
+[`docs/DESIGN.md`](docs/DESIGN.md) и [`docs/USER_FLOW.md`](docs/USER_FLOW.md).
 
 ### Реализация
 
-- Объединить загрузку YOLO, Qwen, Piper и ASR в setup-экран.
-- Перед полной установкой моделей требовать минимум 1.5 ГБ свободного места.
-- При memory warning останавливать сессию, освобождать модели и предлагать
-  restart.
-- При thermal state `serious` отключать автоматические комментарии, сохраняя
-  ручной запрос.
-- При thermal state `critical` останавливать всю AI-сессию.
-- Добавить русскую локализацию интерфейса.
-- Зафиксировать AGPL-3.0 для YOLO как допустимое ограничение открытого
-  pet-проекта.
+- Добавить единые semantic colors, typography, spacing, radius и iOS control
+  tokens и применить их ко всем новым экранам.
+- Использовать переданный POV Agent mark как iOS app icon и чёрный
+  launch surface.
+- Добавить непропускаемый setup gate для YOLO, Qwen, Piper и ASR. До
+  загрузки проверять 1.5 GB storage headroom, скачивать Qwen первым,
+  верифицировать каждый artifact и не запускать camera/audio/AI runtime.
+- Оставить ровно две shell destinations: camera-first `Assistant` и inset-grouped
+  `Settings`.
+- Запрашивать camera и microphone permission только из контекстного
+  rationale. Отказ не должен блокировать ручной text prompt.
+- Показать current status, stable-scene chips, diagnostics, Assistant response,
+  speech controls и composer поверх camera-first surface.
+- Держать observation, audio/voice preferences и shell destination только в
+  текущей сессии; на диске остаются только верифицированные модели и
+  минимальные transfer/integrity metadata.
+- Использовать единственную MVP локаль `en-US`.
 
 ### Готово, когда
 
-- Пройден 30-минутный soak-тест: камера, YOLO, периодические комментарии,
-  TTS и голосовые вопросы.
-- Проверены background/foreground, входящий звонок, audio interruption,
-  отказ в разрешениях, потеря сети и offline restart.
-- Нет утечек camera/audio sessions и неконтролируемого роста RAM.
+- Setup, Assistant и Settings имеют screenshot/golden regression coverage на iPhone
+  viewport.
+- Весь fresh-install путь `setup → permission rationale → Assistant → Settings`
+  пройден end-to-end на iOS Simulator.
+- Прототипные Camera/Assistant tabs и developer controls недоступны в
+  production shell.
+- Переход между Assistant и Settings последовательно освобождает и
+  восстанавливает foreground camera/audio/model resources.
+
+Android visual/E2E acceptance и hardware iPhone acceptance не входят в Milestone 8.
+Они выполняются в post-MVP цикле вместе с soak, memory-warning,
+thermal-state и interruption stabilization.
 
 ## Архитектурные контракты
 
