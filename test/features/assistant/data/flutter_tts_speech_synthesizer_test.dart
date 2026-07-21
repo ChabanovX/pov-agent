@@ -26,6 +26,8 @@ void main() {
     Duration commandTimeout = const Duration(milliseconds: 100),
     Duration utteranceTimeout = const Duration(seconds: 1),
     Duration cancellationDrainTimeout = Duration.zero,
+    Duration iosSessionReleaseRetryDelay = Duration.zero,
+    int iosSessionReleaseAttempts = 4,
   }) {
     return synthesizer = FlutterTtsSpeechSynthesizer(
       preferredLanguage: preferredLanguage,
@@ -34,6 +36,8 @@ void main() {
       commandTimeout: commandTimeout,
       utteranceTimeout: utteranceTimeout,
       cancellationDrainTimeout: cancellationDrainTimeout,
+      iosSessionReleaseRetryDelay: iosSessionReleaseRetryDelay,
+      iosSessionReleaseAttempts: iosSessionReleaseAttempts,
     );
   }
 
@@ -105,6 +109,178 @@ void main() {
 
     expect(await speech, isA<AppSuccess<void>>());
     expect(flutterTts.sharedSessionValues, [true, false]);
+  });
+
+  test('retries a transient iOS audio-session release rejection', () async {
+    flutterTts.sharedSessionResults.addAll([1, 0, 1]);
+    final speech = createSynthesizer(
+      targetPlatform: TargetPlatform.iOS,
+    ).speak('The physical device finishes releasing speech output.');
+
+    await _waitFor(
+      () => flutterTts.spokenTexts.isNotEmpty,
+      reason: 'iOS speech command was not dispatched',
+    );
+    flutterTts
+      ..emitStart()
+      ..emitCompletion();
+
+    expect(await speech, isA<AppSuccess<void>>());
+    expect(flutterTts.sharedSessionValues, [true, false, false]);
+  });
+
+  test('terminal callback cancels watchdog while iOS release is pending', () async {
+    final release = Completer<dynamic>();
+    flutterTts.sharedSessionResults.addAll([1, release.future]);
+    final speech = createSynthesizer(
+      targetPlatform: TargetPlatform.iOS,
+      utteranceTimeout: const Duration(milliseconds: 20),
+    ).speak('The terminal callback arrived before release settled.');
+
+    await _waitFor(
+      () => flutterTts.spokenTexts.isNotEmpty,
+      reason: 'iOS speech command was not dispatched',
+    );
+    flutterTts
+      ..emitStart()
+      ..emitCompletion();
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+
+    expect(flutterTts.stopCalls, 0);
+    release.complete(1);
+    expect(await speech, isA<AppSuccess<void>>());
+  });
+
+  test('close joins an in-flight iOS release retry', () async {
+    final retryRelease = Completer<dynamic>();
+    flutterTts.sharedSessionResults.addAll([1, 0, retryRelease.future]);
+    final adapter = createSynthesizer(
+      targetPlatform: TargetPlatform.iOS,
+    );
+    final speech = adapter.speak('Close waits for the shared release.');
+
+    await _waitFor(
+      () => flutterTts.spokenTexts.isNotEmpty,
+      reason: 'iOS speech command was not dispatched',
+    );
+    flutterTts
+      ..emitStart()
+      ..emitCompletion();
+    await _waitFor(
+      () => flutterTts.sharedSessionValues.length == 3,
+      reason: 'iOS release retry did not start',
+    );
+
+    final close = adapter.close();
+    await _flushEventQueue();
+    expect(flutterTts.sharedSessionValues, [true, false, false]);
+    expect(flutterTts.startHandlerRegistrations, 1);
+
+    retryRelease.complete(1);
+    expect(await speech, isA<AppSuccess<void>>());
+    expect(await close, isA<AppSuccess<void>>());
+    expect(flutterTts.sharedSessionValues, [true, false, false]);
+    expect(flutterTts.startHandlerRegistrations, 2);
+  });
+
+  test('bounds repeated iOS audio-session release rejection', () async {
+    flutterTts.sharedSessionResults.addAll([1, 0, 0]);
+    final speech = createSynthesizer(
+      targetPlatform: TargetPlatform.iOS,
+      iosSessionReleaseAttempts: 2,
+    ).speak('The audio session cannot be released.');
+
+    await _waitFor(
+      () => flutterTts.spokenTexts.isNotEmpty,
+      reason: 'iOS speech command was not dispatched',
+    );
+    flutterTts
+      ..emitStart()
+      ..emitCompletion();
+
+    expect(
+      await speech,
+      _failureWithCode('system_speech_audio_session_release_failed'),
+    );
+    expect(flutterTts.sharedSessionValues, [true, false, false]);
+
+    flutterTts.sharedSessionResults.add(1);
+  });
+
+  test('does not retry an exceptional iOS audio-session release', () async {
+    flutterTts.sharedSessionResults.add(1);
+    flutterTts.sharedSessionError = StateError('native channel unavailable');
+    final speech = createSynthesizer(
+      targetPlatform: TargetPlatform.iOS,
+    ).speak('The native release command throws.');
+
+    await _waitFor(
+      () => flutterTts.spokenTexts.isNotEmpty,
+      reason: 'iOS speech command was not dispatched',
+    );
+    flutterTts
+      ..emitStart()
+      ..emitCompletion();
+
+    expect(
+      await speech,
+      _failureWithCode('system_speech_audio_session_release_failed'),
+    );
+    expect(flutterTts.sharedSessionValues, [true, false]);
+
+    flutterTts.sharedSessionResults.add(1);
+  });
+
+  test('explicit stop bounds the total iOS release attempts', () async {
+    flutterTts.sharedSessionResults.addAll([1, 0, 0]);
+    final adapter = createSynthesizer(
+      targetPlatform: TargetPlatform.iOS,
+      iosSessionReleaseAttempts: 2,
+    );
+    final speech = adapter.speak('Stop performs one bounded release operation.');
+
+    await _waitFor(
+      () => flutterTts.spokenTexts.isNotEmpty,
+      reason: 'iOS speech command was not dispatched',
+    );
+    flutterTts.emitStart();
+
+    expect(await adapter.stop(), _failureWithCode('system_speech_audio_session_release_failed'));
+    expect(await speech, isA<AppSuccess<void>>());
+    expect(flutterTts.sharedSessionValues, [true, false, false]);
+
+    flutterTts.sharedSessionResults.add(1);
+  });
+
+  test('failed iOS release ownership remains retriable during close', () async {
+    flutterTts.sharedSessionResults.addAll([1, 0, 0, 0, 0, 1]);
+    final adapter = createSynthesizer(
+      targetPlatform: TargetPlatform.iOS,
+      iosSessionReleaseAttempts: 2,
+    );
+    final speech = adapter.speak('Release ownership survives rejection.');
+
+    await _waitFor(
+      () => flutterTts.spokenTexts.isNotEmpty,
+      reason: 'iOS speech command was not dispatched',
+    );
+    flutterTts
+      ..emitStart()
+      ..emitCompletion();
+
+    expect(
+      await speech,
+      _failureWithCode('system_speech_audio_session_release_failed'),
+    );
+    expect(
+      await adapter.close(),
+      _failureWithCode('system_speech_audio_session_release_failed'),
+    );
+    expect(flutterTts.startHandlerRegistrations, 1);
+
+    expect(await adapter.close(), isA<AppSuccess<void>>());
+    expect(flutterTts.sharedSessionValues, [true, false, false, false, false, false]);
+    expect(flutterTts.startHandlerRegistrations, 2);
   });
 
   test('timed-out iOS activation is balanced before failure settles', () async {
@@ -443,6 +619,7 @@ final class _FakeFlutterTts extends FlutterTts {
   final List<String> spokenTexts = <String>[];
   final List<bool> speechFocusValues = <bool>[];
   final List<bool> sharedSessionValues = <bool>[];
+  final List<Object?> sharedSessionResults = <Object?>[];
   final List<bool> autoStopValues = <bool>[];
 
   IosTextToSpeechAudioCategory? iosCategory;
@@ -454,6 +631,7 @@ final class _FakeFlutterTts extends FlutterTts {
   Object? speakError;
   Object? speakResult = 1;
   Object? stopResult = 1;
+  Object? sharedSessionError;
   int stopCalls = 0;
   int startHandlerRegistrations = 0;
 
@@ -505,7 +683,13 @@ final class _FakeFlutterTts extends FlutterTts {
     if (sharedSession && activationGate != null) {
       return activationGate!.future;
     }
-    return Future<dynamic>.value(1);
+    if (!sharedSession && sharedSessionError != null) {
+      final error = sharedSessionError;
+      sharedSessionError = null;
+      return Future<dynamic>.error(error!);
+    }
+    final result = sharedSessionResults.isEmpty ? 1 : sharedSessionResults.removeAt(0);
+    return result is Future<dynamic> ? result : Future<dynamic>.value(result);
   }
 
   @override

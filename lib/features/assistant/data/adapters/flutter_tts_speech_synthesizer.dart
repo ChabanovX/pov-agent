@@ -23,7 +23,17 @@ final class FlutterTtsSpeechSynthesizer implements SpeechSynthesizer {
     Duration commandTimeout = const Duration(seconds: 10),
     Duration utteranceTimeout = const Duration(seconds: 30),
     Duration cancellationDrainTimeout = const Duration(seconds: 1),
+    Duration iosSessionReleaseRetryDelay = const Duration(milliseconds: 50),
+    int iosSessionReleaseAttempts = 4,
   }) {
+    assert(
+      !iosSessionReleaseRetryDelay.isNegative,
+      'The iOS session-release retry delay cannot be negative.',
+    );
+    assert(
+      iosSessionReleaseAttempts > 0,
+      'The iOS session-release attempt count must be positive.',
+    );
     return FlutterTtsSpeechSynthesizer._(
       preferredLanguage: preferredLanguage.trim(),
       tts: flutterTts ?? FlutterTts(),
@@ -31,6 +41,8 @@ final class FlutterTtsSpeechSynthesizer implements SpeechSynthesizer {
       commandTimeout: commandTimeout,
       utteranceTimeout: utteranceTimeout,
       cancellationDrainTimeout: cancellationDrainTimeout,
+      iosSessionReleaseRetryDelay: iosSessionReleaseRetryDelay,
+      iosSessionReleaseAttempts: iosSessionReleaseAttempts,
     ).._registerNativeHandlers();
   }
 
@@ -41,6 +53,8 @@ final class FlutterTtsSpeechSynthesizer implements SpeechSynthesizer {
     required this._commandTimeout,
     required this._utteranceTimeout,
     required this._cancellationDrainTimeout,
+    required this._iosSessionReleaseRetryDelay,
+    required this._iosSessionReleaseAttempts,
   });
 
   static final AppLogger _logger = AppLogger(
@@ -53,12 +67,15 @@ final class FlutterTtsSpeechSynthesizer implements SpeechSynthesizer {
   final Duration _commandTimeout;
   final Duration _utteranceTimeout;
   final Duration _cancellationDrainTimeout;
+  final Duration _iosSessionReleaseRetryDelay;
+  final int _iosSessionReleaseAttempts;
 
   _SpeechOperation? _active;
   Future<AppResult<void>>? _configurationTask;
   Future<void>? _speechStartTask;
   Future<AppResult<void>>? _stopTask;
   Future<AppResult<void>>? _closeTask;
+  Future<AppResult<void>>? _iosSessionReleaseTask;
   Completer<void>? _expectedCancellation;
   String? _resolvedLanguage;
   var _engineMayBeSpeaking = false;
@@ -309,8 +326,6 @@ final class FlutterTtsSpeechSynthesizer implements SpeechSynthesizer {
       }
     }
 
-    var deactivation = await _deactivateIosSession();
-
     if (expectedCancellation != null && !expectedCancellation.isCompleted) {
       await Future.any<void>([
         expectedCancellation.future,
@@ -328,7 +343,7 @@ final class FlutterTtsSpeechSynthesizer implements SpeechSynthesizer {
     }
 
     if (speechStartTask != null) await speechStartTask;
-    if (_iosSessionActive) deactivation = await _deactivateIosSession();
+    final deactivation = await _deactivateIosSession();
     if (deactivation case AppError<void>(:final failure)) {
       deactivationFailure = failure;
     }
@@ -336,15 +351,52 @@ final class FlutterTtsSpeechSynthesizer implements SpeechSynthesizer {
     return failure == null ? const AppSuccess<void>(null) : AppError<void>(failure);
   }
 
-  Future<AppResult<void>> _deactivateIosSession() async {
-    if (_targetPlatform != TargetPlatform.iOS || !_iosSessionActive) {
-      return const AppSuccess<void>(null);
+  Future<AppResult<void>> _deactivateIosSession() {
+    if (_targetPlatform != TargetPlatform.iOS) {
+      return Future.value(const AppSuccess<void>(null));
     }
-    final result = await _runNativeCommand(
-      () => _tts.setSharedInstance(false),
-      failureCode: 'system_speech_audio_session_release_failed',
+
+    final existing = _iosSessionReleaseTask;
+    if (existing != null) return existing;
+    if (!_iosSessionActive) {
+      return Future.value(const AppSuccess<void>(null));
+    }
+
+    late final Future<AppResult<void>> task;
+    task = _deactivateIosSessionWithRetry().whenComplete(() {
+      if (identical(_iosSessionReleaseTask, task)) {
+        _iosSessionReleaseTask = null;
+      }
+    });
+    _iosSessionReleaseTask = task;
+    return task;
+  }
+
+  Future<AppResult<void>> _deactivateIosSessionWithRetry() async {
+    AppResult<void> result = const AppError(
+      DeviceUnavailableFailure(
+        code: 'system_speech_audio_session_release_failed',
+      ),
     );
-    if (result is AppSuccess<void>) _iosSessionActive = false;
+    for (var attempt = 0; attempt < _iosSessionReleaseAttempts; attempt += 1) {
+      result = await _runNativeCommand(
+        () => _tts.setSharedInstance(false),
+        failureCode: 'system_speech_audio_session_release_failed',
+      );
+      if (result is AppSuccess<void>) {
+        _iosSessionActive = false;
+        return result;
+      }
+      if (result case AppError<void>(:final failure) when failure.cause != null) {
+        return result;
+      }
+      if (attempt + 1 < _iosSessionReleaseAttempts) {
+        // A physical iPhone can report AVAudioSession as busy briefly after
+        // AVSpeechSynthesizer's terminal callback. The simulator does not
+        // expose that hand-off window, so retry after native output unwinds.
+        await Future<void>.delayed(_iosSessionReleaseRetryDelay);
+      }
+    }
     return result;
   }
 
@@ -480,6 +532,8 @@ final class FlutterTtsSpeechSynthesizer implements SpeechSynthesizer {
     AppResult<void> result,
   ) async {
     if (!identical(_active, operation)) return;
+    operation.timeout?.cancel();
+    operation.timeout = null;
     _engineMayBeSpeaking = false;
     final deactivation = await _deactivateIosSession();
     if (!identical(_active, operation)) return;
