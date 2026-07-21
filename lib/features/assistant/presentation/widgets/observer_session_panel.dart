@@ -14,6 +14,9 @@ final class ObserverSessionPanel extends StatelessWidget {
     required this.onIntervalSelected,
     required this.onStart,
     required this.onStop,
+    required this.onSpeechMutedChanged,
+    required this.onCommentReplay,
+    required this.onSpeechStop,
     super.key,
   });
 
@@ -28,6 +31,15 @@ final class ObserverSessionPanel extends StatelessWidget {
 
   /// Disables automatic observation and cancels its active generation.
   final VoidCallback onStop;
+
+  /// Changes whether future completed comments may be spoken automatically.
+  final ValueChanged<bool> onSpeechMutedChanged;
+
+  /// Replays the committed comment at an append-only transcript index.
+  final ValueChanged<int> onCommentReplay;
+
+  /// Stops the comment currently being spoken.
+  final VoidCallback onSpeechStop;
 
   @override
   Widget build(BuildContext context) {
@@ -61,13 +73,33 @@ final class ObserverSessionPanel extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (state.modelStatus == ObserverModelStatus.ready)
-                  Text(
-                    localizations.observerModelReadyStatus,
-                    style: typography.label.copyWith(color: colors.primary),
+                Semantics(
+                  button: true,
+                  enabled: state.started,
+                  label: state.speechMuted
+                      ? localizations.observerUnmuteSpeechAction
+                      : localizations.observerMuteSpeechAction,
+                  child: CupertinoButton(
+                    key: observerSpeechMuteButtonKey,
+                    padding: spacing.compactControl,
+                    onPressed: state.started ? () => onSpeechMutedChanged(!state.speechMuted) : null,
+                    child: ExcludeSemantics(
+                      child: Icon(
+                        state.speechMuted ? CupertinoIcons.speaker_slash_fill : CupertinoIcons.speaker_2_fill,
+                      ),
+                    ),
                   ),
+                ),
               ],
             ),
+            if (state.modelStatus == ObserverModelStatus.ready)
+              Padding(
+                padding: spacing.topXs,
+                child: Text(
+                  localizations.observerModelReadyStatus,
+                  style: typography.label.copyWith(color: colors.primary),
+                ),
+              ),
             Padding(
               padding: spacing.topLg,
               child: Text(
@@ -132,7 +164,8 @@ final class ObserverSessionPanel extends StatelessWidget {
             ),
             if (state.comments.isNotEmpty ||
                 state.activeGeneration == ObserverGenerationKind.automatic ||
-                state.automaticFailure != null)
+                state.automaticFailure != null ||
+                state.speechFailure != null)
               Padding(
                 padding: spacing.topLg,
                 child: Semantics(
@@ -143,12 +176,27 @@ final class ObserverSessionPanel extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      for (final comment in state.comments) _ObserverCommentBubble(comment: comment.text),
+                      for (var commentIndex = 0; commentIndex < state.comments.length; commentIndex++)
+                        _ObserverCommentBubble(
+                          comment: state.comments[commentIndex].text,
+                          commentIndex: commentIndex,
+                          speechActive: state.activeSpeechCommentIndex == commentIndex,
+                          speechControlEnabled:
+                              state.foregroundActive &&
+                              (state.activeSpeechCommentIndex == commentIndex ||
+                                  (!state.speechMuted && !state.isGenerating && !state.isSpeaking)),
+                          onReplay: () => onCommentReplay(commentIndex),
+                          onStop: onSpeechStop,
+                        ),
                       if (state.activeGeneration == ObserverGenerationKind.automatic)
                         _AutomaticDraft(text: state.automaticDraft),
                       if (state.automaticFailure != null)
-                        _AutomaticFailure(
+                        _ObserverFailure(
                           message: localizations.observerGenerationFailureMessage,
+                        ),
+                      if (state.speechFailure != null)
+                        _ObserverFailure(
+                          message: localizations.observerSpeechFailureMessage,
                         ),
                     ],
                   ),
@@ -208,9 +256,21 @@ final class _SceneObjects extends StatelessWidget {
 }
 
 final class _ObserverCommentBubble extends StatelessWidget {
-  const _ObserverCommentBubble({required this.comment});
+  const _ObserverCommentBubble({
+    required this.comment,
+    required this.commentIndex,
+    required this.speechActive,
+    required this.speechControlEnabled,
+    required this.onReplay,
+    required this.onStop,
+  });
 
   final String comment;
+  final int commentIndex;
+  final bool speechActive;
+  final bool speechControlEnabled;
+  final VoidCallback onReplay;
+  final VoidCallback onStop;
 
   @override
   Widget build(BuildContext context) {
@@ -231,9 +291,27 @@ final class _ObserverCommentBubble extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                localizations.observerRoleLabel,
-                style: typography.label.copyWith(color: colors.primary),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      localizations.observerRoleLabel,
+                      style: typography.label.copyWith(color: colors.primary),
+                    ),
+                  ),
+                  CupertinoButton(
+                    key: observerCommentSpeechButtonKey(commentIndex),
+                    padding: spacing.compactControl,
+                    onPressed: speechControlEnabled
+                        ? speechActive
+                              ? onStop
+                              : onReplay
+                        : null,
+                    child: Text(
+                      speechActive ? localizations.observerStopSpeechAction : localizations.observerReplayCommentAction,
+                    ),
+                  ),
+                ],
               ),
               Padding(
                 padding: spacing.topXs,
@@ -279,8 +357,8 @@ final class _AutomaticDraft extends StatelessWidget {
   }
 }
 
-final class _AutomaticFailure extends StatelessWidget {
-  const _AutomaticFailure({required this.message});
+final class _ObserverFailure extends StatelessWidget {
+  const _ObserverFailure({required this.message});
 
   final String message;
 

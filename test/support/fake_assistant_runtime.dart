@@ -6,6 +6,7 @@ import 'package:pov_agent/features/assistant/application/models/verified_model_a
 import 'package:pov_agent/features/assistant/application/ports/comment_generator.dart';
 import 'package:pov_agent/features/assistant/application/ports/generation_handle.dart';
 import 'package:pov_agent/features/assistant/application/ports/model_store.dart';
+import 'package:pov_agent/features/assistant/application/ports/speech_synthesizer.dart';
 import 'package:pov_agent/shared/domain/app_failure.dart';
 import 'package:pov_agent/shared/domain/app_result.dart';
 import 'package:pov_agent/shared/domain/scene_snapshot.dart';
@@ -155,6 +156,81 @@ final class FakeCommentGenerator implements CommentGenerator {
   @override
   Future<void> close() async {
     closeCalls += 1;
+  }
+}
+
+final class FakeSpeechSynthesizer implements SpeechSynthesizer {
+  final List<String> spokenTexts = [];
+  final List<FakeSpeechAttempt> _queuedAttempts = [];
+
+  Future<AppResult<void>> Function()? onStop;
+  FakeSpeechAttempt? _active;
+  int stopCalls = 0;
+  int closeCalls = 0;
+  bool _closed = false;
+
+  void enqueueAttempt(FakeSpeechAttempt attempt) {
+    _queuedAttempts.add(attempt);
+  }
+
+  @override
+  Future<AppResult<void>> speak(String text) {
+    spokenTexts.add(text);
+    if (_closed) {
+      return Future.value(
+        const AppError(
+          DeviceUnavailableFailure(code: 'fake_speech_closed'),
+        ),
+      );
+    }
+    if (_active != null) {
+      return Future.value(
+        const AppError(
+          DeviceUnavailableFailure(code: 'fake_speech_busy'),
+        ),
+      );
+    }
+    if (_queuedAttempts.isEmpty) {
+      return Future.value(const AppSuccess<void>(null));
+    }
+
+    final attempt = _queuedAttempts.removeAt(0);
+    _active = attempt;
+    return attempt.completion.whenComplete(() {
+      if (identical(_active, attempt)) _active = null;
+    });
+  }
+
+  @override
+  Future<AppResult<void>> stop() async {
+    stopCalls += 1;
+    final result = await onStop?.call() ?? const AppSuccess<void>(null);
+    if (result is AppSuccess<void>) _active?.succeed();
+    return result;
+  }
+
+  @override
+  Future<AppResult<void>> close() async {
+    closeCalls += 1;
+    final result = await stop();
+    if (result is AppSuccess<void>) _closed = true;
+    return result;
+  }
+}
+
+final class FakeSpeechAttempt {
+  final Completer<AppResult<void>> _completion = Completer<AppResult<void>>();
+
+  Future<AppResult<void>> get completion => _completion.future;
+
+  void succeed() {
+    if (!_completion.isCompleted) {
+      _completion.complete(const AppSuccess<void>(null));
+    }
+  }
+
+  void fail(AppFailure failure) {
+    if (!_completion.isCompleted) _completion.complete(AppError<void>(failure));
   }
 }
 

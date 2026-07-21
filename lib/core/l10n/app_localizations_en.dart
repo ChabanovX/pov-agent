@@ -180,6 +180,21 @@ class AppLocalizationsEn extends AppLocalizations {
       'The observer could not comment on this scene. It will retry on the next interval.';
 
   @override
+  String get observerMuteSpeechAction => 'Mute speech';
+
+  @override
+  String get observerUnmuteSpeechAction => 'Unmute speech';
+
+  @override
+  String get observerReplayCommentAction => 'Replay';
+
+  @override
+  String get observerStopSpeechAction => 'Stop';
+
+  @override
+  String get observerSpeechFailureMessage => 'Speech playback failed. Use the comment\'s speech control to recover.';
+
+  @override
   String get cameraDisabledMessage => 'Camera is off.';
 
   @override

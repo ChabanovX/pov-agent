@@ -237,6 +237,26 @@
   "@observerGenerationFailureMessage": {
     "description": "Recoverable automatic generation failure shown until the next timer attempt."
   },
+  "observerMuteSpeechAction": "Mute speech",
+  "@observerMuteSpeechAction": {
+    "description": "Accessibility label for muting automatic observer speech without stopping text observation."
+  },
+  "observerUnmuteSpeechAction": "Unmute speech",
+  "@observerUnmuteSpeechAction": {
+    "description": "Accessibility label for restoring automatic observer speech for future comments."
+  },
+  "observerReplayCommentAction": "Replay",
+  "@observerReplayCommentAction": {
+    "description": "Button label for speaking a completed observer comment again."
+  },
+  "observerStopSpeechAction": "Stop",
+  "@observerStopSpeechAction": {
+    "description": "Button label for stopping the observer comment currently being spoken."
+  },
+  "observerSpeechFailureMessage": "Speech playback failed. Use the comment's speech control to recover.",
+  "@observerSpeechFailureMessage": {
+    "description": "Recoverable system speech failure shown without removing the completed text comment."
+  },
   "cameraDisabledMessage": "Camera is off.",
   "@cameraDisabledMessage": {
     "description": "Message shown when the user has manually disabled the camera."

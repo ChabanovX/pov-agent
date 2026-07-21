@@ -349,6 +349,419 @@ void main() {
     await fixture.close();
   });
 
+  test('speaks only the completed comment and suppresses queued ticks', () async {
+    final fixture = await _Fixture.start();
+    final generation = FakeGenerationHandle();
+    final nextGeneration = FakeGenerationHandle();
+    final speech = FakeSpeechAttempt();
+    fixture.generator
+      ..enqueueHandle(generation)
+      ..enqueueHandle(nextGeneration);
+    fixture.speech.enqueueAttempt(speech);
+
+    fixture.timers.current.fire();
+    await _waitForRequests(fixture.generator, 1);
+    generation.emit('A streamed prefix');
+    await _waitForState(
+      fixture.bloc,
+      (state) => state.automaticDraft.isNotEmpty,
+    );
+    expect(fixture.speech.spokenTexts, isEmpty);
+
+    generation.succeed('A complete comment is spoken once.');
+    final speaking = await _waitForState(
+      fixture.bloc,
+      (state) => state.isSpeaking,
+    );
+    expect(speaking.activeSpeechCommentIndex, 0);
+    expect(
+      fixture.speech.spokenTexts,
+      ['A complete comment is spoken once.'],
+    );
+
+    // Native completion and the timer callback can race into the Bloc queue.
+    // Retained speech metadata must make the already-queued tick lose.
+    speech.succeed();
+    fixture.timers.current.fire();
+    await _waitForState(fixture.bloc, (state) => !state.isSpeaking);
+    await _flushEvents();
+    expect(fixture.generator.requests, hasLength(1));
+
+    fixture.timers.current.fire();
+    await _waitForRequests(fixture.generator, 2);
+    nextGeneration.succeed('The next idle tick may generate.');
+    await _waitForState(fixture.bloc, (state) => state.comments.length == 2);
+    await fixture.close();
+  });
+
+  test('never speaks automatic failures, drafts, or manual answers', () async {
+    final fixture = await _Fixture.start();
+    final automatic = FakeGenerationHandle();
+    final manual = FakeGenerationHandle();
+    fixture.generator
+      ..enqueueHandle(automatic)
+      ..enqueueHandle(manual);
+
+    fixture.timers.current.fire();
+    await _waitForRequests(fixture.generator, 1);
+    automatic
+      ..emit('A failed draft')
+      ..fail(
+        const DeviceUnavailableFailure(code: 'automatic_failed'),
+      );
+    await _waitForState(
+      fixture.bloc,
+      (state) => state.automaticFailure != null,
+    );
+    expect(fixture.speech.spokenTexts, isEmpty);
+
+    fixture.bloc.add(const ObserverPromptSubmitted('Answer silently'));
+    await _waitForRequests(fixture.generator, 2);
+    manual.succeed('This manual answer remains text only.');
+    await _waitForState(fixture.bloc, (state) => state.messages.length == 2);
+    expect(fixture.speech.spokenTexts, isEmpty);
+    await fixture.close();
+  });
+
+  test('mute stops speech, preserves observation, and never backfills', () async {
+    final fixture = await _Fixture.start();
+    final firstGeneration = FakeGenerationHandle();
+    final secondGeneration = FakeGenerationHandle();
+    final firstSpeech = FakeSpeechAttempt();
+    fixture.generator
+      ..enqueueHandle(firstGeneration)
+      ..enqueueHandle(secondGeneration);
+    fixture.speech.enqueueAttempt(firstSpeech);
+
+    fixture.timers.current.fire();
+    await _waitForRequests(fixture.generator, 1);
+    firstGeneration.succeed('This comment starts speech.');
+    await _waitForState(fixture.bloc, (state) => state.isSpeaking);
+
+    fixture.bloc.add(
+      const ObserverSpeechMutedChanged(muted: true),
+    );
+    final muted = await _waitForState(
+      fixture.bloc,
+      (state) => state.speechMuted && !state.isSpeaking,
+    );
+    expect(muted.observationEnabled, isTrue);
+    expect(fixture.speech.stopCalls, 1);
+
+    fixture.timers.current.fire();
+    await _waitForRequests(fixture.generator, 2);
+    secondGeneration.succeed('Muted text still commits normally.');
+    await _waitForState(fixture.bloc, (state) => state.comments.length == 2);
+    expect(fixture.speech.spokenTexts, ['This comment starts speech.']);
+
+    fixture.bloc.add(
+      const ObserverSpeechMutedChanged(muted: false),
+    );
+    await _waitForState(fixture.bloc, (state) => !state.speechMuted);
+    await _flushEvents();
+    expect(fixture.speech.spokenTexts, ['This comment starts speech.']);
+    await fixture.close();
+  });
+
+  test('stop and replay reject stale completion takeover and speech queues', () async {
+    final fixture = await _Fixture.start();
+    final generation = FakeGenerationHandle();
+    final firstSpeech = FakeSpeechAttempt();
+    final replaySpeech = FakeSpeechAttempt();
+    final releaseStop = Completer<void>();
+    fixture.generator.enqueueHandle(generation);
+    fixture.speech
+      ..enqueueAttempt(firstSpeech)
+      ..onStop = () async {
+        await releaseStop.future;
+        return const AppSuccess<void>(null);
+      };
+
+    fixture.timers.current.fire();
+    await _waitForRequests(fixture.generator, 1);
+    generation.succeed('Replay this committed comment.');
+    await _waitForState(fixture.bloc, (state) => state.isSpeaking);
+
+    fixture.bloc.add(const ObserverSpeechStopped());
+    await _waitForCondition(() => fixture.speech.stopCalls == 1);
+    fixture.speech.enqueueAttempt(replaySpeech);
+    fixture.bloc
+      ..add(const ObserverCommentReplayRequested(-1))
+      ..add(const ObserverCommentReplayRequested(8))
+      ..add(const ObserverCommentReplayRequested(0));
+    releaseStop.complete();
+
+    final replaying = await _waitForState(
+      fixture.bloc,
+      (state) => state.isSpeaking && fixture.speech.spokenTexts.length == 2,
+    );
+    expect(replaying.activeSpeechCommentIndex, 0);
+    await _flushEvents();
+    expect(fixture.bloc.state.isSpeaking, isTrue);
+    expect(fixture.bloc.state.speechFailure, isNull);
+
+    fixture.bloc.add(const ObserverCommentReplayRequested(0));
+    await _flushEvents();
+    expect(fixture.speech.spokenTexts, hasLength(2));
+
+    replaySpeech.succeed();
+    await _waitForState(fixture.bloc, (state) => !state.isSpeaking);
+    await fixture.close();
+  });
+
+  test('failed speech stop remains retryable through lifecycle recovery', () async {
+    final fixture = await _Fixture.start();
+    final firstGeneration = FakeGenerationHandle();
+    final nextGeneration = FakeGenerationHandle();
+    final speech = FakeSpeechAttempt();
+    var stopAttempt = 0;
+    fixture.generator
+      ..enqueueHandle(firstGeneration)
+      ..enqueueHandle(nextGeneration);
+    fixture.speech
+      ..enqueueAttempt(speech)
+      ..onStop = () async {
+        stopAttempt += 1;
+        if (stopAttempt < 3) {
+          return const AppError<void>(
+            DeviceUnavailableFailure(code: 'speech_stop_failed'),
+          );
+        }
+        return const AppSuccess<void>(null);
+      };
+
+    fixture.timers.current.fire();
+    await _waitForRequests(fixture.generator, 1);
+    firstGeneration.succeed('Speech whose first stop attempt fails.');
+    await _waitForState(fixture.bloc, (state) => state.isSpeaking);
+
+    fixture.bloc.add(const ObserverSpeechStopped());
+    final failedStop = await _waitForState(
+      fixture.bloc,
+      (state) => state.speechFailure != null,
+    );
+    expect(failedStop.isSpeaking, isTrue);
+    expect(fixture.speech.stopCalls, 1);
+
+    fixture.timers.current.fire();
+    fixture.bloc.add(const ObserverCommentReplayRequested(0));
+    await _flushEvents();
+    expect(fixture.generator.requests, hasLength(1));
+    expect(fixture.speech.spokenTexts, hasLength(1));
+
+    fixture.bloc.add(const ObserverSpeechStopped());
+    await _waitForCondition(() => fixture.speech.stopCalls == 2);
+    final retryFailed = await _waitForState(
+      fixture.bloc,
+      (state) => state.isSpeaking && state.speechFailure != null,
+    );
+    expect(retryFailed.observationEnabled, isTrue);
+    expect(fixture.speech.stopCalls, 2);
+
+    fixture.bloc.add(const ObserverForegroundDeactivated());
+    await _waitForState(
+      fixture.bloc,
+      (state) => !state.foregroundActive && !state.isSpeaking,
+    );
+    expect(fixture.speech.stopCalls, 3);
+
+    fixture.bloc.add(const ObserverResumed());
+    await _waitForState(fixture.bloc, (state) => state.foregroundActive);
+    final replaySpeech = FakeSpeechAttempt();
+    fixture.speech.enqueueAttempt(replaySpeech);
+    fixture.bloc.add(const ObserverCommentReplayRequested(0));
+    await _waitForState(fixture.bloc, (state) => state.isSpeaking);
+    expect(fixture.speech.spokenTexts, hasLength(2));
+    replaySpeech.succeed();
+    await _waitForState(fixture.bloc, (state) => !state.isSpeaking);
+
+    fixture.timers.current.fire();
+    await _waitForRequests(fixture.generator, 2);
+    nextGeneration.succeed('Generation resumes after stop recovery.');
+    await _waitForState(fixture.bloc, (state) => state.comments.length == 2);
+    await fixture.close();
+  });
+
+  test('resume exposes recovery after repeated lifecycle stop failures', () async {
+    final fixture = await _Fixture.start();
+    final generation = FakeGenerationHandle();
+    final speech = FakeSpeechAttempt();
+    var stopAttempt = 0;
+    fixture.generator.enqueueHandle(generation);
+    fixture.speech
+      ..enqueueAttempt(speech)
+      ..onStop = () async {
+        stopAttempt += 1;
+        if (stopAttempt < 4) {
+          return const AppError<void>(
+            DeviceUnavailableFailure(code: 'speech_stop_failed'),
+          );
+        }
+        return const AppSuccess<void>(null);
+      };
+
+    fixture.timers.current.fire();
+    await _waitForRequests(fixture.generator, 1);
+    generation.succeed('Lifecycle recovery must remain visible.');
+    await _waitForState(fixture.bloc, (state) => state.isSpeaking);
+
+    fixture.bloc.add(const ObserverForegroundDeactivated());
+    await _waitForState(
+      fixture.bloc,
+      (state) => !state.foregroundActive && state.speechFailure != null,
+    );
+    expect(fixture.speech.stopCalls, 1);
+
+    fixture.bloc.add(const ObserverSuspended());
+    await _waitForCondition(() => fixture.speech.stopCalls == 2);
+    await _waitForState(
+      fixture.bloc,
+      (state) => state.modelStatus == ObserverModelStatus.suspended,
+    );
+
+    fixture.bloc.add(const ObserverResumed());
+    final recoverable = await _waitForState(
+      fixture.bloc,
+      (state) => state.foregroundActive && state.activeSpeechCommentIndex == 0 && state.speechFailure != null,
+    );
+    expect(recoverable.isSpeaking, isTrue);
+    expect(fixture.speech.stopCalls, 3);
+
+    fixture.bloc.add(const ObserverSpeechStopped());
+    final recovered = await _waitForState(
+      fixture.bloc,
+      (state) => !state.isSpeaking && state.speechFailure == null,
+    );
+    expect(recovered.foregroundActive, isTrue);
+    expect(fixture.speech.stopCalls, 4);
+
+    final replay = FakeSpeechAttempt();
+    fixture.speech.enqueueAttempt(replay);
+    fixture.bloc.add(const ObserverCommentReplayRequested(0));
+    await _waitForState(fixture.bloc, (state) => state.isSpeaking);
+    expect(fixture.speech.spokenTexts, hasLength(2));
+    replay.succeed();
+    await _waitForState(fixture.bloc, (state) => !state.isSpeaking);
+    await fixture.close();
+  });
+
+  test('manual prompt waits for active speech to stop before generation', () async {
+    final fixture = await _Fixture.start();
+    final automatic = FakeGenerationHandle();
+    final manual = FakeGenerationHandle();
+    final speech = FakeSpeechAttempt();
+    final releaseStop = Completer<void>();
+    fixture.generator
+      ..enqueueHandle(automatic)
+      ..enqueueHandle(manual);
+    fixture.speech
+      ..enqueueAttempt(speech)
+      ..onStop = () async {
+        await releaseStop.future;
+        return const AppSuccess<void>(null);
+      };
+
+    fixture.timers.current.fire();
+    await _waitForRequests(fixture.generator, 1);
+    automatic.succeed('Speech yields to a manual request.');
+    await _waitForState(fixture.bloc, (state) => state.isSpeaking);
+
+    fixture.bloc.add(const ObserverPromptSubmitted('Take priority'));
+    await _waitForCondition(() => fixture.speech.stopCalls == 1);
+    expect(fixture.generator.requests, hasLength(1));
+
+    releaseStop.complete();
+    await _waitForRequests(fixture.generator, 2);
+    expect(fixture.bloc.state.isSpeaking, isFalse);
+    expect(
+      fixture.bloc.state.activeGeneration,
+      ObserverGenerationKind.manual,
+    );
+    manual.succeed('Manual generation starts after speech quiesces.');
+    await _waitForState(fixture.bloc, (state) => state.messages.length == 2);
+    await fixture.close();
+  });
+
+  test('speech failure retains the comment and replay recovers', () async {
+    final fixture = await _Fixture.start();
+    final generation = FakeGenerationHandle();
+    final failedSpeech = FakeSpeechAttempt();
+    final replaySpeech = FakeSpeechAttempt();
+    fixture.generator.enqueueHandle(generation);
+    fixture.speech.enqueueAttempt(failedSpeech);
+
+    fixture.timers.current.fire();
+    await _waitForRequests(fixture.generator, 1);
+    generation.succeed('The text remains after speech failure.');
+    await _waitForState(fixture.bloc, (state) => state.isSpeaking);
+    failedSpeech.fail(
+      const DeviceUnavailableFailure(code: 'speech_interrupted'),
+    );
+    final failed = await _waitForState(
+      fixture.bloc,
+      (state) => state.speechFailure != null,
+    );
+    expect(failed.comments, hasLength(1));
+    expect(failed.isSpeaking, isFalse);
+
+    fixture.speech.enqueueAttempt(replaySpeech);
+    fixture.bloc.add(const ObserverCommentReplayRequested(0));
+    final replaying = await _waitForState(
+      fixture.bloc,
+      (state) => state.isSpeaking,
+    );
+    expect(replaying.speechFailure, isNull);
+    replaySpeech.succeed();
+    final recovered = await _waitForState(
+      fixture.bloc,
+      (state) => !state.isSpeaking,
+    );
+    expect(recovered.speechFailure, isNull);
+    await fixture.close();
+  });
+
+  test('foreground deactivation waits for speech and resume does not replay', () async {
+    final fixture = await _Fixture.start();
+    final generation = FakeGenerationHandle();
+    final speech = FakeSpeechAttempt();
+    final releaseStop = Completer<void>();
+    fixture.generator.enqueueHandle(generation);
+    fixture.speech
+      ..enqueueAttempt(speech)
+      ..onStop = () async {
+        await releaseStop.future;
+        return const AppSuccess<void>(null);
+      };
+
+    fixture.timers.current.fire();
+    await _waitForRequests(fixture.generator, 1);
+    generation.succeed('Lifecycle must stop this speech.');
+    await _waitForState(fixture.bloc, (state) => state.isSpeaking);
+
+    fixture.bloc.add(const ObserverForegroundDeactivated());
+    await _waitForCondition(() => fixture.speech.stopCalls == 1);
+    expect(fixture.bloc.state.foregroundActive, isTrue);
+
+    releaseStop.complete();
+    await _waitForState(
+      fixture.bloc,
+      (state) => !state.foregroundActive && !state.isSpeaking,
+    );
+    fixture.bloc.add(const ObserverSuspended());
+    await _waitForState(
+      fixture.bloc,
+      (state) => state.modelStatus == ObserverModelStatus.suspended,
+    );
+    fixture.bloc.add(const ObserverResumed());
+    await _waitForState(
+      fixture.bloc,
+      (state) => state.foregroundActive && state.modelStatus == ObserverModelStatus.ready,
+    );
+    await _flushEvents();
+    expect(fixture.speech.spokenTexts, ['Lifecycle must stop this speech.']);
+    await fixture.close();
+  });
+
   test('lifecycle preserves observer preference, interval, and transcript', () async {
     final fixture = await _Fixture.start();
     final handle = FakeGenerationHandle();
@@ -449,6 +862,7 @@ final class _Fixture {
     required this.scene,
     required this.store,
     required this.generator,
+    required this.speech,
     required this.timers,
     required this.bloc,
   });
@@ -456,6 +870,7 @@ final class _Fixture {
   final FakeSceneSource scene;
   final FakeAssistantModelStore store;
   final FakeCommentGenerator generator;
+  final FakeSpeechSynthesizer speech;
   final _TimerHarness timers;
   final ObserverBloc bloc;
 
@@ -463,8 +878,15 @@ final class _Fixture {
     final scene = FakeSceneSource(current: _scene('person', id: 1));
     final store = FakeAssistantModelStore();
     final generator = FakeCommentGenerator();
+    final speech = FakeSpeechSynthesizer();
     final timers = _TimerHarness();
-    final bloc = _createBloc(scene, store, generator, timers)..add(const ObserverStarted());
+    final bloc = _createBloc(
+      scene,
+      store,
+      generator,
+      timers,
+      speechSynthesizer: speech,
+    )..add(const ObserverStarted());
     await _waitForState(
       bloc,
       (state) => state.modelStatus == ObserverModelStatus.ready,
@@ -473,6 +895,7 @@ final class _Fixture {
       scene: scene,
       store: store,
       generator: generator,
+      speech: speech,
       timers: timers,
       bloc: bloc,
     );
@@ -489,12 +912,14 @@ ObserverBloc _createBloc(
   FakeSceneSource scene,
   FakeAssistantModelStore store,
   FakeCommentGenerator generator,
-  _TimerHarness timers,
-) {
+  _TimerHarness timers, {
+  FakeSpeechSynthesizer? speechSynthesizer,
+}) {
   return ObserverBloc(
     sceneSource: scene,
     modelStore: store,
     commentGenerator: generator,
+    speechSynthesizer: speechSynthesizer ?? FakeSpeechSynthesizer(),
     requestBuilder: ObserverRequestBuilder(
       qwenPromptBuilder: QwenPromptBuilder(
         systemPrompt: 'You are a concise local observer.',
@@ -536,6 +961,14 @@ Future<void> _waitForRequests(
     await _flushEvents();
   }
   fail('Expected $count generation requests, got ${generator.requests.length}.');
+}
+
+Future<void> _waitForCondition(bool Function() predicate) async {
+  for (var attempt = 0; attempt < 100; attempt += 1) {
+    if (predicate()) return;
+    await _flushEvents();
+  }
+  fail('Expected condition to become true.');
 }
 
 Future<void> _flushEvents() => Future<void>.delayed(Duration.zero);

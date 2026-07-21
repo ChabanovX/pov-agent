@@ -11,6 +11,7 @@ import 'package:pov_agent/features/camera/domain/entities/detection.dart';
 import 'package:pov_agent/features/camera/domain/entities/normalized_box.dart';
 import 'package:pov_agent/features/camera/domain/services/scene_stabilizer.dart';
 import 'package:pov_agent/features/camera/presentation/bloc/camera_bloc.dart';
+import 'package:pov_agent/shared/domain/app_failure.dart';
 import 'package:pov_agent/shared/domain/app_result.dart';
 
 import '../../support/fake_assistant_runtime.dart';
@@ -35,6 +36,7 @@ void main() {
       observerBloc: assistant.observerBloc,
       modelStore: assistant.modelStore,
       commentGenerator: assistant.commentGenerator,
+      speechSynthesizer: assistant.speechSynthesizer,
     );
 
     expect(controller.initCalls, 0);
@@ -80,6 +82,7 @@ void main() {
     expect(controller.closeCalls, 1);
     expect(assistant.modelStore.closeCalls, 1);
     expect(assistant.commentGenerator.closeCalls, 1);
+    expect(assistant.speechSynthesizer.closeCalls, 1);
   });
 
   testWidgets('close before start prevents later resource acquisition', (
@@ -97,6 +100,7 @@ void main() {
       observerBloc: assistant.observerBloc,
       modelStore: assistant.modelStore,
       commentGenerator: assistant.commentGenerator,
+      speechSynthesizer: assistant.speechSynthesizer,
     );
     final sceneChangesComplete = expectLater(
       sceneSession.changes,
@@ -128,6 +132,7 @@ void main() {
       observerBloc: assistant.observerBloc,
       modelStore: assistant.modelStore,
       commentGenerator: assistant.commentGenerator,
+      speechSynthesizer: assistant.speechSynthesizer,
     );
     final sceneChangesComplete = expectLater(
       sceneSession.changes,
@@ -166,6 +171,7 @@ void main() {
       observerBloc: assistant.observerBloc,
       modelStore: assistant.modelStore,
       commentGenerator: assistant.commentGenerator,
+      speechSynthesizer: assistant.speechSynthesizer,
     );
 
     final startTask = runtime.start();
@@ -196,6 +202,7 @@ void main() {
         observerBloc: assistant.observerBloc,
         modelStore: assistant.modelStore,
         commentGenerator: assistant.commentGenerator,
+        speechSynthesizer: assistant.speechSynthesizer,
       );
       await runtime.start();
 
@@ -271,6 +278,7 @@ void main() {
         observerBloc: assistant.observerBloc,
         modelStore: assistant.modelStore,
         commentGenerator: assistant.commentGenerator,
+        speechSynthesizer: assistant.speechSynthesizer,
       );
       await runtime.start();
       await tester.pumpAndSettle();
@@ -326,6 +334,7 @@ void main() {
         observerBloc: assistant.observerBloc,
         modelStore: assistant.modelStore,
         commentGenerator: assistant.commentGenerator,
+        speechSynthesizer: assistant.speechSynthesizer,
       );
       await runtime.start();
       assistant.observerBloc.add(const ObserverStarted());
@@ -376,6 +385,7 @@ void main() {
         observerBloc: assistant.observerBloc,
         modelStore: assistant.modelStore,
         commentGenerator: assistant.commentGenerator,
+        speechSynthesizer: assistant.speechSynthesizer,
       );
       await runtime.start();
       assistant.observerBloc.add(const ObserverStarted());
@@ -420,6 +430,7 @@ void main() {
         observerBloc: assistant.observerBloc,
         modelStore: assistant.modelStore,
         commentGenerator: assistant.commentGenerator,
+        speechSynthesizer: assistant.speechSynthesizer,
       );
       await runtime.start();
 
@@ -428,12 +439,14 @@ void main() {
 
       expect(assistant.modelStore.closeCalls, 0);
       expect(assistant.commentGenerator.closeCalls, 0);
+      expect(assistant.speechSynthesizer.closeCalls, 0);
 
       releaseCameraClose.complete();
       await closeTask;
 
       expect(assistant.modelStore.closeCalls, 1);
       expect(assistant.commentGenerator.closeCalls, 1);
+      expect(assistant.speechSynthesizer.closeCalls, 1);
     },
   );
 
@@ -461,6 +474,7 @@ void main() {
         observerBloc: assistant.observerBloc,
         modelStore: assistant.modelStore,
         commentGenerator: assistant.commentGenerator,
+        speechSynthesizer: assistant.speechSynthesizer,
       );
       await runtime.start();
 
@@ -469,6 +483,7 @@ void main() {
 
       expect(assistant.modelStore.closeCalls, 0);
       expect(assistant.commentGenerator.closeCalls, 0);
+      expect(assistant.speechSynthesizer.closeCalls, 0);
 
       releaseCameraClose.complete();
       await expectLater(
@@ -477,6 +492,7 @@ void main() {
       );
       expect(assistant.modelStore.closeCalls, 1);
       expect(assistant.commentGenerator.closeCalls, 1);
+      expect(assistant.speechSynthesizer.closeCalls, 1);
     },
   );
 
@@ -495,6 +511,7 @@ void main() {
       observerBloc: assistant.observerBloc,
       modelStore: assistant.modelStore,
       commentGenerator: assistant.commentGenerator,
+      speechSynthesizer: assistant.speechSynthesizer,
     );
     await runtime.start();
 
@@ -505,5 +522,45 @@ void main() {
     await runtime.close();
 
     expect(assistant.commentGenerator.closeCalls, 2);
+    expect(assistant.speechSynthesizer.closeCalls, 1);
+  });
+
+  test('retries a retained system speech owner after close fails', () async {
+    final controller = FakeCameraController();
+    final sceneSession = ObservationSceneSession(
+      controller: controller,
+      stabilizer: SceneStabilizer(),
+    );
+    final assistant = TestAssistantResources();
+    const closeFailure = DeviceUnavailableFailure(
+      code: 'test_speech_close_failed',
+    );
+    assistant.speechSynthesizer.closeFailures.add(closeFailure);
+    final runtime = AppRuntime(
+      cameraBloc: CameraBloc(controller),
+      sceneSession: sceneSession,
+      observerBloc: assistant.observerBloc,
+      modelStore: assistant.modelStore,
+      commentGenerator: assistant.commentGenerator,
+      speechSynthesizer: assistant.speechSynthesizer,
+    );
+    await runtime.start();
+
+    await expectLater(
+      runtime.close(),
+      throwsA(
+        isA<AppRuntimeCloseException>().having(
+          (error) => error.failure,
+          'failure',
+          same(closeFailure),
+        ),
+      ),
+    );
+    expect(assistant.speechSynthesizer.closeCalls, 1);
+
+    await runtime.close();
+    await runtime.close();
+
+    expect(assistant.speechSynthesizer.closeCalls, 2);
   });
 }

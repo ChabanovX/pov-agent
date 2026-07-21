@@ -4,10 +4,25 @@ import 'package:flutter/widgets.dart';
 import 'package:pov_agent/core/logging/app_logger.dart';
 import 'package:pov_agent/features/assistant/application/ports/comment_generator.dart';
 import 'package:pov_agent/features/assistant/application/ports/model_store.dart';
+import 'package:pov_agent/features/assistant/application/ports/speech_synthesizer.dart';
 import 'package:pov_agent/features/assistant/presentation/bloc/observer_bloc.dart';
 import 'package:pov_agent/features/camera/application/services/observation_scene_session.dart';
 import 'package:pov_agent/features/camera/presentation/bloc/camera_bloc.dart';
 import 'package:pov_agent/features/camera/presentation/bloc/camera_state.dart';
+import 'package:pov_agent/shared/domain/app_failure.dart';
+import 'package:pov_agent/shared/domain/app_result.dart';
+
+/// An application resource failed to release its normalized native ownership.
+final class AppRuntimeCloseException implements Exception {
+  /// Creates a teardown exception retaining the original [failure].
+  const AppRuntimeCloseException(this.failure);
+
+  /// The normalized resource failure reported during shutdown.
+  final AppFailure failure;
+
+  @override
+  String toString() => 'AppRuntimeCloseException(${failure.code})';
+}
 
 /// The process-level owner of application resources and their lifecycle.
 ///
@@ -23,6 +38,7 @@ final class AppRuntime with WidgetsBindingObserver {
     required this.observerBloc,
     required this.modelStore,
     required this.commentGenerator,
+    required this.speechSynthesizer,
   });
 
   /// The process-owned camera state machine.
@@ -39,6 +55,9 @@ final class AppRuntime with WidgetsBindingObserver {
 
   /// The process-owned native text-generation runtime.
   final CommentGenerator commentGenerator;
+
+  /// The process-owned foreground system speech runtime.
+  final SpeechSynthesizer speechSynthesizer;
 
   late final Future<void> _startFuture;
   Future<void>? _rejectedStartFuture;
@@ -147,7 +166,7 @@ final class AppRuntime with WidgetsBindingObserver {
     try {
       if (!observerBloc.isClosed && observerBloc.state.foregroundActive) {
         final observerQuiesced = observerBloc.stream.firstWhere(
-          (state) => !state.foregroundActive && !state.isGenerating,
+          (state) => !state.foregroundActive && !state.isGenerating && !state.isSpeaking,
         );
         observerBloc.add(const ObserverForegroundDeactivated());
         await observerQuiesced;
@@ -246,7 +265,10 @@ final class AppRuntime with WidgetsBindingObserver {
           closeOwner(sceneSession.close),
           closeOwner(cameraBloc.close),
         ]);
-        await closeOwner(_closeModelResources);
+        await Future.wait<void>([
+          closeOwner(_closeModelResources),
+          closeOwner(_closeSpeechResource),
+        ]);
       }
 
       if (firstError case final error?) {
@@ -277,6 +299,13 @@ final class AppRuntime with WidgetsBindingObserver {
 
     if (firstError case final error?) {
       Error.throwWithStackTrace(error, firstStackTrace!);
+    }
+  }
+
+  Future<void> _closeSpeechResource() async {
+    final result = await speechSynthesizer.close();
+    if (result case AppError<void>(:final failure)) {
+      throw AppRuntimeCloseException(failure);
     }
   }
 }

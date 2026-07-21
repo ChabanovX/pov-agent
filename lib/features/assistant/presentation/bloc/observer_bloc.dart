@@ -6,6 +6,7 @@ import 'package:pov_agent/features/assistant/application/models/model_store_stat
 import 'package:pov_agent/features/assistant/application/models/verified_model_artifact.dart';
 import 'package:pov_agent/features/assistant/application/ports/comment_generator.dart';
 import 'package:pov_agent/features/assistant/application/ports/model_store.dart';
+import 'package:pov_agent/features/assistant/application/ports/speech_synthesizer.dart';
 import 'package:pov_agent/features/assistant/application/services/observer_request_builder.dart';
 import 'package:pov_agent/features/assistant/domain/entities/conversation_message.dart';
 import 'package:pov_agent/features/assistant/domain/entities/observer_comment.dart';
@@ -13,6 +14,7 @@ import 'package:pov_agent/features/assistant/domain/entities/observer_interval.d
 import 'package:pov_agent/features/assistant/presentation/bloc/observer_state.dart';
 import 'package:pov_agent/features/assistant/presentation/services/observer_generation_session.dart';
 import 'package:pov_agent/features/assistant/presentation/services/observer_model_session.dart';
+import 'package:pov_agent/features/assistant/presentation/services/observer_speech_session.dart';
 import 'package:pov_agent/features/assistant/presentation/services/observer_timer_controller.dart';
 import 'package:pov_agent/shared/domain/app_failure.dart';
 import 'package:pov_agent/shared/domain/app_result.dart';
@@ -20,6 +22,8 @@ import 'package:pov_agent/shared/domain/scene_snapshot.dart';
 import 'package:pov_agent/shared/domain/scene_source.dart';
 
 part 'observer_event.dart';
+part 'observer_lifecycle_policy.dart';
+part 'observer_speech_policy.dart';
 
 /// Owns the continuous foreground observer projected by [ObserverState].
 ///
@@ -28,15 +32,20 @@ part 'observer_event.dart';
 /// [SceneSource.current] when handled and are discarded whenever the shared
 /// generation runner is busy. Manual requests may preempt automatic work.
 ///
-/// The Bloc owns the scene subscription and its timer, model, and generation
-/// sessions, but not the injected ports. [close] quiesces every owned producer
-/// before process composition closes those app-owned resources.
+/// Completed automatic comments may start one single-flight speech session.
+/// Speech never queues: ticks are ignored while generation or speech owns its
+/// slot, while manual requests preempt both automatic generation and speech.
+///
+/// The Bloc owns the scene subscription and its timer, model, generation, and
+/// speech sessions, but not the injected ports. [close] quiesces every owned
+/// producer before process composition closes those app-owned resources.
 final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
   /// Creates an idle observer without starting model or timer work.
   factory ObserverBloc({
     required SceneSource sceneSource,
     required ModelStore modelStore,
     required CommentGenerator commentGenerator,
+    required SpeechSynthesizer speechSynthesizer,
     required ObserverRequestBuilder requestBuilder,
     ObserverPeriodicTimerFactory? periodicTimerFactory,
   }) {
@@ -46,6 +55,7 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
       requestBuilder,
       periodicTimerFactory,
       commentGenerator,
+      speechSynthesizer,
     );
   }
 
@@ -55,6 +65,7 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
     this._requestBuilder,
     ObserverPeriodicTimerFactory? periodicTimerFactory,
     CommentGenerator commentGenerator,
+    SpeechSynthesizer speechSynthesizer,
   ) : super(ObserverState()) {
     _modelSession = ObserverModelSession(
       modelStore: modelStore,
@@ -63,6 +74,10 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
     _generationSession = ObserverGenerationSession(
       commentGenerator: commentGenerator,
       onUpdate: _forwardGenerationUpdate,
+    );
+    _speechSession = ObserverSpeechSession(
+      speechSynthesizer: speechSynthesizer,
+      onUpdate: _forwardSpeechUpdate,
     );
     _timerController = periodicTimerFactory == null
         ? ObserverTimerController(onTick: _forwardTimerTick)
@@ -82,6 +97,7 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
   final ObserverRequestBuilder _requestBuilder;
   late final ObserverModelSession _modelSession;
   late final ObserverGenerationSession _generationSession;
+  late final ObserverSpeechSession _speechSession;
   late final ObserverTimerController _timerController;
 
   StreamSubscription<SceneSnapshot>? _sceneSubscription;
@@ -111,12 +127,18 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
         await _onManualGenerationCancelled(emit);
       case ObserverAnswerRetryRequested():
         await _onAnswerRetryRequested(emit);
+      case ObserverSpeechMutedChanged(:final muted):
+        await _onSpeechMutedChanged(muted, emit);
+      case ObserverSpeechStopped():
+        await _onSpeechStopped(emit);
+      case ObserverCommentReplayRequested(:final commentIndex):
+        _onCommentReplayRequested(commentIndex, emit);
       case ObserverForegroundDeactivated():
         await _onForegroundDeactivated(emit);
       case ObserverSuspended():
         await _onSuspended(emit);
       case ObserverResumed():
-        _onResumed(emit);
+        await _onResumed(emit);
       case _ObserverTicked():
         _onTicked(emit);
       case _SceneChanged(:final scene):
@@ -125,6 +147,8 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
         await _onModelUpdate(update, emit);
       case _GenerationUpdateReceived(:final update):
         _onGenerationUpdate(update, emit);
+      case _SpeechUpdateReceived(:final update):
+        await _onSpeechUpdate(update, emit);
     }
   }
 
@@ -240,6 +264,30 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
       return;
     }
 
+    if (_speechSession.isActive) {
+      // Manual dialogue has priority over audible commentary. Invalidate the
+      // visible speech target before awaiting native stop so no late terminal
+      // callback can reclaim the next utterance.
+      final commentIndex = state.activeSpeechCommentIndex;
+      emit(
+        state.copyWith(
+          activeSpeechCommentIndex: () => null,
+          speechFailure: () => null,
+        ),
+      );
+      final stopResult = await _speechSession.stop();
+      if (emit.isDone || _closing || !_acceptsForegroundWork) return;
+      if (stopResult case AppError<void>(:final failure)) {
+        emit(
+          state.copyWith(
+            activeSpeechCommentIndex: () => commentIndex,
+            speechFailure: () => failure,
+          ),
+        );
+        return;
+      }
+    }
+
     if (_generationSession.active?.kind == ObserverGenerationKind.automatic) {
       emit(
         state.copyWith(
@@ -299,7 +347,9 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
         !state.observationEnabled ||
         state.modelStatus != ObserverModelStatus.ready ||
         state.isGenerating ||
-        _generationSession.isActive) {
+        _generationSession.isActive ||
+        state.isSpeaking ||
+        _speechSession.isActive) {
       return;
     }
 
@@ -323,58 +373,7 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
     );
   }
 
-  // ── Lifecycle and model state ──
-
-  Future<void> _onForegroundDeactivated(Emitter<ObserverState> emit) async {
-    if (!_acceptsForegroundWork) return;
-    // Reject new work before awaiting cancellation. `state.foregroundActive`
-    // becomes false only after quiescence and serves as the runtime's ack.
-    _acceptsForegroundWork = false;
-    _cancelObservationTimer();
-    _modelSession.invalidatePreparation();
-    await _generationSession.cancel();
-    if (emit.isDone || _closing) return;
-    emit(_withoutGenerationDrafts(state).copyWith(foregroundActive: false));
-  }
-
-  Future<void> _onSuspended(Emitter<ObserverState> emit) async {
-    if (_closing || !state.started) return;
-    _acceptsForegroundWork = false;
-    _cancelObservationTimer();
-    emit(
-      _withoutGenerationDrafts(state).copyWith(
-        foregroundActive: false,
-        modelStatus: ObserverModelStatus.suspended,
-        modelDownloadProgress: () => null,
-        modelFailure: () => null,
-      ),
-    );
-    try {
-      await _generationSession.cancel();
-    } finally {
-      await _modelSession.suspend();
-    }
-  }
-
-  void _onResumed(Emitter<ObserverState> emit) {
-    if (_acceptsForegroundWork || _closing) return;
-    _acceptsForegroundWork = true;
-    // Preparation may finish after foreground deactivation but before the
-    // platform sends suspension. Reconcile from the store's synchronous state
-    // instead of trusting the intentionally frozen presentation projection.
-    final storeState = _modelSession.current;
-    final needsReload = switch (storeState.phase) {
-      ModelStorePhase.idle || ModelStorePhase.suspended => true,
-      _ => false,
-    };
-    final resumed = _projectModelState(
-      state.copyWith(foregroundActive: true),
-      storeState,
-    );
-    emit(needsReload ? _preparingState(resumed) : resumed);
-    _replaceObservationTimer();
-    if (needsReload) _modelSession.requestPreparation();
-  }
+  // ── Model state ──
 
   Future<void> _onModelUpdate(
     ObserverModelUpdate update,
@@ -483,15 +482,28 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
           );
           return;
         }
+        final commentIndex = state.comments.length;
+        final committedComment = ObserverComment(
+          scene: observationScene,
+          text: comment,
+        );
+        final speech = !_acceptsForegroundWork || state.speechMuted || _speechSession.isActive
+            ? null
+            : _speechSession.start(
+                commentIndex: commentIndex,
+                text: committedComment.text,
+              );
         emit(
           state.copyWith(
             activeGeneration: () => null,
             comments: [
               ...state.comments,
-              ObserverComment(scene: observationScene, text: comment),
+              committedComment,
             ],
             automaticDraft: '',
             automaticFailure: () => null,
+            activeSpeechCommentIndex: speech == null ? null : () => commentIndex,
+            speechFailure: speech == null ? null : () => null,
           ),
         );
       case (ObserverGenerationKind.automatic, AppError<String>(:final failure)):
@@ -554,6 +566,10 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
     if (!_closing && !isClosed) add(_GenerationUpdateReceived(update));
   }
 
+  void _forwardSpeechUpdate(ObserverSpeechCompleted update) {
+    if (!_closing && !isClosed) add(_SpeechUpdateReceived(update));
+  }
+
   void _forwardTimerTick() {
     if (!_closing && !isClosed) add(const _ObserverTicked());
   }
@@ -614,6 +630,7 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
       ?sceneCancellation,
       _modelSession.close(),
       _generationSession.close(),
+      _speechSession.close().then<void>((_) {}),
     ]);
     _closeTask = task;
     return task;

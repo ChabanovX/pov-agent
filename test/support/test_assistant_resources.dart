@@ -7,6 +7,7 @@ import 'package:pov_agent/features/assistant/application/models/verified_model_a
 import 'package:pov_agent/features/assistant/application/ports/comment_generator.dart';
 import 'package:pov_agent/features/assistant/application/ports/generation_handle.dart';
 import 'package:pov_agent/features/assistant/application/ports/model_store.dart';
+import 'package:pov_agent/features/assistant/application/ports/speech_synthesizer.dart';
 import 'package:pov_agent/features/assistant/application/services/observer_request_builder.dart';
 import 'package:pov_agent/features/assistant/application/services/qwen_prompt_builder.dart';
 import 'package:pov_agent/features/assistant/presentation/bloc/observer_bloc.dart';
@@ -35,11 +36,13 @@ final class TestAssistantResources {
   /// Creates a coherent test assistant dependency graph.
   TestAssistantResources({SceneSource? sceneSource})
     : modelStore = TestModelStore(),
-      commentGenerator = TestCommentGenerator() {
+      commentGenerator = TestCommentGenerator(),
+      speechSynthesizer = TestSpeechSynthesizer() {
     observerBloc = ObserverBloc(
       sceneSource: sceneSource ?? const _EmptySceneSource(),
       modelStore: modelStore,
       commentGenerator: commentGenerator,
+      speechSynthesizer: speechSynthesizer,
       requestBuilder: ObserverRequestBuilder(
         qwenPromptBuilder: QwenPromptBuilder(
           systemPrompt: 'Test system prompt.',
@@ -55,6 +58,9 @@ final class TestAssistantResources {
 
   /// Deterministic native-generation boundary.
   final TestCommentGenerator commentGenerator;
+
+  /// Deterministic foreground speech boundary.
+  final TestSpeechSynthesizer speechSynthesizer;
 
   /// Process-style presentation owner built from the test ports.
   late final ObserverBloc observerBloc;
@@ -167,5 +173,45 @@ final class TestCommentGenerator implements CommentGenerator {
     closeCalls += 1;
     if (closeFailures.isNotEmpty) throw closeFailures.removeAt(0);
     _closed = true;
+  }
+}
+
+/// Speech boundary that records process ownership in app tests.
+final class TestSpeechSynthesizer implements SpeechSynthesizer {
+  /// Number of completed-comment speech requests.
+  int speakCalls = 0;
+
+  /// Number of cooperative stop requests.
+  int stopCalls = 0;
+
+  /// Number of terminal closes.
+  int closeCalls = 0;
+
+  /// Failures returned by successive terminal-close attempts.
+  final List<AppFailure> closeFailures = [];
+
+  bool _closed = false;
+
+  @override
+  Future<AppResult<void>> speak(String text) async {
+    speakCalls += 1;
+    return const AppSuccess<void>(null);
+  }
+
+  @override
+  Future<AppResult<void>> stop() async {
+    stopCalls += 1;
+    return const AppSuccess<void>(null);
+  }
+
+  @override
+  Future<AppResult<void>> close() async {
+    if (_closed) return const AppSuccess<void>(null);
+    closeCalls += 1;
+    if (closeFailures.isNotEmpty) {
+      return AppError<void>(closeFailures.removeAt(0));
+    }
+    _closed = true;
+    return const AppSuccess<void>(null);
   }
 }

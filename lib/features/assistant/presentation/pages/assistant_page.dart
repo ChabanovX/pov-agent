@@ -25,6 +25,7 @@ final class AssistantPage extends StatefulWidget {
 final class _AssistantPageState extends State<AssistantPage> {
   final TextEditingController _promptController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  String? _submittedPrompt;
 
   @override
   void dispose() {
@@ -50,7 +51,10 @@ final class _AssistantPageState extends State<AssistantPage> {
             ),
             child: BlocListener<ObserverBloc, ObserverState>(
               listenWhen: _transcriptChanged,
-              listener: (_, _) => _scheduleScrollToLatest(),
+              listener: (_, state) {
+                _clearAcceptedPrompt(state);
+                _scheduleScrollToLatest();
+              },
               child: BlocBuilder<ObserverBloc, ObserverState>(
                 builder: (context, state) {
                   final manualGenerating = state.activeGeneration == ObserverGenerationKind.manual;
@@ -85,6 +89,21 @@ final class _AssistantPageState extends State<AssistantPage> {
                               const ObservationStopped(),
                             );
                           },
+                          onSpeechMutedChanged: (muted) {
+                            context.read<ObserverBloc>().add(
+                              ObserverSpeechMutedChanged(muted: muted),
+                            );
+                          },
+                          onCommentReplay: (commentIndex) {
+                            context.read<ObserverBloc>().add(
+                              ObserverCommentReplayRequested(commentIndex),
+                            );
+                          },
+                          onSpeechStop: () {
+                            context.read<ObserverBloc>().add(
+                              const ObserverSpeechStopped(),
+                            );
+                          },
                         ),
                       ),
                       if (state.modelStatus == ObserverModelStatus.ready)
@@ -115,8 +134,24 @@ final class _AssistantPageState extends State<AssistantPage> {
     final prompt = _promptController.text.trim();
     if (!bloc.state.canSubmit || prompt.isEmpty) return;
 
+    // Keep editable text until the Bloc has crossed any speech-preemption
+    // barrier and projected the accepted manual request.
+    _submittedPrompt = prompt;
     bloc.add(ObserverPromptSubmitted(prompt));
-    _promptController.clear();
+  }
+
+  void _clearAcceptedPrompt(ObserverState state) {
+    final submittedPrompt = _submittedPrompt;
+    if (submittedPrompt == null ||
+        state.activeGeneration != ObserverGenerationKind.manual ||
+        state.manualDraftPrompt != submittedPrompt) {
+      return;
+    }
+
+    _submittedPrompt = null;
+    if (_promptController.text.trim() == submittedPrompt) {
+      _promptController.clear();
+    }
   }
 
   void _scheduleScrollToLatest() {

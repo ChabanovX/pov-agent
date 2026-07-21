@@ -415,6 +415,36 @@ abstract class AppLocalizations {
   /// **'The observer could not comment on this scene. It will retry on the next interval.'**
   String get observerGenerationFailureMessage;
 
+  /// Accessibility label for muting automatic observer speech without stopping text observation.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute speech'**
+  String get observerMuteSpeechAction;
+
+  /// Accessibility label for restoring automatic observer speech for future comments.
+  ///
+  /// In en, this message translates to:
+  /// **'Unmute speech'**
+  String get observerUnmuteSpeechAction;
+
+  /// Button label for speaking a completed observer comment again.
+  ///
+  /// In en, this message translates to:
+  /// **'Replay'**
+  String get observerReplayCommentAction;
+
+  /// Button label for stopping the observer comment currently being spoken.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get observerStopSpeechAction;
+
+  /// Recoverable system speech failure shown without removing the completed text comment.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech playback failed. Use the comment\'s speech control to recover.'**
+  String get observerSpeechFailureMessage;
+
   /// Message shown when the user has manually disabled the camera.
   ///
   /// In en, this message translates to:
