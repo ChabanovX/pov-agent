@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:pov_agent/features/assistant/application/models/model_store_state.dart';
 import 'package:pov_agent/features/assistant/application/models/verified_model_artifact.dart';
+import 'package:pov_agent/features/assistant/application/ports/comment_generator.dart';
 import 'package:pov_agent/features/assistant/application/ports/model_store.dart';
 import 'package:pov_agent/shared/domain/app_failure.dart';
 import 'package:pov_agent/shared/domain/app_result.dart';
@@ -29,33 +30,51 @@ final class ObserverModelPreparationCompleted extends ObserverModelUpdate {
   final AppResult<VerifiedModelArtifact> result;
 }
 
-/// Owns model observation, preparation tasks, and stale-result epochs.
+/// Owns Qwen artifact observation, runtime activation, and stale-result epochs.
 ///
-/// The injected store remains process-owned. This session only stops producing
-/// callbacks on [close]; process composition closes the store after its Bloc no
-/// longer consumes model updates.
+/// Artifact acquisition never loads llama.cpp. This foreground session loads a
+/// verified artifact only after the observer starts and unloads it on suspend.
+/// Both injected ports remain process-owned and are closed by composition after
+/// this session has stopped producing callbacks.
 final class ObserverModelSession {
   /// Creates an inactive model session.
   factory ObserverModelSession({
     required QwenModelStore modelStore,
+    required CommentGenerator commentGenerator,
     required void Function(ObserverModelUpdate update) onUpdate,
   }) {
-    return ObserverModelSession._(modelStore, onUpdate);
+    return ObserverModelSession._(
+      modelStore,
+      commentGenerator,
+      onUpdate,
+    );
   }
 
-  ObserverModelSession._(this._modelStore, this._onUpdate);
+  ObserverModelSession._(
+    this._modelStore,
+    this._commentGenerator,
+    this._onUpdate,
+  );
 
   final QwenModelStore _modelStore;
+  final CommentGenerator _commentGenerator;
   final void Function(ObserverModelUpdate update) _onUpdate;
   // This session retains the subscription until its terminal close boundary.
   // ignore: cancel_subscriptions
   StreamSubscription<QwenModelStoreState>? _subscription;
   Future<void>? _preparationTask;
+  VerifiedModelArtifact? _runtimeArtifact;
   var _preparationEpoch = 0;
   var _closed = false;
 
   /// The store state synchronously available to a newly started observer.
-  QwenModelStoreState get current => _modelStore.current;
+  QwenModelStoreState get current {
+    final storeState = _modelStore.current;
+    if (storeState.phase != ModelStorePhase.ready || _sameArtifact(storeState.artifact, _runtimeArtifact)) {
+      return storeState;
+    }
+    return const QwenModelStoreState.loading();
+  }
 
   /// Whether one preparation request is still settling.
   bool get preparationActive => _preparationTask != null;
@@ -64,7 +83,11 @@ final class ObserverModelSession {
   void activate() {
     if (_closed || _subscription != null) return;
     _subscription = _modelStore.states.listen((state) {
-      if (!_closed) _onUpdate(ObserverModelStateChanged(state));
+      if (_closed) return;
+      if (state.phase != ModelStorePhase.ready) {
+        _runtimeArtifact = null;
+      }
+      _onUpdate(ObserverModelStateChanged(_projectStoreState(state)));
     });
   }
 
@@ -88,7 +111,11 @@ final class ObserverModelSession {
   /// Suspends acquisition and loaded model resources at the store boundary.
   Future<void> suspend() async {
     invalidatePreparation();
-    await _modelStore.suspend();
+    _runtimeArtifact = null;
+    await Future.wait<void>([
+      _modelStore.suspend(),
+      _commentGenerator.unload(),
+    ]);
   }
 
   /// Stops callbacks and cancels the owned store subscription.
@@ -106,7 +133,11 @@ final class ObserverModelSession {
   Future<void> _observePreparation(int epoch) async {
     AppResult<VerifiedModelArtifact> result;
     try {
-      result = await _modelStore.prepare();
+      final storeState = _modelStore.current;
+      final artifact = storeState.artifact;
+      result = storeState.phase == ModelStorePhase.ready && artifact != null
+          ? AppSuccess<VerifiedModelArtifact>(artifact)
+          : await _modelStore.prepare();
     } on Object catch (error, stackTrace) {
       result = AppError(
         UnexpectedFailure(
@@ -117,8 +148,49 @@ final class ObserverModelSession {
         ),
       );
     }
-    if (!_closed && epoch == _preparationEpoch) {
-      _onUpdate(ObserverModelPreparationCompleted(result));
+    if (_closed || epoch != _preparationEpoch) return;
+
+    if (result case AppSuccess<VerifiedModelArtifact>(:final value)) {
+      AppResult<void> loadResult;
+      try {
+        loadResult = await _commentGenerator.loadModel(value);
+      } on Object catch (error, stackTrace) {
+        loadResult = AppError(
+          UnexpectedFailure(
+            code: 'observer_model_load_unexpected',
+            message: error.toString(),
+            cause: error,
+            stackTrace: stackTrace,
+          ),
+        );
+      }
+      if (_closed || epoch != _preparationEpoch) return;
+      result = switch (loadResult) {
+        AppSuccess<void>() => AppSuccess<VerifiedModelArtifact>(value),
+        AppError<void>(:final failure) => AppError<VerifiedModelArtifact>(failure),
+      };
+      if (loadResult is AppSuccess<void>) _runtimeArtifact = value;
     }
+    _onUpdate(ObserverModelPreparationCompleted(result));
   }
+
+  QwenModelStoreState _projectStoreState(QwenModelStoreState state) {
+    if (state.phase == ModelStorePhase.ready && !_sameArtifact(state.artifact, _runtimeArtifact)) {
+      return const QwenModelStoreState.loading();
+    }
+    return state;
+  }
+}
+
+bool _sameArtifact(
+  VerifiedModelArtifact? first,
+  VerifiedModelArtifact? second,
+) {
+  return first != null &&
+      second != null &&
+      first.modelId == second.modelId &&
+      first.revision == second.revision &&
+      first.filePath == second.filePath &&
+      first.byteSize == second.byteSize &&
+      first.sha256 == second.sha256;
 }

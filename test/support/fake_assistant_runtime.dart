@@ -67,7 +67,7 @@ final class FakeSceneSource implements SceneSource {
   Future<void> close() => _changes.close();
 }
 
-final class FakeAssistantModelStore implements QwenModelStore {
+final class FakeAssistantModelStore implements CacheVerifyingModelStore<VerifiedModelArtifact> {
   factory FakeAssistantModelStore({
     QwenModelStoreState current = const QwenModelStoreState.idle(),
     Future<AppResult<VerifiedModelArtifact>> Function()? onPrepare,
@@ -114,6 +114,12 @@ final class FakeAssistantModelStore implements QwenModelStore {
   }
 
   @override
+  Future<AppResult<bool>> verifyCache() async {
+    emit(QwenModelStoreState.ready(testQwenArtifact));
+    return const AppSuccess(true);
+  }
+
+  @override
   Future<void> suspend() async {
     suspendCalls += 1;
     await onSuspend?.call();
@@ -127,7 +133,7 @@ final class FakeAssistantModelStore implements QwenModelStore {
   }
 }
 
-final class FakeAsrModelStore implements AsrModelStore {
+final class FakeAsrModelStore implements CacheVerifyingModelStore<VerifiedAsrModelBundle> {
   factory FakeAsrModelStore({
     ModelStoreState<VerifiedAsrModelBundle> current = const ModelStoreState.idle(),
     Future<AppResult<VerifiedAsrModelBundle>> Function()? onPrepare,
@@ -168,6 +174,12 @@ final class FakeAsrModelStore implements AsrModelStore {
   }
 
   @override
+  Future<AppResult<bool>> verifyCache() async {
+    emit(ModelStoreState.ready(testAsrBundle));
+    return const AppSuccess(true);
+  }
+
+  @override
   Future<void> suspend() async {
     suspendCalls += 1;
     await onSuspend?.call();
@@ -184,8 +196,15 @@ final class FakeAsrModelStore implements AsrModelStore {
 final class FakeMicrophonePermissionGateway implements MicrophonePermissionGateway {
   final List<AppResult<void>> _queuedResults = [];
   int requestCalls = 0;
+  int openSettingsCalls = 0;
 
   void enqueue(AppResult<void> result) => _queuedResults.add(result);
+
+  @override
+  Future<AppResult<void>> openApplicationSettings() async {
+    openSettingsCalls += 1;
+    return const AppSuccess<void>(null);
+  }
 
   @override
   Future<AppResult<void>> request() async {

@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:pov_agent/features/assistant/application/models/model_store_state.dart';
 import 'package:pov_agent/features/assistant/application/models/verified_model_artifact.dart';
-import 'package:pov_agent/features/assistant/application/ports/comment_generator.dart';
 import 'package:pov_agent/features/assistant/application/ports/model_store.dart';
 import 'package:pov_agent/features/assistant/data/datasources/model_artifact_downloader.dart';
 import 'package:pov_agent/features/assistant/data/datasources/model_checksum_verifier.dart';
@@ -15,15 +14,14 @@ import 'package:pov_agent/features/assistant/data/models/qwen_model_manifest.dar
 import 'package:pov_agent/shared/domain/app_failure.dart';
 import 'package:pov_agent/shared/domain/app_result.dart';
 
-/// Acquires, verifies, and activates one pinned Qwen artifact.
+/// Acquires and verifies one pinned Qwen artifact.
 ///
 /// The store owns the download staging file and preparation lifecycle. The
-/// injected [CommentGenerator] retains ownership of native model resources.
 /// Concurrent prepares share one attempt. Suspend invalidates that attempt
-/// before cancelling transport and native work, so stale progress, failure, or
-/// readiness can never replace the suspended state. Prepares requested during
-/// suspension wait until transport and native cleanup have both settled.
-final class VerifiedQwenModelStore implements QwenModelStore {
+/// before cancelling transport, so stale progress, failure, or readiness can
+/// never replace the suspended state. Native llama.cpp activation is a
+/// foreground concern owned by the observer model session, not acquisition.
+final class VerifiedQwenModelStore implements QwenModelStore, CacheVerifyingModelStore<VerifiedModelArtifact> {
   /// Creates a model store from explicit transport and storage policies.
   factory VerifiedQwenModelStore({
     required QwenModelManifest manifest,
@@ -31,7 +29,6 @@ final class VerifiedQwenModelStore implements QwenModelStore {
     required ModelDiskCapacityGateway diskCapacityGateway,
     required ModelArtifactDownloader downloader,
     required ModelChecksumVerifier checksumVerifier,
-    required CommentGenerator commentGenerator,
   }) {
     return VerifiedQwenModelStore._(
       manifest: manifest,
@@ -39,7 +36,6 @@ final class VerifiedQwenModelStore implements QwenModelStore {
       diskCapacityGateway: diskCapacityGateway,
       downloader: downloader,
       checksumVerifier: checksumVerifier,
-      commentGenerator: commentGenerator,
     );
   }
 
@@ -49,7 +45,6 @@ final class VerifiedQwenModelStore implements QwenModelStore {
     required this._diskCapacityGateway,
     required this._downloader,
     required this._checksumVerifier,
-    required this._commentGenerator,
   });
 
   final QwenModelManifest _manifest;
@@ -57,17 +52,18 @@ final class VerifiedQwenModelStore implements QwenModelStore {
   final ModelDiskCapacityGateway _diskCapacityGateway;
   final ModelArtifactDownloader _downloader;
   final ModelChecksumVerifier _checksumVerifier;
-  final CommentGenerator _commentGenerator;
 
   final StreamController<QwenModelStoreState> _statesController = StreamController.broadcast(
     sync: true,
   );
   QwenModelStoreState _current = const QwenModelStoreState.idle();
+  VerifiedModelArtifact? _verifiedArtifact;
 
   bool _isClosed = false;
   bool _isSuspended = false;
   int _preparationEpoch = 0;
   Future<AppResult<VerifiedModelArtifact>>? _activePreparation;
+  Future<AppResult<bool>>? _activeCacheVerification;
   ModelDownloadCancellation? _activeDownloadCancellation;
   File? _activePartialFile;
   Future<void>? _activeSuspension;
@@ -99,16 +95,141 @@ final class VerifiedQwenModelStore implements QwenModelStore {
       return _prepareAfterSuspension(activeSuspension);
     }
 
+    final activeCacheVerification = _activeCacheVerification;
+    if (activeCacheVerification != null) {
+      return _prepareAfterCacheVerification(activeCacheVerification);
+    }
+
     final activePreparation = _activePreparation;
     if (activePreparation != null) return activePreparation;
 
     _isSuspended = false;
     final epoch = ++_preparationEpoch;
+    final verifiedArtifact = _verifiedArtifact;
+    if (verifiedArtifact != null) {
+      _publishForEpoch(epoch, QwenModelStoreState.ready(verifiedArtifact));
+      return Future.value(AppSuccess(verifiedArtifact));
+    }
     final completer = Completer<AppResult<VerifiedModelArtifact>>();
     final preparation = completer.future;
     _activePreparation = preparation;
     unawaited(_completePreparation(epoch, completer, preparation));
     return preparation;
+  }
+
+  @override
+  Future<AppResult<bool>> verifyCache() {
+    if (_isClosed) {
+      return Future.value(
+        const AppError<bool>(
+          UnexpectedFailure(
+            code: 'model_store_closed',
+            message: 'The model store is already closed.',
+          ),
+        ),
+      );
+    }
+
+    final activeSuspension = _activeSuspension;
+    if (activeSuspension != null) {
+      return _verifyCacheAfterSuspension(activeSuspension);
+    }
+
+    final activeCacheVerification = _activeCacheVerification;
+    if (activeCacheVerification != null) return activeCacheVerification;
+
+    final activePreparation = _activePreparation;
+    if (activePreparation != null) {
+      return _verifyCacheAfterPreparation(activePreparation);
+    }
+
+    _isSuspended = false;
+    final epoch = ++_preparationEpoch;
+    late final Future<AppResult<bool>> task;
+    task =
+        Future<AppResult<bool>>.microtask(
+          () => _verifyCacheForEpoch(epoch),
+        ).whenComplete(() {
+          if (identical(_activeCacheVerification, task)) {
+            _activeCacheVerification = null;
+          }
+        });
+    _activeCacheVerification = task;
+    return task;
+  }
+
+  Future<AppResult<bool>> _verifyCacheForEpoch(int epoch) async {
+    try {
+      _publishForEpoch(epoch, const QwenModelStoreState.loading());
+      final directory = await _directoryProvider.resolve();
+      _ensureCurrentEpoch(epoch);
+      final verifiedFile = File(
+        '${directory.path}${Platform.pathSeparator}${_manifest.filename}',
+      );
+      final partialFile = File('${verifiedFile.path}.part');
+      await _deleteIfPresent(partialFile);
+      _ensureCurrentEpoch(epoch);
+
+      // Cache probes originate on the UI isolate, so keep filesystem metadata
+      // access asynchronous before checksum work moves to its isolate.
+      // ignore: avoid_slow_async_io
+      if (!await verifiedFile.exists()) {
+        _verifiedArtifact = null;
+        _publishForEpoch(epoch, const QwenModelStoreState.idle());
+        return const AppSuccess(false);
+      }
+      if (!await _matchesManifest(verifiedFile, epoch)) {
+        await verifiedFile.delete();
+        _ensureCurrentEpoch(epoch);
+        _verifiedArtifact = null;
+        _publishForEpoch(epoch, const QwenModelStoreState.idle());
+        return const AppSuccess(false);
+      }
+
+      _publishReady(_artifactFor(verifiedFile), epoch);
+      return const AppSuccess(true);
+    } catch (error, stackTrace) {
+      if (error is Error) rethrow;
+      final failure = _isCurrentEpoch(epoch)
+          ? ModelStoreFailureMapper.map(error, stackTrace)
+          : ModelStoreFailureMapper.map(
+              const ModelPreparationCancelledException(),
+              stackTrace,
+            );
+      if (_isCurrentEpoch(epoch)) {
+        _publishForEpoch(epoch, QwenModelStoreState.failure(failure));
+      }
+      return AppError(failure);
+    }
+  }
+
+  Future<AppResult<bool>> _verifyCacheAfterSuspension(
+    Future<void> suspension,
+  ) async {
+    try {
+      await suspension;
+    } catch (error, stackTrace) {
+      if (error is Error) rethrow;
+      return AppError(ModelStoreFailureMapper.map(error, stackTrace));
+    }
+    return verifyCache();
+  }
+
+  Future<AppResult<bool>> _verifyCacheAfterPreparation(
+    Future<AppResult<VerifiedModelArtifact>> preparation,
+  ) async {
+    final result = await preparation;
+    return switch (result) {
+      AppSuccess<VerifiedModelArtifact>() => const AppSuccess(true),
+      AppError<VerifiedModelArtifact>(:final failure) => AppError(failure),
+    };
+  }
+
+  Future<AppResult<VerifiedModelArtifact>> _prepareAfterCacheVerification(
+    Future<AppResult<bool>> verification,
+  ) async {
+    await verification;
+    return prepare();
   }
 
   @override
@@ -170,7 +291,7 @@ final class VerifiedQwenModelStore implements QwenModelStore {
     Future<void> suspension,
   ) async {
     try {
-      await _stopPreparationAndUnload();
+      await _stopPreparation();
       _clearCompletedSuspension(suspension);
       completer.complete();
     } catch (error, stackTrace) {
@@ -213,20 +334,29 @@ final class VerifiedQwenModelStore implements QwenModelStore {
     _activePartialFile = partialFile;
 
     try {
-      await _deleteIfPresent(partialFile);
-      _ensureCurrentEpoch(epoch);
-
       // Keep metadata I/O asynchronous because preparation starts on the UI isolate.
       // ignore: avoid_slow_async_io
       if (await verifiedFile.exists()) {
         final cacheMatches = await _matchesManifest(verifiedFile, epoch);
         if (cacheMatches) {
-          return await _loadVerifiedArtifact(
-            _artifactFor(verifiedFile),
-            epoch,
-          );
+          await _deleteIfPresent(partialFile);
+          return _publishReady(_artifactFor(verifiedFile), epoch);
         }
         await verifiedFile.delete();
+        _ensureCurrentEpoch(epoch);
+      }
+
+      // A background URLSession publishes only complete bytes at this path.
+      // Process termination can happen before Dart atomically promotes them,
+      // so reconcile the staging file before asking transport to start again.
+      // ignore: avoid_slow_async_io
+      if (await partialFile.exists()) {
+        if (await _matchesManifest(partialFile, epoch)) {
+          final publishedFile = await partialFile.rename(verifiedFile.path);
+          _ensureCurrentEpoch(epoch);
+          return _publishReady(_artifactFor(publishedFile), epoch);
+        }
+        await partialFile.delete();
         _ensureCurrentEpoch(epoch);
       }
 
@@ -242,10 +372,7 @@ final class VerifiedQwenModelStore implements QwenModelStore {
 
       final publishedFile = await partialFile.rename(verifiedFile.path);
       _ensureCurrentEpoch(epoch);
-      return await _loadVerifiedArtifact(
-        _artifactFor(publishedFile),
-        epoch,
-      );
+      return _publishReady(_artifactFor(publishedFile), epoch);
     } finally {
       await _deleteIfPresent(partialFile);
       if (identical(_activePartialFile, partialFile)) {
@@ -305,33 +432,13 @@ final class VerifiedQwenModelStore implements QwenModelStore {
     }
   }
 
-  Future<AppResult<VerifiedModelArtifact>> _loadVerifiedArtifact(
-    VerifiedModelArtifact artifact,
-    int epoch,
-  ) async {
-    _publishForEpoch(epoch, const QwenModelStoreState.loading());
-    final loadResult = await _commentGenerator.loadModel(artifact);
-    _ensureCurrentEpoch(epoch);
-    return switch (loadResult) {
-      AppSuccess<void>() => _publishReady(artifact, epoch),
-      AppError<void>(:final failure) => _publishGeneratorFailure(failure, epoch),
-    };
-  }
-
   AppResult<VerifiedModelArtifact> _publishReady(
     VerifiedModelArtifact artifact,
     int epoch,
   ) {
+    _verifiedArtifact = artifact;
     _publishForEpoch(epoch, QwenModelStoreState.ready(artifact));
     return AppSuccess(artifact);
-  }
-
-  AppResult<VerifiedModelArtifact> _publishGeneratorFailure(
-    AppFailure failure,
-    int epoch,
-  ) {
-    _publishForEpoch(epoch, QwenModelStoreState.failure(failure));
-    return AppError(failure);
   }
 
   VerifiedModelArtifact _artifactFor(File file) {
@@ -354,26 +461,27 @@ final class VerifiedQwenModelStore implements QwenModelStore {
     try {
       final suspension = _activeSuspension;
       if (suspension != null) await suspension;
-      await _stopPreparationAndUnload();
+      await _stopPreparation();
     } finally {
       await _statesController.close();
     }
   }
 
-  Future<void> _stopPreparationAndUnload() async {
+  Future<void> _stopPreparation() async {
     final preparation = _activePreparation;
+    final cacheVerification = _activeCacheVerification;
     try {
       await Future.wait<void>([
-        _commentGenerator.unload(),
         if (preparation != null) preparation.then<void>((_) {}),
+        if (cacheVerification != null) cacheVerification.then<void>((_) {}),
       ]);
     } finally {
       if (preparation != null) {
         _clearCompletedPreparation(preparation);
       }
-      // A load may have crossed the first unload call before observing the
-      // invalidated epoch. The second idempotent unload closes that race.
-      await _commentGenerator.unload();
+      if (identical(_activeCacheVerification, cacheVerification)) {
+        _activeCacheVerification = null;
+      }
       final partialFile = _activePartialFile;
       if (partialFile != null) await _deleteIfPresent(partialFile);
     }

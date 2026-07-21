@@ -18,7 +18,7 @@ import 'package:pov_agent/shared/domain/app_result.dart';
 /// The shared archive store owns download, verification, staging, suspension,
 /// and cleanup. This wrapper defines only Piper's required runtime entries and
 /// application artifact projection.
-final class VerifiedPiperModelStore implements ModelStore<VerifiedPiperModelBundle> {
+final class VerifiedPiperModelStore implements CacheVerifyingModelStore<VerifiedPiperModelBundle> {
   /// Creates a store from explicit transport, storage, and archive policies.
   VerifiedPiperModelStore({
     required PiperModelManifest manifest,
@@ -69,6 +69,9 @@ final class VerifiedPiperModelStore implements ModelStore<VerifiedPiperModelBund
 
   @override
   Future<AppResult<VerifiedPiperModelBundle>> prepare() => _delegate.prepare();
+
+  @override
+  Future<AppResult<bool>> verifyCache() => _delegate.verifyCache();
 
   @override
   Future<void> suspend() => _delegate.suspend();

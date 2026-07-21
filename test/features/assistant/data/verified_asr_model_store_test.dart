@@ -259,6 +259,24 @@ void main() {
     },
   );
 
+  test(
+    'promotes a completed background archive before considering transport',
+    () async {
+      partialArchive()
+        ..createSync(recursive: true)
+        ..writeAsBytesSync(fixture.archiveBytes);
+      final store = createStore(downloader: _FailingDownloader());
+
+      final result = await store.prepare();
+
+      expect(result, isA<AppSuccess<VerifiedAsrModelBundle>>());
+      expect(cachedArchive().readAsBytesSync(), fixture.archiveBytes);
+      expect(partialArchive().existsSync(), isFalse);
+      expect(server.requestCount, 0);
+      expect(diskCapacity.calls, 1);
+    },
+  );
+
   test('integrity failure removes every incomplete cache entry', () async {
     final store = createStore(
       bundleManifest: manifest(archiveSha256: '0' * 64),

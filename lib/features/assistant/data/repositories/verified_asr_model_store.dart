@@ -18,7 +18,7 @@ import 'package:pov_agent/shared/domain/app_result.dart';
 /// The shared archive store owns download, verification, staging, suspension,
 /// and cleanup. This wrapper defines only ASR's required model/token files and
 /// application artifact projection.
-final class VerifiedAsrModelStore implements ModelStore<VerifiedAsrModelBundle> {
+final class VerifiedAsrModelStore implements CacheVerifyingModelStore<VerifiedAsrModelBundle> {
   /// Creates a store from explicit transport, storage, and archive policies.
   VerifiedAsrModelStore({
     required AsrModelManifest manifest,
@@ -64,6 +64,9 @@ final class VerifiedAsrModelStore implements ModelStore<VerifiedAsrModelBundle> 
 
   @override
   Future<AppResult<VerifiedAsrModelBundle>> prepare() => _delegate.prepare();
+
+  @override
+  Future<AppResult<bool>> verifyCache() => _delegate.verifyCache();
 
   @override
   Future<void> suspend() => _delegate.suspend();

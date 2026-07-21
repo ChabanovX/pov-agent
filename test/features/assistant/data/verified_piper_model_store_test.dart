@@ -307,6 +307,46 @@ void main() {
     );
   });
 
+  test('cache-only verification trusts no archive without checking capacity', () async {
+    final pinnedManifest = manifest();
+    final missingStore = createStore(
+      bundleManifest: pinnedManifest,
+      capacityGateway: _FailingDiskCapacityGateway(),
+      downloader: _FailingDownloader(),
+    );
+
+    expect(
+      await missingStore.verifyCache(),
+      isA<AppSuccess<bool>>().having(
+        (success) => success.value,
+        'cache present',
+        isFalse,
+      ),
+    );
+
+    final installedStore = createStore(bundleManifest: pinnedManifest);
+    expect(
+      await installedStore.prepare(),
+      isA<AppSuccess<VerifiedPiperModelBundle>>(),
+    );
+    await installedStore.close();
+    await server.close();
+
+    final cachedStore = createStore(
+      bundleManifest: pinnedManifest,
+      capacityGateway: _FailingDiskCapacityGateway(),
+      downloader: _FailingDownloader(),
+    );
+    expect(
+      await cachedStore.verifyCache(),
+      isA<AppSuccess<bool>>().having(
+        (success) => success.value,
+        'cache present',
+        isTrue,
+      ),
+    );
+  });
+
   test(
     'a corrupt extracted bundle is rebuilt from the verified archive offline',
     () async {

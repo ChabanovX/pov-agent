@@ -31,6 +31,18 @@ abstract interface class ModelStore<TArtifact extends Object> {
   Future<void> close();
 }
 
+/// A model store whose existing cache can be verified without acquisition.
+///
+/// The root setup gate uses [verifyCache] only after a matching installation
+/// receipt is found. Implementations must not download, extract, or activate a
+/// native runtime from that method. A successful `false` result means the
+/// pinned cache is absent or invalid and a normal first-install preflight is
+/// required.
+abstract interface class CacheVerifyingModelStore<TArtifact extends Object> implements ModelStore<TArtifact> {
+  /// Verifies only already-published bytes for the configured artifact.
+  Future<AppResult<bool>> verifyCache();
+}
+
 /// The verified single-file model store consumed by Qwen generation.
 typedef QwenModelStore = ModelStore<VerifiedModelArtifact>;
 

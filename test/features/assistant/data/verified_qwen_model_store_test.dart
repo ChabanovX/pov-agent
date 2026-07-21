@@ -4,11 +4,8 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pov_agent/features/assistant/application/models/comment_generation_request.dart';
 import 'package:pov_agent/features/assistant/application/models/model_store_state.dart';
 import 'package:pov_agent/features/assistant/application/models/verified_model_artifact.dart';
-import 'package:pov_agent/features/assistant/application/ports/comment_generator.dart';
-import 'package:pov_agent/features/assistant/application/ports/generation_handle.dart';
 import 'package:pov_agent/features/assistant/data/datasources/model_artifact_downloader.dart';
 import 'package:pov_agent/features/assistant/data/datasources/model_checksum_verifier.dart';
 import 'package:pov_agent/features/assistant/data/datasources/model_directory_provider.dart';
@@ -28,7 +25,6 @@ void main() {
   late Directory modelDirectory;
   late _LoopbackArtifactServer server;
   late _FakeDiskCapacityGateway diskCapacity;
-  late _FakeCommentGenerator generator;
   late VerifiedQwenModelStore store;
   late StreamSubscription<QwenModelStoreState> stateSubscription;
   late List<QwenModelStoreState> publishedStates;
@@ -49,16 +45,15 @@ void main() {
   VerifiedQwenModelStore createStore({
     QwenModelManifest? artifactManifest,
     ModelDiskCapacityGateway? capacityGateway,
-    _FakeCommentGenerator? commentGenerator,
     ModelArtifactDownloader? downloader,
+    ModelChecksumVerifier? checksumVerifier,
   }) {
     return VerifiedQwenModelStore(
       manifest: artifactManifest ?? manifest(),
       directoryProvider: _FixedModelDirectoryProvider(modelDirectory),
       diskCapacityGateway: capacityGateway ?? diskCapacity,
       downloader: downloader ?? HttpModelArtifactDownloader(),
-      checksumVerifier: const IsolateModelChecksumVerifier(),
-      commentGenerator: commentGenerator ?? generator,
+      checksumVerifier: checksumVerifier ?? const IsolateModelChecksumVerifier(),
     );
   }
 
@@ -84,7 +79,6 @@ void main() {
     diskCapacity = _FakeDiskCapacityGateway(
       available: payload.length + reserveBytes,
     );
-    generator = _FakeCommentGenerator();
     store = createStore();
     observe(store);
   });
@@ -96,14 +90,13 @@ void main() {
     if (sandbox.existsSync()) sandbox.deleteSync(recursive: true);
   });
 
-  test('downloads, verifies, atomically publishes, and loads the artifact', () async {
+  test('downloads, verifies, and atomically publishes the artifact', () async {
     final result = await store.prepare();
 
     expect(result, isA<AppSuccess<VerifiedModelArtifact>>());
     final artifact = (result as AppSuccess<VerifiedModelArtifact>).value;
     expect(File(artifact.filePath).readAsBytesSync(), payload);
     expect(File('${artifact.filePath}.part').existsSync(), isFalse);
-    expect(generator.loadedArtifacts, [artifact]);
     expect(server.requestCount, 1);
     expect(diskCapacity.calls, 1);
     expect(publishedStates.first.phase, ModelStorePhase.loading);
@@ -112,7 +105,6 @@ void main() {
       containsAllInOrder([
         ModelStorePhase.downloading,
         ModelStorePhase.verifying,
-        ModelStorePhase.loading,
         ModelStorePhase.ready,
       ]),
     );
@@ -136,7 +128,6 @@ void main() {
     await store.close();
     await server.close();
 
-    generator = _FakeCommentGenerator();
     store = createStore(
       artifactManifest: offlineManifest,
       capacityGateway: _FailingDiskCapacityGateway(),
@@ -145,18 +136,50 @@ void main() {
     final cachedResult = await store.prepare();
 
     expect(cachedResult, isA<AppSuccess<VerifiedModelArtifact>>());
-    expect(generator.loadedArtifacts, hasLength(1));
     expect(File('${artifact.filePath}.part').existsSync(), isFalse);
     expect(
       publishedStates.map((state) => state.phase),
       [
         ModelStorePhase.loading,
         ModelStorePhase.verifying,
-        ModelStorePhase.loading,
         ModelStorePhase.ready,
       ],
     );
   });
+
+  test(
+    'promotes a complete background-transfer staging file without network',
+    () async {
+      final pinnedManifest = manifest();
+      await stateSubscription.cancel();
+      await store.close();
+      await server.close();
+      partialFile()
+        ..createSync(recursive: true)
+        ..writeAsBytesSync(payload);
+
+      store = createStore(
+        artifactManifest: pinnedManifest,
+        capacityGateway: _FailingDiskCapacityGateway(),
+        downloader: const _FailingDownloader(),
+      );
+      observe(store);
+
+      final result = await store.prepare();
+
+      expect(result, isA<AppSuccess<VerifiedModelArtifact>>());
+      expect(verifiedFile().readAsBytesSync(), payload);
+      expect(partialFile().existsSync(), isFalse);
+      expect(
+        publishedStates.map((state) => state.phase),
+        [
+          ModelStorePhase.loading,
+          ModelStorePhase.verifying,
+          ModelStorePhase.ready,
+        ],
+      );
+    },
+  );
 
   test('rejects bad checksum bytes and removes every incomplete file', () async {
     await stateSubscription.cancel();
@@ -176,7 +199,6 @@ void main() {
     );
     expect(verifiedFile().existsSync(), isFalse);
     expect(partialFile().existsSync(), isFalse);
-    expect(generator.loadedArtifacts, isEmpty);
     expect(store.current.phase, ModelStorePhase.failure);
   });
 
@@ -257,7 +279,6 @@ void main() {
     };
     await stateSubscription.cancel();
     await store.close();
-    generator = _FakeCommentGenerator();
     store = createStore(
       downloader: HttpModelArtifactDownloader(
         responseTimeout: const Duration(seconds: 1),
@@ -301,7 +322,6 @@ void main() {
     releaseResponse.complete();
     expect(await first, isA<AppSuccess<VerifiedModelArtifact>>());
     expect(await second, isA<AppSuccess<VerifiedModelArtifact>>());
-    expect(generator.loadedArtifacts, hasLength(1));
   });
 
   test('installs the shared task before synchronous loading publication', () async {
@@ -322,13 +342,11 @@ void main() {
     expect(await primaryPreparation, isA<AppSuccess<VerifiedModelArtifact>>());
     expect(await reentrant, isA<AppSuccess<VerifiedModelArtifact>>());
     expect(server.requestCount, 1);
-    expect(generator.loadedArtifacts, hasLength(1));
   });
 
   test('suspend cancels transport, removes partial bytes, and suppresses stale state', () async {
     await stateSubscription.cancel();
     await store.close();
-    generator = _FakeCommentGenerator();
     final blockingDownloader = _BlockingModelArtifactDownloader(payload);
     store = createStore(downloader: blockingDownloader);
     observe(store);
@@ -347,33 +365,44 @@ void main() {
       isEmpty,
     );
     expect(partialFile().existsSync(), isFalse);
-    expect(generator.unloadCalls, greaterThanOrEqualTo(1));
   });
 
-  test('suspend rejects a native load completion that crossed invalidation', () async {
-    generator.loadGate = Completer<AppResult<void>>();
-    final preparation = store.prepare();
-    await generator.loadStarted.future;
-    expect(store.current.phase, ModelStorePhase.loading);
+  test('cache verification reports absence without acquisition', () async {
+    final result = await store.verifyCache();
 
-    final suspension = store.suspend();
-    await suspension.timeout(const Duration(seconds: 5));
-    final result = await preparation;
-
-    expect(result, isA<AppError<VerifiedModelArtifact>>());
-    expect(store.current.phase, ModelStorePhase.suspended);
-    expect(publishedStates.where((state) => state.phase == ModelStorePhase.ready), isEmpty);
-    expect(verifiedFile().existsSync(), isTrue);
-
-    final retried = await store.prepare();
-    expect(retried, isA<AppSuccess<VerifiedModelArtifact>>());
-    expect(store.current.phase, ModelStorePhase.ready);
-    expect(generator.loadedArtifacts, hasLength(2));
+    expect(result, const AppSuccess(false));
+    expect(server.requestCount, 0);
+    expect(diskCapacity.calls, 0);
+    expect(store.current.phase, ModelStorePhase.idle);
+    expect(verifiedFile().existsSync(), isFalse);
   });
 
-  test('queues reentrant prepare until suspended resources are unloaded', () async {
+  test('close joins active cache verification before closing state', () async {
+    verifiedFile()
+      ..createSync(recursive: true)
+      ..writeAsBytesSync(payload);
+    await stateSubscription.cancel();
+    await store.close();
+    final checksum = _BlockingChecksumVerifier(
+      sha256.convert(payload).toString(),
+    );
+    store = createStore(checksumVerifier: checksum);
+    observe(store);
+
+    final verification = store.verifyCache();
+    await checksum.started.future;
+    var closeSettled = false;
+    final close = store.close().whenComplete(() => closeSettled = true);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(closeSettled, isFalse);
+    checksum.release.complete();
+    await close;
+    expect(await verification, isA<AppError<bool>>());
+  });
+
+  test('queues reentrant prepare until suspension cleanup settles', () async {
     expect(await store.prepare(), isA<AppSuccess<VerifiedModelArtifact>>());
-    expect(generator.isLoaded, isTrue);
     await stateSubscription.cancel();
     Future<AppResult<VerifiedModelArtifact>>? queuedPreparation;
     stateSubscription = store.states.listen((state) {
@@ -389,8 +418,6 @@ void main() {
     expect(queued, isNotNull);
     expect(await queued, isA<AppSuccess<VerifiedModelArtifact>>());
     expect(store.current.phase, ModelStorePhase.ready);
-    expect(generator.isLoaded, isTrue);
-    expect(generator.loadedArtifacts, hasLength(2));
     expect(server.requestCount, 1);
   });
 
@@ -398,7 +425,6 @@ void main() {
     final streamDone = Completer<void>();
     await stateSubscription.cancel();
     await store.close();
-    generator = _FakeCommentGenerator();
     final blockingDownloader = _BlockingModelArtifactDownloader(payload);
     store = createStore(downloader: blockingDownloader);
     stateSubscription = store.states.listen(
@@ -494,41 +520,21 @@ final class _FailingDiskCapacityGateway implements ModelDiskCapacityGateway {
   }
 }
 
-final class _FakeCommentGenerator implements CommentGenerator {
-  final List<VerifiedModelArtifact> loadedArtifacts = [];
-  final Completer<void> loadStarted = Completer<void>();
-  Completer<AppResult<void>>? loadGate;
-  int unloadCalls = 0;
-  bool isLoaded = false;
+final class _FailingDownloader implements ModelArtifactDownloader {
+  const _FailingDownloader();
 
   @override
-  Future<AppResult<void>> loadModel(VerifiedModelArtifact artifact) async {
-    loadedArtifacts.add(artifact);
-    if (!loadStarted.isCompleted) loadStarted.complete();
-    final result = await (loadGate?.future ?? Future.value(const AppSuccess<void>(null)));
-    if (result is AppSuccess<void>) isLoaded = true;
-    return result;
-  }
-
-  @override
-  Future<AppResult<GenerationHandle>> generate(CommentGenerationRequest request) async {
-    return const AppError(
-      UnexpectedFailure(code: 'generation_not_used_by_model_store_test'),
+  Future<void> download({
+    required Uri source,
+    required String destinationPath,
+    required int expectedBytes,
+    required ModelDownloadProgress onProgress,
+    required ModelDownloadCancellation cancellation,
+  }) {
+    throw StateError(
+      'A complete background staging file must not require transport.',
     );
   }
-
-  @override
-  Future<void> unload() async {
-    unloadCalls += 1;
-    isLoaded = false;
-    final gate = loadGate;
-    if (gate != null && !gate.isCompleted) {
-      gate.complete(const AppSuccess<void>(null));
-    }
-  }
-
-  @override
-  Future<void> close() => unload();
 }
 
 final class _BlockingModelArtifactDownloader implements ModelArtifactDownloader {
@@ -555,5 +561,20 @@ final class _BlockingModelArtifactDownloader implements ModelArtifactDownloader 
     await cancelled.future;
     removeListener();
     throw const ModelDownloadCancelledException();
+  }
+}
+
+final class _BlockingChecksumVerifier implements ModelChecksumVerifier {
+  _BlockingChecksumVerifier(this.digest);
+
+  final String digest;
+  final Completer<void> started = Completer<void>();
+  final Completer<void> release = Completer<void>();
+
+  @override
+  Future<String> sha256ForFile(String filePath) async {
+    started.complete();
+    await release.future;
+    return digest;
   }
 }

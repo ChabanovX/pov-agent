@@ -66,7 +66,7 @@ typedef VerifiedArchiveArtifactFactory<TArtifact extends Object> =
 /// a late result can populate the cache but can never replace suspended state.
 /// Typed stores supply only their runtime-critical entries and artifact
 /// projection; this class retains complete lifecycle and staging ownership.
-final class VerifiedArchiveModelStore<TArtifact extends Object> implements ModelStore<TArtifact> {
+final class VerifiedArchiveModelStore<TArtifact extends Object> implements CacheVerifyingModelStore<TArtifact> {
   /// Creates a store from explicit transport, storage, and archive policies.
   VerifiedArchiveModelStore({
     required VerifiedArchiveModelManifest manifest,
@@ -129,6 +129,7 @@ final class VerifiedArchiveModelStore<TArtifact extends Object> implements Model
 
   TArtifact? _verifiedBundle;
   Future<AppResult<TArtifact>>? _activePreparation;
+  Future<AppResult<bool>>? _activeCacheVerification;
   Future<void>? _activeSuspension;
   Future<void>? _closeTask;
   ModelDownloadCancellation? _activeDownloadCancellation;
@@ -162,6 +163,10 @@ final class VerifiedArchiveModelStore<TArtifact extends Object> implements Model
     if (activeSuspension != null) {
       return _prepareAfterSuspension(activeSuspension);
     }
+    final activeCacheVerification = _activeCacheVerification;
+    if (activeCacheVerification != null) {
+      return _prepareAfterCacheVerification(activeCacheVerification);
+    }
     final activePreparation = _activePreparation;
     if (activePreparation != null) return activePreparation;
 
@@ -178,6 +183,136 @@ final class VerifiedArchiveModelStore<TArtifact extends Object> implements Model
     _activePreparation = preparation;
     unawaited(_completePreparation(epoch, completer, preparation));
     return preparation;
+  }
+
+  @override
+  Future<AppResult<bool>> verifyCache() {
+    if (_isClosed) {
+      return Future.value(
+        AppError(
+          UnexpectedFailure(
+            code: _closedFailureCode,
+            message: _closedFailureMessage,
+          ),
+        ),
+      );
+    }
+
+    final activeSuspension = _activeSuspension;
+    if (activeSuspension != null) {
+      return _verifyCacheAfterSuspension(activeSuspension);
+    }
+
+    final activeCacheVerification = _activeCacheVerification;
+    if (activeCacheVerification != null) return activeCacheVerification;
+
+    final activePreparation = _activePreparation;
+    if (activePreparation != null) {
+      return _verifyCacheAfterPreparation(activePreparation);
+    }
+
+    _isSuspended = false;
+    final epoch = ++_preparationEpoch;
+    late final Future<AppResult<bool>> task;
+    task =
+        Future<AppResult<bool>>.microtask(
+          () => _verifyCacheForEpoch(epoch),
+        ).whenComplete(() {
+          if (identical(_activeCacheVerification, task)) {
+            _activeCacheVerification = null;
+          }
+        });
+    _activeCacheVerification = task;
+    return task;
+  }
+
+  Future<AppResult<bool>> _verifyCacheForEpoch(int epoch) async {
+    try {
+      final inMemoryBundle = _verifiedBundle;
+      if (inMemoryBundle != null) {
+        _publishForEpoch(epoch, ModelStoreState.ready(inMemoryBundle));
+        return const AppSuccess(true);
+      }
+
+      _publishForEpoch(epoch, const ModelStoreState.loading());
+      final directory = await _directoryProvider.resolve();
+      _ensureCurrentEpoch(epoch);
+      final archive = File(
+        _childPath(directory.path, _manifest.archiveFilename),
+      );
+      final bundleDirectory = Directory(
+        _childPath(directory.path, _manifest.archiveRoot),
+      );
+      await _deleteFileIfPresent(File('${archive.path}.part'));
+      await _deleteDirectoryIfPresent(
+        Directory('${bundleDirectory.path}.extracting'),
+      );
+      _ensureCurrentEpoch(epoch);
+
+      // The receipt represents both the pinned archive and its published tree.
+      // Cache-only verification must not silently extract or redownload either.
+      // ignore: avoid_slow_async_io
+      if (!await archive.exists()) {
+        _publishForEpoch(epoch, const ModelStoreState.idle());
+        return const AppSuccess(false);
+      }
+      if (!await _matchesArchive(archive, epoch)) {
+        await archive.delete();
+        await _deleteDirectoryIfPresent(bundleDirectory);
+        _ensureCurrentEpoch(epoch);
+        _publishForEpoch(epoch, const ModelStoreState.idle());
+        return const AppSuccess(false);
+      }
+
+      final bundle = await _verifiedBundleIfPresent(bundleDirectory, epoch);
+      if (bundle == null) {
+        _publishForEpoch(epoch, const ModelStoreState.idle());
+        return const AppSuccess(false);
+      }
+      _publishReady(bundle, epoch);
+      return const AppSuccess(true);
+    } catch (error, stackTrace) {
+      if (error is Error) rethrow;
+      final failure = _isCurrentEpoch(epoch)
+          ? ModelStoreFailureMapper.map(error, stackTrace)
+          : ModelStoreFailureMapper.map(
+              const ModelPreparationCancelledException(),
+              stackTrace,
+            );
+      if (_isCurrentEpoch(epoch)) {
+        _publishForEpoch(epoch, ModelStoreState.failure(failure));
+      }
+      return AppError(failure);
+    }
+  }
+
+  Future<AppResult<bool>> _verifyCacheAfterSuspension(
+    Future<void> suspension,
+  ) async {
+    try {
+      await suspension;
+    } catch (error, stackTrace) {
+      if (error is Error) rethrow;
+      return AppError(ModelStoreFailureMapper.map(error, stackTrace));
+    }
+    return verifyCache();
+  }
+
+  Future<AppResult<bool>> _verifyCacheAfterPreparation(
+    Future<AppResult<TArtifact>> preparation,
+  ) async {
+    final result = await preparation;
+    return switch (result) {
+      AppSuccess<TArtifact>() => const AppSuccess(true),
+      AppError<TArtifact>(:final failure) => AppError(failure),
+    };
+  }
+
+  Future<AppResult<TArtifact>> _prepareAfterCacheVerification(
+    Future<AppResult<bool>> verification,
+  ) async {
+    await verification;
+    return prepare();
   }
 
   @override
@@ -299,7 +434,6 @@ final class VerifiedArchiveModelStore<TArtifact extends Object> implements Model
     _activeStagingDirectory = stagingDirectory;
 
     try {
-      await _deleteFileIfPresent(partialArchive);
       await _deleteFileIfPresent(expandedArchive);
       await _deleteDirectoryIfPresent(stagingDirectory);
       _ensureCurrentEpoch(epoch);
@@ -315,6 +449,26 @@ final class VerifiedArchiveModelStore<TArtifact extends Object> implements Model
           await _deleteDirectoryIfPresent(bundleDirectory);
           _ensureCurrentEpoch(epoch);
         }
+      }
+
+      // Native background transfer moves only a complete archive into this
+      // path. Recover it after process termination before creating or
+      // reattaching to another network task.
+      if (!archiveMatches) {
+        // Recovery probes model-sized staging files from the UI isolate.
+        // ignore: avoid_slow_async_io
+        if (await partialArchive.exists()) {
+          if (await _matchesArchive(partialArchive, epoch)) {
+            await partialArchive.rename(archive.path);
+            _ensureCurrentEpoch(epoch);
+            archiveMatches = true;
+          } else {
+            await partialArchive.delete();
+            _ensureCurrentEpoch(epoch);
+          }
+        }
+      } else {
+        await _deleteFileIfPresent(partialArchive);
       }
 
       if (archiveMatches) {
@@ -534,7 +688,14 @@ final class VerifiedArchiveModelStore<TArtifact extends Object> implements Model
 
   Future<void> _stopPreparation() async {
     final preparation = _activePreparation;
-    if (preparation != null) await preparation;
+    final cacheVerification = _activeCacheVerification;
+    await Future.wait<void>([
+      if (preparation != null) preparation.then<void>((_) {}),
+      if (cacheVerification != null) cacheVerification.then<void>((_) {}),
+    ]);
+    if (identical(_activeCacheVerification, cacheVerification)) {
+      _activeCacheVerification = null;
+    }
     final partialArchive = _activePartialArchive;
     if (partialArchive != null) await _deleteFileIfPresent(partialArchive);
     final expandedArchive = _activeExpandedArchive;
