@@ -42,5 +42,20 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+    target.build_configurations.each do |config|
+      # Keep CocoaPods builds aligned with the plist-driven Flutter SPM setup.
+      existing_definitions = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS']
+      definitions = existing_definitions.is_a?(Array) \
+        ? existing_definitions.dup \
+        : existing_definitions.to_s.split
+      [
+        '$(inherited)',
+        'PERMISSION_CAMERA=1',
+        'PERMISSION_MICROPHONE=1',
+      ].each do |definition|
+        definitions << definition unless definitions.include?(definition)
+      end
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = definitions
+    end
   end
 end

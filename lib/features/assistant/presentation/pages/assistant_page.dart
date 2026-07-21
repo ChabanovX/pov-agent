@@ -74,6 +74,11 @@ final class _AssistantPageState extends State<AssistantPage> {
                               const ObserverModelRetryRequested(),
                             );
                           },
+                          onVoiceRetry: () {
+                            context.read<ObserverBloc>().add(
+                              const ObserverVoiceRetryRequested(),
+                            );
+                          },
                           onIntervalSelected: (interval) {
                             context.read<ObserverBloc>().add(
                               ObservationIntervalSelected(interval),

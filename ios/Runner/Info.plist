@@ -26,6 +26,15 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Camera access is required to preview and analyze images.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Microphone access is required for hands-free assistant questions.</string>
+	<!-- Flutter debug/profile builds publish this service when a physical device is paired over the local network. -->
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_dartVmService._tcp</string>
+	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Local network access is used to connect development tools to this app.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<!-- just_audio exposes in-memory StreamAudioSource bytes on loopback. -->

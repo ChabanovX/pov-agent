@@ -21,9 +21,7 @@ import '../../support/test_assistant_resources.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('owns camera and scene startup and shutdown exactly once', (
-    tester,
-  ) async {
+  test('owns camera and scene startup and shutdown exactly once', () async {
     final controller = FakeCameraController();
     final sceneSession = ObservationSceneSession(
       controller: controller,
@@ -35,7 +33,9 @@ void main() {
       sceneSession: sceneSession,
       observerBloc: assistant.observerBloc,
       modelStore: assistant.modelStore,
+      asrModelStore: assistant.asrModelStore,
       commentGenerator: assistant.commentGenerator,
+      speechRecognizer: assistant.speechRecognizer,
       speechSynthesizer: assistant.speechSynthesizer,
     );
 
@@ -75,19 +75,19 @@ void main() {
       emitsDone,
     );
 
-    await tester.runAsync(runtime.close);
-    await tester.runAsync(runtime.close);
+    await runtime.close();
+    await runtime.close();
     await sceneChangesComplete;
 
     expect(controller.closeCalls, 1);
     expect(assistant.modelStore.closeCalls, 1);
+    expect(assistant.asrModelStore.closeCalls, 1);
     expect(assistant.commentGenerator.closeCalls, 1);
+    expect(assistant.speechRecognizer.closeCalls, 1);
     expect(assistant.speechSynthesizer.closeCalls, 1);
   });
 
-  testWidgets('close before start prevents later resource acquisition', (
-    tester,
-  ) async {
+  test('close before start prevents later resource acquisition', () async {
     final controller = FakeCameraController();
     final sceneSession = ObservationSceneSession(
       controller: controller,
@@ -99,7 +99,9 @@ void main() {
       sceneSession: sceneSession,
       observerBloc: assistant.observerBloc,
       modelStore: assistant.modelStore,
+      asrModelStore: assistant.asrModelStore,
       commentGenerator: assistant.commentGenerator,
+      speechRecognizer: assistant.speechRecognizer,
       speechSynthesizer: assistant.speechSynthesizer,
     );
     final sceneChangesComplete = expectLater(
@@ -107,7 +109,7 @@ void main() {
       emitsDone,
     );
 
-    await tester.runAsync(runtime.close);
+    await runtime.close();
     await sceneChangesComplete;
 
     final rejectedStart = runtime.start();
@@ -117,9 +119,7 @@ void main() {
     expect(controller.closeCalls, 1);
   });
 
-  testWidgets('close wins an immediate overlap with startup', (
-    tester,
-  ) async {
+  test('close wins an immediate overlap with startup', () async {
     final controller = FakeCameraController();
     final sceneSession = ObservationSceneSession(
       controller: controller,
@@ -131,7 +131,9 @@ void main() {
       sceneSession: sceneSession,
       observerBloc: assistant.observerBloc,
       modelStore: assistant.modelStore,
+      asrModelStore: assistant.asrModelStore,
       commentGenerator: assistant.commentGenerator,
+      speechRecognizer: assistant.speechRecognizer,
       speechSynthesizer: assistant.speechSynthesizer,
     );
     final sceneChangesComplete = expectLater(
@@ -139,12 +141,10 @@ void main() {
       emitsDone,
     );
 
-    await tester.runAsync(() async {
-      final startTask = runtime.start();
-      final closeTask = runtime.close();
-      expect(identical(closeTask, runtime.close()), isTrue);
-      await Future.wait([startTask, closeTask]);
-    });
+    final startTask = runtime.start();
+    final closeTask = runtime.close();
+    expect(identical(closeTask, runtime.close()), isTrue);
+    await Future.wait([startTask, closeTask]);
     await sceneChangesComplete;
 
     expect(controller.closeCalls, 1);
@@ -170,7 +170,9 @@ void main() {
       sceneSession: sceneSession,
       observerBloc: assistant.observerBloc,
       modelStore: assistant.modelStore,
+      asrModelStore: assistant.asrModelStore,
       commentGenerator: assistant.commentGenerator,
+      speechRecognizer: assistant.speechRecognizer,
       speechSynthesizer: assistant.speechSynthesizer,
     );
 
@@ -187,9 +189,9 @@ void main() {
     expect(controller.closeCalls, 1);
   });
 
-  testWidgets(
+  test(
     'suspends and reloads the eager observer session',
-    (tester) async {
+    () async {
       final controller = FakeCameraController();
       final sceneSession = ObservationSceneSession(
         controller: controller,
@@ -201,16 +203,28 @@ void main() {
         sceneSession: sceneSession,
         observerBloc: assistant.observerBloc,
         modelStore: assistant.modelStore,
+        asrModelStore: assistant.asrModelStore,
         commentGenerator: assistant.commentGenerator,
+        speechRecognizer: assistant.speechRecognizer,
         speechSynthesizer: assistant.speechSynthesizer,
       );
       await runtime.start();
+      await _waitForCondition(
+        () =>
+            assistant.observerBloc.state.modelStatus == ObserverModelStatus.ready &&
+            assistant.observerBloc.state.voicePhase == VoiceAgentPhase.watching,
+      );
 
       runtime
         ..didChangeAppLifecycleState(AppLifecycleState.inactive)
         ..didChangeAppLifecycleState(AppLifecycleState.hidden)
         ..didChangeAppLifecycleState(AppLifecycleState.paused);
-      await tester.pumpAndSettle();
+      await _waitForCondition(
+        () =>
+            assistant.modelStore.suspendCalls == 1 &&
+            controller.disableCalls == 1 &&
+            assistant.observerBloc.state.modelStatus == ObserverModelStatus.suspended,
+      );
       expect(assistant.modelStore.suspendCalls, 1);
       expect(controller.disableCalls, 1);
 
@@ -218,7 +232,12 @@ void main() {
         ..didChangeAppLifecycleState(AppLifecycleState.hidden)
         ..didChangeAppLifecycleState(AppLifecycleState.inactive)
         ..didChangeAppLifecycleState(AppLifecycleState.resumed);
-      await tester.pumpAndSettle();
+      await _waitForCondition(
+        () =>
+            assistant.modelStore.prepareCalls == 2 &&
+            controller.enableCalls.length == 2 &&
+            assistant.observerBloc.state.voicePhase == VoiceAgentPhase.watching,
+      );
 
       expect(assistant.modelStore.prepareCalls, 2);
       expect(
@@ -231,7 +250,12 @@ void main() {
         ..didChangeAppLifecycleState(AppLifecycleState.inactive)
         ..didChangeAppLifecycleState(AppLifecycleState.hidden)
         ..didChangeAppLifecycleState(AppLifecycleState.paused);
-      await tester.pumpAndSettle();
+      await _waitForCondition(
+        () =>
+            assistant.modelStore.suspendCalls == 2 &&
+            controller.disableCalls == 2 &&
+            assistant.observerBloc.state.modelStatus == ObserverModelStatus.suspended,
+      );
       expect(assistant.modelStore.suspendCalls, 2);
       expect(controller.disableCalls, 2);
       expect(
@@ -243,7 +267,12 @@ void main() {
         ..didChangeAppLifecycleState(AppLifecycleState.hidden)
         ..didChangeAppLifecycleState(AppLifecycleState.inactive)
         ..didChangeAppLifecycleState(AppLifecycleState.resumed);
-      await tester.pumpAndSettle();
+      await _waitForCondition(
+        () =>
+            assistant.modelStore.prepareCalls == 3 &&
+            controller.enableCalls.length == 3 &&
+            assistant.observerBloc.state.voicePhase == VoiceAgentPhase.watching,
+      );
       expect(assistant.modelStore.prepareCalls, 3);
       expect(
         assistant.observerBloc.state.modelStatus,
@@ -251,13 +280,13 @@ void main() {
       );
       expect(controller.enableCalls, hasLength(3));
 
-      await tester.runAsync(runtime.close);
+      await runtime.close();
     },
   );
 
-  testWidgets(
+  test(
     'quiesces generation before deactivating the camera',
-    (tester) async {
+    () async {
       final releaseCancellation = Completer<void>();
       final cameraDeactivationStarted = Completer<void>();
       final handle = FakeGenerationHandle()..onCancel = () => releaseCancellation.future;
@@ -277,44 +306,54 @@ void main() {
         sceneSession: sceneSession,
         observerBloc: assistant.observerBloc,
         modelStore: assistant.modelStore,
+        asrModelStore: assistant.asrModelStore,
         commentGenerator: assistant.commentGenerator,
+        speechRecognizer: assistant.speechRecognizer,
         speechSynthesizer: assistant.speechSynthesizer,
       );
       await runtime.start();
-      await tester.pumpAndSettle();
+      await _waitForCondition(
+        () =>
+            assistant.observerBloc.state.modelStatus == ObserverModelStatus.ready &&
+            assistant.observerBloc.state.voicePhase == VoiceAgentPhase.watching,
+      );
       assistant.observerBloc.add(
         const ObserverPromptSubmitted('Describe the scene'),
       );
-      await tester.pumpAndSettle();
+      await _waitForCondition(
+        () => assistant.observerBloc.state.activeGeneration == ObserverGenerationKind.manual,
+      );
       expect(
         assistant.observerBloc.state.activeGeneration,
         ObserverGenerationKind.manual,
       );
 
       runtime.didChangeAppLifecycleState(AppLifecycleState.inactive);
-      await tester.pump();
+      await _waitForCondition(() => handle.cancelCalls == 1);
 
       expect(handle.cancelCalls, 1);
       expect(controller.disableCalls, 0);
-      await tester.runAsync(() async {
-        releaseCancellation.complete();
-        await handle.cancel();
-        await Future<void>.delayed(Duration.zero);
-      });
-      await tester.pumpAndSettle();
+      releaseCancellation.complete();
+      await handle.cancel();
+      await _waitForCondition(
+        () =>
+            !assistant.observerBloc.state.foregroundActive &&
+            controller.disableCalls == 1 &&
+            assistant.modelStore.suspendCalls == 1,
+      );
       expect(assistant.observerBloc.state.foregroundActive, isFalse);
       expect(assistant.observerBloc.state.activeGeneration, isNull);
       expect(cameraDeactivationStarted.isCompleted, isTrue);
       expect(controller.disableCalls, 1);
       expect(assistant.modelStore.suspendCalls, 1);
 
-      await tester.runAsync(runtime.close);
+      await runtime.close();
     },
   );
 
-  testWidgets(
+  test(
     'settles camera work before suspending the assistant runtime',
-    (tester) async {
+    () async {
       final disableStarted = Completer<void>();
       final releaseDisable = Completer<void>();
       final controller = FakeCameraController(
@@ -333,15 +372,17 @@ void main() {
         sceneSession: sceneSession,
         observerBloc: assistant.observerBloc,
         modelStore: assistant.modelStore,
+        asrModelStore: assistant.asrModelStore,
         commentGenerator: assistant.commentGenerator,
+        speechRecognizer: assistant.speechRecognizer,
         speechSynthesizer: assistant.speechSynthesizer,
       );
       await runtime.start();
-      assistant.observerBloc.add(const ObserverStarted());
-      await tester.pumpAndSettle();
+      await _waitForCondition(
+        () => assistant.observerBloc.state.modelStatus == ObserverModelStatus.ready,
+      );
 
       runtime.didChangeAppLifecycleState(AppLifecycleState.inactive);
-      await tester.pump();
       await disableStarted.future;
 
       expect(assistant.modelStore.suspendCalls, 0);
@@ -351,7 +392,11 @@ void main() {
       );
 
       releaseDisable.complete();
-      await tester.pumpAndSettle();
+      await _waitForCondition(
+        () =>
+            assistant.modelStore.suspendCalls == 1 &&
+            assistant.observerBloc.state.modelStatus == ObserverModelStatus.suspended,
+      );
 
       expect(assistant.modelStore.suspendCalls, 1);
       expect(
@@ -359,13 +404,13 @@ void main() {
         ObserverModelStatus.suspended,
       );
 
-      await tester.runAsync(runtime.close);
+      await runtime.close();
     },
   );
 
-  testWidgets(
+  test(
     'rejects queued suspension after a rapid foreground return',
-    (tester) async {
+    () async {
       final disableStarted = Completer<void>();
       final releaseDisable = Completer<void>();
       final controller = FakeCameraController(
@@ -384,19 +429,23 @@ void main() {
         sceneSession: sceneSession,
         observerBloc: assistant.observerBloc,
         modelStore: assistant.modelStore,
+        asrModelStore: assistant.asrModelStore,
         commentGenerator: assistant.commentGenerator,
+        speechRecognizer: assistant.speechRecognizer,
         speechSynthesizer: assistant.speechSynthesizer,
       );
       await runtime.start();
-      assistant.observerBloc.add(const ObserverStarted());
-      await tester.pumpAndSettle();
+      await _waitForCondition(
+        () => assistant.observerBloc.state.modelStatus == ObserverModelStatus.ready,
+      );
 
       runtime.didChangeAppLifecycleState(AppLifecycleState.inactive);
-      await tester.pump();
       await disableStarted.future;
       runtime.didChangeAppLifecycleState(AppLifecycleState.resumed);
       releaseDisable.complete();
-      await tester.pumpAndSettle();
+      await _waitForCondition(
+        () => assistant.observerBloc.state.foregroundActive && controller.enableCalls.length == 2,
+      );
 
       expect(assistant.modelStore.suspendCalls, 0);
       expect(
@@ -404,7 +453,7 @@ void main() {
         ObserverModelStatus.ready,
       );
 
-      await tester.runAsync(runtime.close);
+      await runtime.close();
     },
   );
 
@@ -429,23 +478,35 @@ void main() {
         sceneSession: sceneSession,
         observerBloc: assistant.observerBloc,
         modelStore: assistant.modelStore,
+        asrModelStore: assistant.asrModelStore,
         commentGenerator: assistant.commentGenerator,
+        speechRecognizer: assistant.speechRecognizer,
         speechSynthesizer: assistant.speechSynthesizer,
       );
       await runtime.start();
+      if (assistant.observerBloc.state.voicePhase != VoiceAgentPhase.watching) {
+        await assistant.observerBloc.stream.firstWhere(
+          (state) => state.voicePhase == VoiceAgentPhase.watching,
+        );
+      }
 
       final closeTask = runtime.close();
       await cameraCloseStarted.future;
 
+      expect(assistant.speechRecognizer.activeHandleStopCalls, 1);
       expect(assistant.modelStore.closeCalls, 0);
+      expect(assistant.asrModelStore.closeCalls, 0);
       expect(assistant.commentGenerator.closeCalls, 0);
+      expect(assistant.speechRecognizer.closeCalls, 0);
       expect(assistant.speechSynthesizer.closeCalls, 0);
 
       releaseCameraClose.complete();
       await closeTask;
 
       expect(assistant.modelStore.closeCalls, 1);
+      expect(assistant.asrModelStore.closeCalls, 1);
       expect(assistant.commentGenerator.closeCalls, 1);
+      expect(assistant.speechRecognizer.closeCalls, 1);
       expect(assistant.speechSynthesizer.closeCalls, 1);
     },
   );
@@ -473,7 +534,9 @@ void main() {
         sceneSession: sceneSession,
         observerBloc: assistant.observerBloc,
         modelStore: assistant.modelStore,
+        asrModelStore: assistant.asrModelStore,
         commentGenerator: assistant.commentGenerator,
+        speechRecognizer: assistant.speechRecognizer,
         speechSynthesizer: assistant.speechSynthesizer,
       );
       await runtime.start();
@@ -482,7 +545,9 @@ void main() {
       await cameraCloseStarted.future;
 
       expect(assistant.modelStore.closeCalls, 0);
+      expect(assistant.asrModelStore.closeCalls, 0);
       expect(assistant.commentGenerator.closeCalls, 0);
+      expect(assistant.speechRecognizer.closeCalls, 0);
       expect(assistant.speechSynthesizer.closeCalls, 0);
 
       releaseCameraClose.complete();
@@ -491,7 +556,9 @@ void main() {
         throwsA(same(cameraCloseFailure)),
       );
       expect(assistant.modelStore.closeCalls, 1);
+      expect(assistant.asrModelStore.closeCalls, 1);
       expect(assistant.commentGenerator.closeCalls, 1);
+      expect(assistant.speechRecognizer.closeCalls, 1);
       expect(assistant.speechSynthesizer.closeCalls, 1);
     },
   );
@@ -510,7 +577,9 @@ void main() {
       sceneSession: sceneSession,
       observerBloc: assistant.observerBloc,
       modelStore: assistant.modelStore,
+      asrModelStore: assistant.asrModelStore,
       commentGenerator: assistant.commentGenerator,
+      speechRecognizer: assistant.speechRecognizer,
       speechSynthesizer: assistant.speechSynthesizer,
     );
     await runtime.start();
@@ -541,7 +610,9 @@ void main() {
       sceneSession: sceneSession,
       observerBloc: assistant.observerBloc,
       modelStore: assistant.modelStore,
+      asrModelStore: assistant.asrModelStore,
       commentGenerator: assistant.commentGenerator,
+      speechRecognizer: assistant.speechRecognizer,
       speechSynthesizer: assistant.speechSynthesizer,
     );
     await runtime.start();
@@ -563,4 +634,88 @@ void main() {
 
     expect(assistant.speechSynthesizer.closeCalls, 2);
   });
+
+  test('retries a retained speech recognizer after close fails', () async {
+    final controller = FakeCameraController();
+    final sceneSession = ObservationSceneSession(
+      controller: controller,
+      stabilizer: SceneStabilizer(),
+    );
+    final assistant = TestAssistantResources();
+    const closeFailure = DeviceUnavailableFailure(
+      code: 'test_asr_close_failed',
+    );
+    assistant.speechRecognizer.closeFailures.add(closeFailure);
+    final runtime = AppRuntime(
+      cameraBloc: CameraBloc(controller),
+      sceneSession: sceneSession,
+      observerBloc: assistant.observerBloc,
+      modelStore: assistant.modelStore,
+      asrModelStore: assistant.asrModelStore,
+      commentGenerator: assistant.commentGenerator,
+      speechRecognizer: assistant.speechRecognizer,
+      speechSynthesizer: assistant.speechSynthesizer,
+    );
+    await runtime.start();
+
+    await expectLater(
+      runtime.close(),
+      throwsA(
+        isA<AppRuntimeCloseException>().having(
+          (error) => error.failure,
+          'failure',
+          same(closeFailure),
+        ),
+      ),
+    );
+    expect(assistant.speechRecognizer.closeCalls, 1);
+
+    await runtime.close();
+    await runtime.close();
+
+    expect(assistant.speechRecognizer.closeCalls, 2);
+  });
+
+  test(
+    'closes the recognizer when ASR-store close fails and retries the store',
+    () async {
+      final controller = FakeCameraController();
+      final sceneSession = ObservationSceneSession(
+        controller: controller,
+        stabilizer: SceneStabilizer(),
+      );
+      final assistant = TestAssistantResources();
+      final closeFailure = Exception('ASR store close failed');
+      assistant.asrModelStore.closeFailures.add(closeFailure);
+      final runtime = AppRuntime(
+        cameraBloc: CameraBloc(controller),
+        sceneSession: sceneSession,
+        observerBloc: assistant.observerBloc,
+        modelStore: assistant.modelStore,
+        asrModelStore: assistant.asrModelStore,
+        commentGenerator: assistant.commentGenerator,
+        speechRecognizer: assistant.speechRecognizer,
+        speechSynthesizer: assistant.speechSynthesizer,
+      );
+      await runtime.start();
+
+      await expectLater(runtime.close(), throwsA(same(closeFailure)));
+      expect(assistant.asrModelStore.closeCalls, 1);
+      expect(assistant.speechRecognizer.closeCalls, 1);
+
+      await runtime.close();
+      await runtime.close();
+
+      expect(assistant.asrModelStore.closeCalls, 2);
+      expect(assistant.speechRecognizer.closeCalls, 1);
+    },
+  );
+}
+
+Future<void> _waitForCondition(bool Function() predicate) async {
+  for (var attempt = 0; attempt < 100; attempt += 1) {
+    if (predicate()) return;
+    await Future<void>.delayed(Duration.zero);
+  }
+  fail('Expected asynchronous runtime state to settle.');
 }

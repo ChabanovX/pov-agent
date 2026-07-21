@@ -916,16 +916,25 @@ ObserverBloc _createBloc(
   FakeSpeechSynthesizer? speechSynthesizer,
 }) {
   return ObserverBloc(
-    sceneSource: scene,
-    modelStore: store,
-    commentGenerator: generator,
-    speechSynthesizer: speechSynthesizer ?? FakeSpeechSynthesizer(),
-    requestBuilder: ObserverRequestBuilder(
-      qwenPromptBuilder: QwenPromptBuilder(
-        systemPrompt: 'You are a concise local observer.',
-        manualOptions: _testManualOptions,
-        shortCommentOptions: _testShortOptions,
+    generation: ObserverGenerationDependencies(
+      sceneSource: scene,
+      qwenModelStore: store,
+      commentGenerator: generator,
+      requestBuilder: ObserverRequestBuilder(
+        qwenPromptBuilder: QwenPromptBuilder(
+          systemPrompt: 'You are a concise local observer.',
+          dialogueOptions: _testManualOptions,
+          shortCommentOptions: _testShortOptions,
+        ),
       ),
+    ),
+    voice: ObserverVoiceDependencies(
+      asrModelStore: FakeAsrModelStore(),
+      microphonePermissionGateway: FakeMicrophonePermissionGateway(),
+      speechRecognizer: FakeSpeechRecognizer(),
+      speechSynthesizer: speechSynthesizer ?? FakeSpeechSynthesizer(),
+      wakePhrase: 'assistant',
+      questionDeadline: testVoiceQuestionDeadline,
     ),
     periodicTimerFactory: timers.create,
   );

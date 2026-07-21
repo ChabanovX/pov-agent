@@ -56,7 +56,7 @@ void main() {
       tester.binding.handleAppLifecycleStateChanged(
         AppLifecycleState.paused,
       );
-      await tester.pumpAndSettle();
+      await _pumpUntil(tester, () => controller.disableCalls == 1);
       expect(controller.disableCalls, 1);
 
       tester.binding.handleAppLifecycleStateChanged(
@@ -68,7 +68,7 @@ void main() {
       tester.binding.handleAppLifecycleStateChanged(
         AppLifecycleState.resumed,
       );
-      await tester.pumpAndSettle();
+      await _pumpUntil(tester, () => controller.enableCalls.length == 2);
       expect(controller.enableCalls, hasLength(2));
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
@@ -139,4 +139,16 @@ void main() {
       await tester.runAsync(() => disposeTestAppRuntime(runtime));
     }
   });
+}
+
+Future<void> _pumpUntil(
+  WidgetTester tester,
+  bool Function() predicate,
+) async {
+  for (var attempt = 0; attempt < 100; attempt += 1) {
+    await tester.pump();
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    if (predicate()) return;
+  }
+  throw TestFailure('Expected lifecycle operation to settle.');
 }

@@ -21,6 +21,12 @@ const assistantAnswerRetryButtonKey = Key('assistant-answer-retry-button');
 /// Stable key for retrying local-model preparation.
 const assistantModelRetryButtonKey = Key('assistant-model-retry-button');
 
+/// Stable key for the hands-free agent status surface.
+const handsFreeAgentPanelKey = Key('hands-free-agent-panel');
+
+/// Stable key for retrying hands-free model, permission, or input setup.
+const handsFreeAgentRetryButtonKey = Key('hands-free-agent-retry-button');
+
 /// Stable key for the automatic observer start-or-stop control.
 const observerToggleButtonKey = Key('observer-toggle-button');
 

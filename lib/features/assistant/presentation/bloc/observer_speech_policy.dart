@@ -18,7 +18,7 @@ extension _ObserverSpeechPolicy on ObserverBloc {
         speechFailure: () => null,
       ),
     );
-    if (!muted || !_speechSession.isActive) return;
+    if (!muted || commentIndex == null || !_speechSession.isActive) return;
 
     final result = await _speechSession.stop();
     if (emit.isDone || _closing) return;
@@ -29,11 +29,15 @@ extension _ObserverSpeechPolicy on ObserverBloc {
           speechFailure: () => failure,
         ),
       );
+    } else {
+      unawaited(_voiceInputSession.watch());
     }
   }
 
   Future<void> _onSpeechStopped(Emitter<ObserverState> emit) async {
-    if (_closing || !_speechSession.isActive) return;
+    if (_closing || state.activeSpeechCommentIndex == null || !_speechSession.isActive) {
+      return;
+    }
 
     final commentIndex = state.activeSpeechCommentIndex;
     emit(
@@ -51,13 +55,15 @@ extension _ObserverSpeechPolicy on ObserverBloc {
           speechFailure: () => failure,
         ),
       );
+    } else {
+      unawaited(_voiceInputSession.watch());
     }
   }
 
-  void _onCommentReplayRequested(
+  Future<void> _onCommentReplayRequested(
     int commentIndex,
     Emitter<ObserverState> emit,
-  ) {
+  ) async {
     if (_closing ||
         !_acceptsForegroundWork ||
         !state.started ||
@@ -70,6 +76,18 @@ extension _ObserverSpeechPolicy on ObserverBloc {
       return;
     }
 
+    final voicePause = await _voiceInputSession.pause();
+    if (emit.isDone || _closing || !_acceptsForegroundWork) return;
+    if (voicePause case AppError<void>(:final failure)) {
+      emit(
+        state.copyWith(
+          voicePhase: VoiceAgentPhase.failure,
+          voiceFailure: () => failure,
+        ),
+      );
+      return;
+    }
+
     final speech = _speechSession.start(
       commentIndex: commentIndex,
       text: state.comments[commentIndex].text,
@@ -78,6 +96,7 @@ extension _ObserverSpeechPolicy on ObserverBloc {
     emit(
       state.copyWith(
         activeSpeechCommentIndex: () => commentIndex,
+        voicePhase: VoiceAgentPhase.unavailable,
         speechFailure: () => null,
       ),
     );
@@ -93,27 +112,68 @@ extension _ObserverSpeechPolicy on ObserverBloc {
     switch (update.result) {
       case AppSuccess<void>():
         _speechSession.complete(update.speech.runId);
-        emit(
-          state.copyWith(
-            activeSpeechCommentIndex: () => null,
-            speechFailure: () => null,
-          ),
-        );
+        switch (update.speech.target) {
+          case ObserverCommentSpeechTarget():
+            emit(
+              state.copyWith(
+                activeSpeechCommentIndex: () => null,
+                speechFailure: () => null,
+              ),
+            );
+            unawaited(_voiceInputSession.watch());
+          case ObserverVoiceAnswerSpeechTarget():
+            emit(
+              state.copyWith(
+                activeVoiceSpeechTurnId: () => null,
+                voicePhase: VoiceAgentPhase.unavailable,
+                voiceQuestionDraft: '',
+                voiceTurnId: () => null,
+                voiceFailure: () => null,
+                speechFailure: () => null,
+              ),
+            );
+            unawaited(_voiceInputSession.watch());
+        }
       case AppError<void>(:final failure):
         final stopResult = await _speechSession.stop();
         if (emit.isDone || _closing) return;
-        switch (stopResult) {
-          case AppSuccess<void>():
+        switch ((update.speech.target, stopResult)) {
+          case (ObserverCommentSpeechTarget(), AppSuccess<void>()):
             emit(
               state.copyWith(
                 activeSpeechCommentIndex: () => null,
                 speechFailure: () => failure,
               ),
             );
-          case AppError<void>(:final failure):
+            unawaited(_voiceInputSession.watch());
+          case (
+            ObserverCommentSpeechTarget(:final commentIndex),
+            AppError<void>(:final failure),
+          ):
             emit(
               state.copyWith(
-                activeSpeechCommentIndex: () => update.speech.commentIndex,
+                activeSpeechCommentIndex: () => commentIndex,
+                speechFailure: () => failure,
+              ),
+            );
+          case (ObserverVoiceAnswerSpeechTarget(), AppSuccess<void>()):
+            emit(
+              state.copyWith(
+                activeVoiceSpeechTurnId: () => null,
+                voicePhase: VoiceAgentPhase.failure,
+                voiceFailure: () => failure,
+                speechFailure: () => failure,
+              ),
+            );
+          case (
+            ObserverVoiceAnswerSpeechTarget(:final turnId),
+            AppError<void>(:final failure),
+          ):
+            emit(
+              state.copyWith(
+                activeVoiceSpeechTurnId: () => turnId,
+                voicePhase: VoiceAgentPhase.failure,
+                voiceFailure: () => failure,
                 speechFailure: () => failure,
               ),
             );

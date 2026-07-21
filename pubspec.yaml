@@ -53,8 +53,10 @@ dependencies:
   meta: ^1.18.0
   # Resolves the application-support directory for verified model artifacts.
   path_provider: ^2.1.5
-  # Implements the data-layer camera permission gateway on iOS and Android.
+  # Implements data-layer camera and microphone permission gateways.
   permission_handler: ^12.0.3
+  # Streams mono PCM16 microphone audio directly to the on-device recognizer.
+  record: 7.1.1
   # Runs the pinned Piper-compatible VITS voice fully on device.
   sherpa_onnx: 1.13.4
   # Drives the native camera surface and on-device YOLO inference boundary.
@@ -86,6 +88,8 @@ flutter:
     # Keeps the pinned platform YOLO models available without a first-run download.
     - assets/models/yolo26n.mlpackage.zip
     - assets/models/yolo26n_w8a32.tflite
+    # Replays one synthetic voice command through native ASR acceptance lanes.
+    - assets/audio/hands_free_question_en_us.pcm
     # Provides deterministic camera input for simulator and emulator acceptance lanes.
     - assets/video/pedestrians.mp4
 

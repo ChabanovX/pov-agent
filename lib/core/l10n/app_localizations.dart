@@ -247,6 +247,156 @@ abstract class AppLocalizations {
   /// **'Retry answer'**
   String get assistantRetryAnswerAction;
 
+  /// Heading for the hands-free voice-agent status panel.
+  ///
+  /// In en, this message translates to:
+  /// **'Hands-free assistant'**
+  String get handsFreeAgentTitle;
+
+  /// Status shown while foreground recognition is temporarily not armed.
+  ///
+  /// In en, this message translates to:
+  /// **'Hands-free listening is paused while another task is active.'**
+  String get handsFreeAgentUnavailableMessage;
+
+  /// Status shown while the speech model cache or native recognizer is prepared.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing on-device speech recognition…'**
+  String get handsFreeAgentPreparingMessage;
+
+  /// Progress status shown during the first speech-recognition model download.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading speech recognition: {percent}%'**
+  String handsFreeAgentDownloadingMessage(int percent);
+
+  /// Status shown while cached or downloaded speech-model bytes are verified.
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying on-device speech recognition…'**
+  String get handsFreeAgentVerifyingMessage;
+
+  /// Status shown while recognition is armed and waiting for the wake phrase.
+  ///
+  /// In en, this message translates to:
+  /// **'Say “{wakePhrase}” to ask about the current scene.'**
+  String handsFreeAgentWatchingMessage(String wakePhrase);
+
+  /// Status shown immediately after the configured wake phrase is recognized.
+  ///
+  /// In en, this message translates to:
+  /// **'Wake phrase detected. Ask your question.'**
+  String get handsFreeAgentWakeDetectedMessage;
+
+  /// Status shown while the agent collects the spoken question.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening for your question…'**
+  String get handsFreeAgentListeningMessage;
+
+  /// Status shown while Qwen generates a hands-free answer.
+  ///
+  /// In en, this message translates to:
+  /// **'Thinking about your question…'**
+  String get handsFreeAgentThinkingMessage;
+
+  /// Status shown while the committed hands-free answer is spoken.
+  ///
+  /// In en, this message translates to:
+  /// **'Speaking the answer…'**
+  String get handsFreeAgentSpeakingMessage;
+
+  /// Status shown after lifecycle suspension releases foreground recognition.
+  ///
+  /// In en, this message translates to:
+  /// **'Hands-free listening is paused while the app is inactive.'**
+  String get handsFreeAgentSuspendedMessage;
+
+  /// Live speech-recognition transcript shown during a hands-free question.
+  ///
+  /// In en, this message translates to:
+  /// **'Heard: {transcript}'**
+  String handsFreeAgentRecognizedSpeechLabel(String transcript);
+
+  /// Recognized hands-free question shown during generation and speech.
+  ///
+  /// In en, this message translates to:
+  /// **'Question: {question}'**
+  String handsFreeAgentQuestionLabel(String question);
+
+  /// Live uncommitted hands-free answer prefix shown during generation.
+  ///
+  /// In en, this message translates to:
+  /// **'Answering: {answer}'**
+  String handsFreeAgentAnswerDraftLabel(String answer);
+
+  /// Actionable failure shown when hands-free microphone permission is denied.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone access is off. Allow it in Settings, then retry.'**
+  String get handsFreeAgentMicrophonePermissionFailureMessage;
+
+  /// Actionable speech-model failure shown for unavailable network transport.
+  ///
+  /// In en, this message translates to:
+  /// **'The speech model could not be downloaded. Check your connection and retry.'**
+  String get handsFreeAgentModelNetworkFailureMessage;
+
+  /// Actionable speech-model failure shown when its volume lacks free space.
+  ///
+  /// In en, this message translates to:
+  /// **'There is not enough free storage for on-device speech recognition.'**
+  String get handsFreeAgentModelStorageFailureMessage;
+
+  /// Actionable speech-model failure shown after size or checksum verification fails.
+  ///
+  /// In en, this message translates to:
+  /// **'The speech model did not pass verification. Retry the download.'**
+  String get handsFreeAgentModelIntegrityFailureMessage;
+
+  /// Actionable speech-model failure shown when native recognition services are unavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'On-device speech recognition could not start on this device.'**
+  String get handsFreeAgentModelUnavailableFailureMessage;
+
+  /// Fallback speech-model preparation failure.
+  ///
+  /// In en, this message translates to:
+  /// **'On-device speech recognition could not be prepared.'**
+  String get handsFreeAgentModelFailureMessage;
+
+  /// Recoverable failure shown after a wake phrase with no spoken question.
+  ///
+  /// In en, this message translates to:
+  /// **'No question was heard. Say “{wakePhrase}” and try again.'**
+  String handsFreeAgentEmptyQuestionFailureMessage(String wakePhrase);
+
+  /// Recoverable failure shown when microphone capture or recognition stops unexpectedly.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech recognition stopped. Retry hands-free listening.'**
+  String get handsFreeAgentRecognitionFailureMessage;
+
+  /// Recoverable failure shown when generation or speech cannot complete a voice turn.
+  ///
+  /// In en, this message translates to:
+  /// **'The local assistant could not complete the spoken answer. Retry hands-free listening.'**
+  String get handsFreeAgentAnswerFailureMessage;
+
+  /// Fallback recoverable hands-free failure.
+  ///
+  /// In en, this message translates to:
+  /// **'Hands-free listening stopped. Retry to start it again.'**
+  String get handsFreeAgentFailureMessage;
+
+  /// Button label for retrying hands-free model, permission, or recognition setup.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry hands-free listening'**
+  String get handsFreeAgentRetryAction;
+
   /// Heading for the continuous scene observer controls and transcript.
   ///
   /// In en, this message translates to:

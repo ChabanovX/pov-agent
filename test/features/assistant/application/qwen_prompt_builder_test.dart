@@ -25,7 +25,7 @@ void main() {
   setUp(() {
     builder = QwenPromptBuilder(
       systemPrompt: 'Always answer in English.',
-      manualOptions: _manualOptions,
+      dialogueOptions: _manualOptions,
       shortCommentOptions: _shortCommentOptions,
     );
   });
@@ -116,7 +116,7 @@ void main() {
     );
     final configured = QwenPromptBuilder(
       systemPrompt: 'Injected policy.',
-      manualOptions: manual,
+      dialogueOptions: manual,
       shortCommentOptions: short,
     );
 

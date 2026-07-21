@@ -13,6 +13,6 @@ final class ObserverPrompt {
   /// The current-scene and previous-comment instruction.
   final String text;
 
-  /// Up to four completed, bounded manual dialogue pairs.
+  /// Up to four completed, bounded typed or hands-free dialogue pairs.
   final List<ConversationMessage> dialogueHistory;
 }

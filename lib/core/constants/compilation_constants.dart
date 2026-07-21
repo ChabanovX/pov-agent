@@ -11,6 +11,17 @@ abstract final class CompilationConstants {
     defaultValue: 'false',
   );
 
+  /// Feeds the bundled acceptance waveform instead of the device microphone.
+  static bool get usesRecordedAudio => _parseCompileTimeBoolean(
+    'USE_RECORDED_AUDIO',
+    _usesRecordedAudioValue,
+  );
+
+  static const String _usesRecordedAudioValue = String.fromEnvironment(
+    'USE_RECORDED_AUDIO',
+    defaultValue: 'false',
+  );
+
   /// Stable upstream repository identifier for the selected model.
   static const String qwenModelId = String.fromEnvironment(
     'QWEN_MODEL_ID',
@@ -88,14 +99,15 @@ abstract final class CompilationConstants {
 
   /// Sampler base seed; fixed values sequence short comments deterministically.
   ///
-  /// Manual requests use the value directly. `2^32 - 1` asks llama.cpp to
-  /// choose a random seed for every request instead of deriving a sequence.
+  /// Typed and hands-free dialogue requests use the value directly. `2^32 - 1`
+  /// asks llama.cpp to choose a random seed for every request instead of
+  /// deriving a sequence.
   static const String qwenRandomSeed = String.fromEnvironment(
     'QWEN_RANDOM_SEED',
     defaultValue: '4294967295',
   );
 
-  /// System instruction shared by manual and observer prompts.
+  /// System instruction shared by dialogue and observer prompts.
   static const String qwenSystemPrompt = String.fromEnvironment(
     'QWEN_SYSTEM_PROMPT',
     defaultValue:
@@ -103,31 +115,34 @@ abstract final class CompilationConstants {
         'Always answer in English.',
   );
 
-  /// Maximum generated tokens for a manual `/think` request.
+  /// Maximum tokens for typed and hands-free `/think` dialogue.
+  ///
+  /// The environment key keeps its pre-hands-free `MANUAL` name for backwards
+  /// compatibility.
   static const String qwenManualMaxTokens = String.fromEnvironment(
     'QWEN_MANUAL_MAX_TOKENS',
     defaultValue: '512',
   );
 
-  /// Temperature for a manual `/think` request.
+  /// Temperature for typed and hands-free `/think` dialogue.
   static const String qwenManualTemperature = String.fromEnvironment(
     'QWEN_MANUAL_TEMPERATURE',
     defaultValue: '0.6',
   );
 
-  /// Top-p threshold for a manual `/think` request.
+  /// Top-p threshold for typed and hands-free `/think` dialogue.
   static const String qwenManualTopP = String.fromEnvironment(
     'QWEN_MANUAL_TOP_P',
     defaultValue: '0.95',
   );
 
-  /// Top-k threshold for a manual `/think` request.
+  /// Top-k threshold for typed and hands-free `/think` dialogue.
   static const String qwenManualTopK = String.fromEnvironment(
     'QWEN_MANUAL_TOP_K',
     defaultValue: '20',
   );
 
-  /// Min-p threshold for a manual `/think` request.
+  /// Min-p threshold for typed and hands-free `/think` dialogue.
   static const String qwenManualMinP = String.fromEnvironment(
     'QWEN_MANUAL_MIN_P',
     defaultValue: '0.0',
@@ -318,6 +333,172 @@ abstract final class CompilationConstants {
   /// Whether sherpa-onnx emits native diagnostic logging.
   static const String piperDebug = String.fromEnvironment(
     'PIPER_DEBUG',
+    defaultValue: 'false',
+  );
+
+  /// Stable upstream identifier for the selected streaming ASR bundle.
+  static const String asrModelId = String.fromEnvironment(
+    'ASR_MODEL_ID',
+    defaultValue:
+        'k2-fsa/sherpa-onnx/'
+        'sherpa-onnx-nemo-streaming-fast-conformer-ctc-en-80ms-int8',
+  );
+
+  /// Download URL for the checksum-pinned ASR archive.
+  static const String asrModelUrl = String.fromEnvironment(
+    'ASR_MODEL_URL',
+    defaultValue:
+        'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/'
+        'sherpa-onnx-nemo-streaming-fast-conformer-ctc-en-80ms-int8.tar.bz2',
+  );
+
+  /// Upstream release tag containing the ASR archive.
+  static const String asrModelRevision = String.fromEnvironment(
+    'ASR_MODEL_REVISION',
+    defaultValue: 'asr-models',
+  );
+
+  /// Cached filename of the compressed ASR bundle.
+  static const String asrModelArchiveFilename = String.fromEnvironment(
+    'ASR_MODEL_ARCHIVE_FILENAME',
+    defaultValue: 'sherpa-onnx-nemo-streaming-fast-conformer-ctc-en-80ms-int8.tar.bz2',
+  );
+
+  /// Exact compressed ASR archive length.
+  static const String asrModelArchiveSizeBytes = String.fromEnvironment(
+    'ASR_MODEL_ARCHIVE_SIZE_BYTES',
+    defaultValue: '99459493',
+  );
+
+  /// SHA-256 required before the ASR archive can be extracted.
+  static const String asrModelArchiveSha256 = String.fromEnvironment(
+    'ASR_MODEL_ARCHIVE_SHA256',
+    defaultValue: '479759fbd5c69c909e7175d7773105a1bfabf82fa533de68c546c89d85f234e8',
+  );
+
+  /// Exact temporary tar length produced during ASR extraction.
+  static const String asrModelExpandedArchiveSizeBytes = String.fromEnvironment(
+    'ASR_MODEL_EXPANDED_ARCHIVE_SIZE_BYTES',
+    defaultValue: '132891648',
+  );
+
+  /// Exact sum of regular-file bytes in the extracted ASR tree.
+  static const String asrModelExtractedSizeBytes = String.fromEnvironment(
+    'ASR_MODEL_EXTRACTED_SIZE_BYTES',
+    defaultValue: '132884963',
+  );
+
+  /// Exact regular-file count in the extracted ASR tree.
+  static const String asrModelExtractedFileCount = String.fromEnvironment(
+    'ASR_MODEL_EXTRACTED_FILE_COUNT',
+    defaultValue: '6',
+  );
+
+  /// Canonical tree digest required before publishing the ASR bundle.
+  static const String asrModelBundleTreeSha256 = String.fromEnvironment(
+    'ASR_MODEL_BUNDLE_TREE_SHA256',
+    defaultValue: '8ec5fb017edb1fc389101bf235cbc13063185657b91752b9b17fa649eeade040',
+  );
+
+  /// Single root directory contained by the ASR archive.
+  static const String asrModelArchiveRoot = String.fromEnvironment(
+    'ASR_MODEL_ARCHIVE_ROOT',
+    defaultValue: 'sherpa-onnx-nemo-streaming-fast-conformer-ctc-en-80ms-int8',
+  );
+
+  /// NeMo CTC graph filename inside the verified ASR bundle.
+  static const String asrModelFilename = String.fromEnvironment(
+    'ASR_MODEL_FILENAME',
+    defaultValue: 'model.int8.onnx',
+  );
+
+  /// Token-table filename inside the verified ASR bundle.
+  static const String asrTokensFilename = String.fromEnvironment(
+    'ASR_TOKENS_FILENAME',
+    defaultValue: 'tokens.txt',
+  );
+
+  /// License identifier recorded for the upstream model weights.
+  static const String asrModelLicense = String.fromEnvironment(
+    'ASR_MODEL_LICENSE',
+    defaultValue: 'NVIDIA-NGC-TOU',
+  );
+
+  /// Free-space reserve retained beyond the ASR extraction peak.
+  static const String asrDownloadReserveBytes = String.fromEnvironment(
+    'ASR_DOWNLOAD_RESERVE_BYTES',
+    defaultValue: '33554432',
+  );
+
+  /// sherpa-onnx execution provider used by streaming ASR.
+  static const String asrProvider = String.fromEnvironment(
+    'ASR_PROVIDER',
+    defaultValue: 'cpu',
+  );
+
+  /// CPU thread count used by the streaming recognizer.
+  static const String asrThreadCount = String.fromEnvironment(
+    'ASR_THREAD_COUNT',
+    defaultValue: '2',
+  );
+
+  /// Requested microphone and recognizer sample rate.
+  static const String asrSampleRate = String.fromEnvironment(
+    'ASR_SAMPLE_RATE',
+    defaultValue: '16000',
+  );
+
+  /// Mel feature dimension expected by the pinned NeMo graph.
+  static const String asrFeatureDimension = String.fromEnvironment(
+    'ASR_FEATURE_DIMENSION',
+    defaultValue: '80',
+  );
+
+  /// Online CTC decoding strategy.
+  static const String asrDecodingMethod = String.fromEnvironment(
+    'ASR_DECODING_METHOD',
+    defaultValue: 'greedy_search',
+  );
+
+  /// Maximum paths retained by non-greedy online decoding methods.
+  static const String asrMaximumActivePaths = String.fromEnvironment(
+    'ASR_MAXIMUM_ACTIVE_PATHS',
+    defaultValue: '4',
+  );
+
+  /// Endpoint silence when the current segment contains no decoded tokens.
+  static const String asrEmptyTrailingSilenceSeconds = String.fromEnvironment(
+    'ASR_EMPTY_TRAILING_SILENCE_SECONDS',
+    defaultValue: '2.4',
+  );
+
+  /// Endpoint silence after at least one token has been decoded.
+  static const String asrTrailingSilenceSeconds = String.fromEnvironment(
+    'ASR_TRAILING_SILENCE_SECONDS',
+    defaultValue: '1.2',
+  );
+
+  /// Native and application hard limit for one voice question.
+  static const String asrMaximumUtteranceSeconds = String.fromEnvironment(
+    'ASR_MAXIMUM_UTTERANCE_SECONDS',
+    defaultValue: '15',
+  );
+
+  /// Exact normalized wake phrase accepted by the English recognizer.
+  static const String asrWakePhrase = String.fromEnvironment(
+    'ASR_WAKE_PHRASE',
+    defaultValue: 'assistant',
+  );
+
+  /// Maximum PCM chunks allowed to wait behind native decoding.
+  static const String asrMaximumPendingAudioChunks = String.fromEnvironment(
+    'ASR_MAXIMUM_PENDING_AUDIO_CHUNKS',
+    defaultValue: '8',
+  );
+
+  /// Whether sherpa-onnx emits native recognition diagnostics.
+  static const String asrDebug = String.fromEnvironment(
+    'ASR_DEBUG',
     defaultValue: 'false',
   );
 

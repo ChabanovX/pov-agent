@@ -1,7 +1,10 @@
-import 'package:pov_agent/core/constants/compilation_constants.dart';
+import 'package:pov_agent/app/di/assistant_environment_values.dart';
+import 'package:pov_agent/core/config/positive_duration.dart';
+import 'package:pov_agent/features/assistant/application/models/asr_runtime_configuration.dart';
 import 'package:pov_agent/features/assistant/application/models/generation_options.dart';
 import 'package:pov_agent/features/assistant/application/models/piper_runtime_configuration.dart';
 import 'package:pov_agent/features/assistant/data/ffi/llama_native_runtime.dart';
+import 'package:pov_agent/features/assistant/data/models/asr_model_manifest.dart';
 import 'package:pov_agent/features/assistant/data/models/piper_model_manifest.dart';
 import 'package:pov_agent/features/assistant/data/models/qwen_model_manifest.dart';
 
@@ -15,76 +18,31 @@ final class AssistantBuildConfiguration {
   AssistantBuildConfiguration._({
     required this.manifest,
     required this.runtime,
-    required this.manualOptions,
+    required this.dialogueOptions,
     required this.commentOptions,
     required this.randomSeed,
     required this.systemPrompt,
     required this.piperManifest,
     required this.piperRuntime,
+    required this.asrManifest,
+    required this.asrRuntime,
+    required this.asrWakePhrase,
   });
 
   /// Parses and validates the compile-time local assistant configuration.
   factory AssistantBuildConfiguration.fromEnvironment({
-    String modelId = CompilationConstants.qwenModelId,
-    String modelUrl = CompilationConstants.qwenModelUrl,
-    String modelRevision = CompilationConstants.qwenModelRevision,
-    String modelFilename = CompilationConstants.qwenModelFilename,
-    String modelSizeBytes = CompilationConstants.qwenModelSizeBytes,
-    String modelSha256 = CompilationConstants.qwenModelSha256,
-    String modelLicense = CompilationConstants.qwenModelLicense,
-    String downloadReserveBytes = CompilationConstants.qwenDownloadReserveBytes,
-    String contextTokens = CompilationConstants.qwenContextTokens,
-    String batchTokens = CompilationConstants.qwenBatchTokens,
-    String threadCount = CompilationConstants.qwenThreadCount,
-    String gpuLayers = CompilationConstants.qwenGpuLayers,
-    String randomSeed = CompilationConstants.qwenRandomSeed,
-    String systemPrompt = CompilationConstants.qwenSystemPrompt,
-    String manualMaxTokens = CompilationConstants.qwenManualMaxTokens,
-    String manualTemperature = CompilationConstants.qwenManualTemperature,
-    String manualTopP = CompilationConstants.qwenManualTopP,
-    String manualTopK = CompilationConstants.qwenManualTopK,
-    String manualMinP = CompilationConstants.qwenManualMinP,
-    String commentMaxTokens = CompilationConstants.qwenCommentMaxTokens,
-    String commentTemperature = CompilationConstants.qwenCommentTemperature,
-    String commentTopP = CompilationConstants.qwenCommentTopP,
-    String commentTopK = CompilationConstants.qwenCommentTopK,
-    String commentMinP = CompilationConstants.qwenCommentMinP,
-    String piperModelId = CompilationConstants.piperModelId,
-    String piperModelUrl = CompilationConstants.piperModelUrl,
-    String piperModelRevision = CompilationConstants.piperModelRevision,
-    String piperModelArchiveFilename = CompilationConstants.piperModelArchiveFilename,
-    String piperModelArchiveSizeBytes = CompilationConstants.piperModelArchiveSizeBytes,
-    String piperModelArchiveSha256 = CompilationConstants.piperModelArchiveSha256,
-    String piperModelExpandedArchiveSizeBytes = CompilationConstants.piperModelExpandedArchiveSizeBytes,
-    String piperModelExtractedSizeBytes = CompilationConstants.piperModelExtractedSizeBytes,
-    String piperModelExtractedFileCount = CompilationConstants.piperModelExtractedFileCount,
-    String piperModelBundleTreeSha256 = CompilationConstants.piperModelBundleTreeSha256,
-    String piperModelArchiveRoot = CompilationConstants.piperModelArchiveRoot,
-    String piperModelFilename = CompilationConstants.piperModelFilename,
-    String piperTokensFilename = CompilationConstants.piperTokensFilename,
-    String piperEspeakDataDirectory = CompilationConstants.piperEspeakDataDirectory,
-    String piperModelLicense = CompilationConstants.piperModelLicense,
-    String piperDownloadReserveBytes = CompilationConstants.piperDownloadReserveBytes,
-    String piperProvider = CompilationConstants.piperProvider,
-    String piperThreadCount = CompilationConstants.piperThreadCount,
-    String piperSpeakerId = CompilationConstants.piperSpeakerId,
-    String piperNoiseScale = CompilationConstants.piperNoiseScale,
-    String piperNoiseScaleW = CompilationConstants.piperNoiseScaleW,
-    String piperLengthScale = CompilationConstants.piperLengthScale,
-    String piperSpeed = CompilationConstants.piperSpeed,
-    String piperSilenceScale = CompilationConstants.piperSilenceScale,
-    String piperMaxSentences = CompilationConstants.piperMaxSentences,
-    String piperDebug = CompilationConstants.piperDebug,
+    AssistantEnvironmentValues values = const AssistantEnvironmentValues(),
   }) {
+    final qwen = values.qwen;
     final parsedModelSizeBytes = _parseInteger(
       'QWEN_MODEL_SIZE_BYTES',
-      modelSizeBytes,
+      qwen.modelSizeBytes,
       minimum: 1,
       maximum: _maxInt64,
     );
     final parsedDownloadReserveBytes = _parseInteger(
       'QWEN_DOWNLOAD_RESERVE_BYTES',
-      downloadReserveBytes,
+      qwen.downloadReserveBytes,
       minimum: 0,
       maximum: _maxInt64,
     );
@@ -96,88 +54,62 @@ final class AssistantBuildConfiguration {
     }
     final parsedContextTokens = _parseInteger(
       'QWEN_CONTEXT_TOKENS',
-      contextTokens,
+      qwen.contextTokens,
       minimum: 1,
       maximum: _maxInt32,
     );
     final parsedBatchTokens = _parseInteger(
       'QWEN_BATCH_TOKENS',
-      batchTokens,
+      qwen.batchTokens,
       minimum: 1,
       maximum: _maxInt32,
     );
     if (parsedBatchTokens > parsedContextTokens) {
       throw ArgumentError.value(
-        batchTokens,
+        qwen.batchTokens,
         'batchTokens',
         'QWEN_BATCH_TOKENS must be no larger than the context.',
       );
     }
     final parsedThreadCount = _parseInteger(
       'QWEN_THREAD_COUNT',
-      threadCount,
+      qwen.threadCount,
       minimum: 1,
       maximum: _maxInt32,
     );
     final parsedGpuLayers = _parseInteger(
       'QWEN_GPU_LAYERS',
-      gpuLayers,
+      qwen.gpuLayers,
       minimum: 0,
       maximum: _maxInt32,
     );
     final parsedRandomSeed = _parseInteger(
       'QWEN_RANDOM_SEED',
-      randomSeed,
+      qwen.randomSeed,
       minimum: 0,
       maximum: _maxUint32,
     );
-    final normalizedSystemPrompt = systemPrompt.trim();
+    final normalizedSystemPrompt = qwen.systemPrompt.trim();
     if (normalizedSystemPrompt.isEmpty) {
       throw ArgumentError.value(
-        systemPrompt,
+        qwen.systemPrompt,
         'systemPrompt',
         'QWEN_SYSTEM_PROMPT must not be empty.',
       );
     }
-    final piper = _parsePiperConfiguration(
-      modelId: piperModelId,
-      modelUrl: piperModelUrl,
-      modelRevision: piperModelRevision,
-      archiveFilename: piperModelArchiveFilename,
-      archiveSizeBytes: piperModelArchiveSizeBytes,
-      archiveSha256: piperModelArchiveSha256,
-      expandedArchiveSizeBytes: piperModelExpandedArchiveSizeBytes,
-      extractedSizeBytes: piperModelExtractedSizeBytes,
-      extractedFileCount: piperModelExtractedFileCount,
-      bundleTreeSha256: piperModelBundleTreeSha256,
-      archiveRoot: piperModelArchiveRoot,
-      modelFilename: piperModelFilename,
-      tokensFilename: piperTokensFilename,
-      espeakDataDirectory: piperEspeakDataDirectory,
-      modelLicense: piperModelLicense,
-      downloadReserveBytes: piperDownloadReserveBytes,
-      provider: piperProvider,
-      threadCount: piperThreadCount,
-      speakerId: piperSpeakerId,
-      noiseScale: piperNoiseScale,
-      noiseScaleW: piperNoiseScaleW,
-      lengthScale: piperLengthScale,
-      speed: piperSpeed,
-      silenceScale: piperSilenceScale,
-      maxSentences: piperMaxSentences,
-      debug: piperDebug,
-    );
+    final piper = _parsePiperConfiguration(values.piper);
+    final asr = _parseAsrConfiguration(values.asr);
     final qwenManifest = QwenModelManifest(
-      modelId: modelId,
-      downloadUrl: modelUrl,
-      revision: modelRevision,
-      filename: modelFilename,
+      modelId: qwen.modelId,
+      downloadUrl: qwen.modelUrl,
+      revision: qwen.modelRevision,
+      filename: qwen.modelFilename,
       byteSize: parsedModelSizeBytes,
-      sha256: modelSha256,
-      license: modelLicense,
+      sha256: qwen.modelSha256,
+      license: qwen.modelLicense,
       downloadReserveBytes: parsedDownloadReserveBytes,
     );
-    _validateSharedCachePaths(qwenManifest, piper.manifest);
+    _validateSharedCachePaths(qwenManifest, piper.manifest, asr.manifest);
 
     return AssistantBuildConfiguration._(
       manifest: qwenManifest,
@@ -187,28 +119,31 @@ final class AssistantBuildConfiguration {
         threadCount: parsedThreadCount,
         gpuLayers: parsedGpuLayers,
       ),
-      manualOptions: _parseGenerationOptions(
+      dialogueOptions: _parseGenerationOptions(
         prefix: 'QWEN_MANUAL',
         contextTokens: parsedContextTokens,
-        maxTokens: manualMaxTokens,
-        temperature: manualTemperature,
-        topP: manualTopP,
-        topK: manualTopK,
-        minP: manualMinP,
+        maxTokens: qwen.dialogueMaxTokens,
+        temperature: qwen.dialogueTemperature,
+        topP: qwen.dialogueTopP,
+        topK: qwen.dialogueTopK,
+        minP: qwen.dialogueMinP,
       ),
       commentOptions: _parseGenerationOptions(
         prefix: 'QWEN_COMMENT',
         contextTokens: parsedContextTokens,
-        maxTokens: commentMaxTokens,
-        temperature: commentTemperature,
-        topP: commentTopP,
-        topK: commentTopK,
-        minP: commentMinP,
+        maxTokens: qwen.commentMaxTokens,
+        temperature: qwen.commentTemperature,
+        topP: qwen.commentTopP,
+        topK: qwen.commentTopK,
+        minP: qwen.commentMinP,
       ),
       randomSeed: parsedRandomSeed,
       systemPrompt: normalizedSystemPrompt,
       piperManifest: piper.manifest,
       piperRuntime: piper.runtime,
+      asrManifest: asr.manifest,
+      asrRuntime: asr.runtime,
+      asrWakePhrase: asr.wakePhrase,
     );
   }
 
@@ -218,8 +153,8 @@ final class AssistantBuildConfiguration {
   /// llama.cpp context and execution policy.
   final LlamaRuntimeConfiguration runtime;
 
-  /// Sampling policy for manual `/think` dialogue.
-  final GenerationOptions manualOptions;
+  /// Sampling policy shared by typed and hands-free `/think` dialogue.
+  final GenerationOptions dialogueOptions;
 
   /// Sampling policy for short `/no_think` comments.
   final GenerationOptions commentOptions;
@@ -235,11 +170,21 @@ final class AssistantBuildConfiguration {
 
   /// sherpa-onnx execution and decoding policy.
   final PiperRuntimeConfiguration piperRuntime;
+
+  /// Pinned streaming-ASR archive and extracted-tree integrity manifest.
+  final AsrModelManifest asrManifest;
+
+  /// sherpa-onnx streaming recognition and endpoint policy.
+  final AsrRuntimeConfiguration asrRuntime;
+
+  /// Normalized English phrase that starts one hands-free question.
+  final String asrWakePhrase;
 }
 
 void _validateSharedCachePaths(
   QwenModelManifest qwen,
   PiperModelManifest piper,
+  AsrModelManifest asr,
 ) {
   final entries = <(String, String)>[
     ('QWEN_MODEL_FILENAME', qwen.filename),
@@ -249,6 +194,11 @@ void _validateSharedCachePaths(
     ('PIPER_MODEL_ARCHIVE_ROOT', piper.archiveRoot),
     ('Piper extraction directory', '${piper.archiveRoot}.extracting'),
     ('Piper expanded archive', '${piper.archiveRoot}.extracting.tar'),
+    ('ASR_MODEL_ARCHIVE_FILENAME', asr.archiveFilename),
+    ('ASR partial download', '${asr.archiveFilename}.part'),
+    ('ASR_MODEL_ARCHIVE_ROOT', asr.archiveRoot),
+    ('ASR extraction directory', '${asr.archiveRoot}.extracting'),
+    ('ASR expanded archive', '${asr.archiveRoot}.extracting.tar'),
   ];
   final ownersByPath = <String, String>{};
   for (final (owner, path) in entries) {
@@ -263,34 +213,239 @@ void _validateSharedCachePaths(
   }
 }
 
-({PiperModelManifest manifest, PiperRuntimeConfiguration runtime}) _parsePiperConfiguration({
-  required String modelId,
-  required String modelUrl,
-  required String modelRevision,
-  required String archiveFilename,
-  required String archiveSizeBytes,
-  required String archiveSha256,
-  required String expandedArchiveSizeBytes,
-  required String extractedSizeBytes,
-  required String extractedFileCount,
-  required String bundleTreeSha256,
-  required String archiveRoot,
-  required String modelFilename,
-  required String tokensFilename,
-  required String espeakDataDirectory,
-  required String modelLicense,
-  required String downloadReserveBytes,
-  required String provider,
-  required String threadCount,
-  required String speakerId,
-  required String noiseScale,
-  required String noiseScaleW,
-  required String lengthScale,
-  required String speed,
-  required String silenceScale,
-  required String maxSentences,
-  required String debug,
-}) {
+({
+  AsrModelManifest manifest,
+  AsrRuntimeConfiguration runtime,
+  String wakePhrase,
+})
+_parseAsrConfiguration(AsrEnvironmentValues values) {
+  final AsrEnvironmentValues(
+    :modelId,
+    :modelUrl,
+    :modelRevision,
+    :archiveFilename,
+    :archiveSizeBytes,
+    :archiveSha256,
+    :expandedArchiveSizeBytes,
+    :extractedSizeBytes,
+    :extractedFileCount,
+    :bundleTreeSha256,
+    :archiveRoot,
+    :modelFilename,
+    :tokensFilename,
+    :modelLicense,
+    :downloadReserveBytes,
+    :provider,
+    :threadCount,
+    :sampleRate,
+    :featureDimension,
+    :decodingMethod,
+    :maximumActivePaths,
+    :emptyTrailingSilenceSeconds,
+    :trailingSilenceSeconds,
+    :maximumUtteranceSeconds,
+    :wakePhrase,
+    :maximumPendingAudioChunks,
+    :debug,
+  ) = values;
+  final parsedArchiveSizeBytes = _parseInteger(
+    'ASR_MODEL_ARCHIVE_SIZE_BYTES',
+    archiveSizeBytes,
+    minimum: 1,
+    maximum: _maxInt64,
+  );
+  final parsedExpandedArchiveSizeBytes = _parseInteger(
+    'ASR_MODEL_EXPANDED_ARCHIVE_SIZE_BYTES',
+    expandedArchiveSizeBytes,
+    minimum: 1,
+    maximum: _maxInt64,
+  );
+  final parsedExtractedSizeBytes = _parseInteger(
+    'ASR_MODEL_EXTRACTED_SIZE_BYTES',
+    extractedSizeBytes,
+    minimum: 1,
+    maximum: _maxInt64,
+  );
+  final parsedDownloadReserveBytes = _parseInteger(
+    'ASR_DOWNLOAD_RESERVE_BYTES',
+    downloadReserveBytes,
+    minimum: 0,
+    maximum: _maxInt64,
+  );
+  if (parsedArchiveSizeBytes > _maxInt64 - parsedExpandedArchiveSizeBytes ||
+      parsedArchiveSizeBytes + parsedExpandedArchiveSizeBytes > _maxInt64 - parsedExtractedSizeBytes ||
+      parsedArchiveSizeBytes + parsedExpandedArchiveSizeBytes + parsedExtractedSizeBytes >
+          _maxInt64 - parsedDownloadReserveBytes) {
+    throw ArgumentError(
+      'The ASR archive, expanded archive, extracted tree, and download '
+      'reserve must fit a signed 64-bit filesystem capacity.',
+    );
+  }
+
+  final normalizedProvider = provider.trim();
+  if (normalizedProvider != 'cpu') {
+    throw ArgumentError.value(
+      provider,
+      'provider',
+      'ASR_PROVIDER must be "cpu" for the supported mobile runtime.',
+    );
+  }
+  final parsedThreadCount = _parseInteger(
+    'ASR_THREAD_COUNT',
+    threadCount,
+    minimum: 1,
+    maximum: _maxInt32,
+  );
+  final parsedSampleRate = _parseInteger(
+    'ASR_SAMPLE_RATE',
+    sampleRate,
+    minimum: 16000,
+    maximum: 16000,
+  );
+  final parsedFeatureDimension = _parseInteger(
+    'ASR_FEATURE_DIMENSION',
+    featureDimension,
+    minimum: 80,
+    maximum: 80,
+  );
+  final normalizedDecodingMethod = decodingMethod.trim();
+  if (normalizedDecodingMethod != 'greedy_search') {
+    throw ArgumentError.value(
+      decodingMethod,
+      'decodingMethod',
+      'ASR_DECODING_METHOD must be "greedy_search" for the pinned CTC model.',
+    );
+  }
+  final parsedMaximumActivePaths = _parseInteger(
+    'ASR_MAXIMUM_ACTIVE_PATHS',
+    maximumActivePaths,
+    minimum: 1,
+    maximum: _maxInt32,
+  );
+  final parsedRule1Silence = _parsePositiveDurationSeconds(
+    'ASR_EMPTY_TRAILING_SILENCE_SECONDS',
+    emptyTrailingSilenceSeconds,
+  );
+  final parsedRule2Silence = _parsePositiveDurationSeconds(
+    'ASR_TRAILING_SILENCE_SECONDS',
+    trailingSilenceSeconds,
+  );
+  final parsedMaximumUtterance = _parsePositiveDurationSeconds(
+    'ASR_MAXIMUM_UTTERANCE_SECONDS',
+    maximumUtteranceSeconds,
+  );
+  if (parsedRule1Silence < parsedRule2Silence) {
+    throw ArgumentError(
+      'ASR_EMPTY_TRAILING_SILENCE_SECONDS must be at least as long as '
+      'ASR_TRAILING_SILENCE_SECONDS.',
+    );
+  }
+  if (parsedMaximumUtterance <= parsedRule2Silence) {
+    throw ArgumentError(
+      'ASR_MAXIMUM_UTTERANCE_SECONDS must exceed the trailing-silence '
+      'endpoint.',
+    );
+  }
+  final normalizedWakePhrase = wakePhrase.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+  if (!RegExp(r'^[a-z0-9]+(?: [a-z0-9]+)*$').hasMatch(
+    normalizedWakePhrase,
+  )) {
+    throw ArgumentError.value(
+      wakePhrase,
+      'wakePhrase',
+      'ASR_WAKE_PHRASE must contain only English letters, digits, and spaces.',
+    );
+  }
+  final parsedMaximumPendingAudioChunks = _parseInteger(
+    'ASR_MAXIMUM_PENDING_AUDIO_CHUNKS',
+    maximumPendingAudioChunks,
+    minimum: 1,
+    maximum: 64,
+  );
+
+  return (
+    manifest: AsrModelManifest(
+      modelId: modelId,
+      downloadUrl: modelUrl,
+      revision: modelRevision,
+      archiveFilename: archiveFilename,
+      archiveByteSize: parsedArchiveSizeBytes,
+      archiveSha256: archiveSha256,
+      expandedArchiveByteSize: parsedExpandedArchiveSizeBytes,
+      extractedByteSize: parsedExtractedSizeBytes,
+      extractedFileCount: _parseInteger(
+        'ASR_MODEL_EXTRACTED_FILE_COUNT',
+        extractedFileCount,
+        minimum: 1,
+        maximum: _maxInt32,
+      ),
+      bundleTreeSha256: bundleTreeSha256,
+      archiveRoot: archiveRoot,
+      modelFilename: modelFilename,
+      tokensFilename: tokensFilename,
+      license: modelLicense,
+      downloadReserveBytes: parsedDownloadReserveBytes,
+    ),
+    runtime: AsrRuntimeConfiguration(
+      provider: normalizedProvider,
+      threadCount: parsedThreadCount,
+      sampleRateHz: parsedSampleRate,
+      featureDimension: parsedFeatureDimension,
+      decodingMethod: normalizedDecodingMethod,
+      maxActivePaths: parsedMaximumActivePaths,
+      rule1MinTrailingSilence: parsedRule1Silence,
+      rule2MinTrailingSilence: parsedRule2Silence,
+      maxUtteranceDuration: parsedMaximumUtterance,
+      debug: _parseBoolean('ASR_DEBUG', debug),
+      maxPendingAudioChunks: parsedMaximumPendingAudioChunks,
+    ),
+    wakePhrase: normalizedWakePhrase,
+  );
+}
+
+Duration _parsePositiveDurationSeconds(String name, String value) {
+  final seconds = _parseFiniteDouble(name, value);
+  if (seconds <= 0 || seconds > _maxFloat32) {
+    throw ArgumentError.value(
+      value,
+      name,
+      '$name must be positive and fit a 32-bit float.',
+    );
+  }
+  return positiveSecondsDuration(seconds, name: name);
+}
+
+({PiperModelManifest manifest, PiperRuntimeConfiguration runtime}) _parsePiperConfiguration(
+  PiperEnvironmentValues values,
+) {
+  final PiperEnvironmentValues(
+    :modelId,
+    :modelUrl,
+    :modelRevision,
+    :archiveFilename,
+    :archiveSizeBytes,
+    :archiveSha256,
+    :expandedArchiveSizeBytes,
+    :extractedSizeBytes,
+    :extractedFileCount,
+    :bundleTreeSha256,
+    :archiveRoot,
+    :modelFilename,
+    :tokensFilename,
+    :espeakDataDirectory,
+    :modelLicense,
+    :downloadReserveBytes,
+    :provider,
+    :threadCount,
+    :speakerId,
+    :noiseScale,
+    :noiseScaleW,
+    :lengthScale,
+    :speed,
+    :silenceScale,
+    :maxSentences,
+    :debug,
+  ) = values;
   final parsedArchiveSizeBytes = _parseInteger(
     'PIPER_MODEL_ARCHIVE_SIZE_BYTES',
     archiveSizeBytes,

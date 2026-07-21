@@ -3,10 +3,14 @@ import 'dart:async';
 import 'package:pov_agent/features/assistant/application/models/comment_generation_request.dart';
 import 'package:pov_agent/features/assistant/application/models/generation_options.dart';
 import 'package:pov_agent/features/assistant/application/models/model_store_state.dart';
+import 'package:pov_agent/features/assistant/application/models/speech_recognition_event.dart';
+import 'package:pov_agent/features/assistant/application/models/verified_asr_model_bundle.dart';
 import 'package:pov_agent/features/assistant/application/models/verified_model_artifact.dart';
 import 'package:pov_agent/features/assistant/application/ports/comment_generator.dart';
 import 'package:pov_agent/features/assistant/application/ports/generation_handle.dart';
+import 'package:pov_agent/features/assistant/application/ports/microphone_permission_gateway.dart';
 import 'package:pov_agent/features/assistant/application/ports/model_store.dart';
+import 'package:pov_agent/features/assistant/application/ports/speech_recognizer.dart';
 import 'package:pov_agent/features/assistant/application/ports/speech_synthesizer.dart';
 import 'package:pov_agent/features/assistant/application/services/observer_request_builder.dart';
 import 'package:pov_agent/features/assistant/application/services/qwen_prompt_builder.dart';
@@ -36,19 +40,31 @@ final class TestAssistantResources {
   /// Creates a coherent test assistant dependency graph.
   TestAssistantResources({SceneSource? sceneSource})
     : modelStore = TestModelStore(),
+      asrModelStore = TestAsrModelStore(),
       commentGenerator = TestCommentGenerator(),
+      microphonePermissionGateway = TestMicrophonePermissionGateway(),
+      speechRecognizer = TestSpeechRecognizer(),
       speechSynthesizer = TestSpeechSynthesizer() {
     observerBloc = ObserverBloc(
-      sceneSource: sceneSource ?? const _EmptySceneSource(),
-      modelStore: modelStore,
-      commentGenerator: commentGenerator,
-      speechSynthesizer: speechSynthesizer,
-      requestBuilder: ObserverRequestBuilder(
-        qwenPromptBuilder: QwenPromptBuilder(
-          systemPrompt: 'Test system prompt.',
-          manualOptions: _testManualOptions,
-          shortCommentOptions: _testShortCommentOptions,
+      generation: ObserverGenerationDependencies(
+        sceneSource: sceneSource ?? const _EmptySceneSource(),
+        qwenModelStore: modelStore,
+        commentGenerator: commentGenerator,
+        requestBuilder: ObserverRequestBuilder(
+          qwenPromptBuilder: QwenPromptBuilder(
+            systemPrompt: 'Test system prompt.',
+            dialogueOptions: _testManualOptions,
+            shortCommentOptions: _testShortCommentOptions,
+          ),
         ),
+      ),
+      voice: ObserverVoiceDependencies(
+        asrModelStore: asrModelStore,
+        microphonePermissionGateway: microphonePermissionGateway,
+        speechRecognizer: speechRecognizer,
+        speechSynthesizer: speechSynthesizer,
+        wakePhrase: 'assistant',
+        questionDeadline: const Duration(seconds: 15),
       ),
     );
   }
@@ -56,8 +72,17 @@ final class TestAssistantResources {
   /// Deterministic verified-model lifecycle.
   final TestModelStore modelStore;
 
+  /// Deterministic verified streaming-ASR bundle lifecycle.
+  final TestAsrModelStore asrModelStore;
+
   /// Deterministic native-generation boundary.
   final TestCommentGenerator commentGenerator;
+
+  /// Deterministic microphone permission boundary.
+  final TestMicrophonePermissionGateway microphonePermissionGateway;
+
+  /// Deterministic streaming speech-recognition boundary.
+  final TestSpeechRecognizer speechRecognizer;
 
   /// Deterministic foreground speech boundary.
   final TestSpeechSynthesizer speechSynthesizer;
@@ -124,6 +149,162 @@ final class TestModelStore implements QwenModelStore {
     if (closeCalls > 0) return;
     closeCalls += 1;
     await _states.close();
+  }
+}
+
+/// In-memory ASR bundle store that becomes ready immediately.
+final class TestAsrModelStore implements AsrModelStore {
+  static const _bundle = VerifiedAsrModelBundle(
+    modelId: 'test-asr',
+    revision: 'test-revision',
+    bundleDirectoryPath: '/test/asr',
+    modelFilePath: '/test/asr/model.int8.onnx',
+    tokensFilePath: '/test/asr/tokens.txt',
+    extractedByteSize: 2,
+    extractedFileCount: 2,
+    bundleTreeSha256: 'test-tree',
+  );
+
+  final StreamController<ModelStoreState<VerifiedAsrModelBundle>> _states = StreamController.broadcast(sync: true);
+  ModelStoreState<VerifiedAsrModelBundle> _current = const ModelStoreState.idle();
+
+  /// Number of preparation requests.
+  int prepareCalls = 0;
+
+  /// Number of foreground suspensions.
+  int suspendCalls = 0;
+
+  /// Number of terminal closes.
+  int closeCalls = 0;
+
+  /// Failures thrown by successive terminal-close attempts.
+  final List<Exception> closeFailures = [];
+
+  bool _closed = false;
+
+  @override
+  ModelStoreState<VerifiedAsrModelBundle> get current => _current;
+
+  @override
+  Stream<ModelStoreState<VerifiedAsrModelBundle>> get states => _states.stream;
+
+  @override
+  Future<AppResult<VerifiedAsrModelBundle>> prepare() async {
+    prepareCalls += 1;
+    _current = ModelStoreState.ready(_bundle);
+    _states.add(_current);
+    return const AppSuccess(_bundle);
+  }
+
+  @override
+  Future<void> suspend() async {
+    suspendCalls += 1;
+    _current = const ModelStoreState.suspended();
+    _states.add(_current);
+  }
+
+  @override
+  Future<void> close() async {
+    if (_closed) return;
+    closeCalls += 1;
+    if (closeFailures.isNotEmpty) throw closeFailures.removeAt(0);
+    await _states.close();
+    _closed = true;
+  }
+}
+
+/// Permission boundary that always grants microphone access.
+final class TestMicrophonePermissionGateway implements MicrophonePermissionGateway {
+  /// Number of permission requests.
+  int requestCalls = 0;
+
+  @override
+  Future<AppResult<void>> request() async {
+    requestCalls += 1;
+    return const AppSuccess<void>(null);
+  }
+}
+
+/// Recognition boundary that exposes lifecycle counters without transcripts.
+final class TestSpeechRecognizer implements SpeechRecognizer {
+  _TestSpeechRecognitionHandle? _active;
+
+  /// Number of native model loads.
+  int loadCalls = 0;
+
+  /// Number of microphone session starts.
+  int startCalls = 0;
+
+  /// Number of native model unloads.
+  int unloadCalls = 0;
+
+  /// Number of terminal closes.
+  int closeCalls = 0;
+
+  /// Failures returned by successive terminal-close attempts.
+  final List<AppFailure> closeFailures = [];
+
+  /// Stop count of the currently retained recognition handle.
+  int get activeHandleStopCalls => _active?.stopCalls ?? 0;
+
+  bool _closed = false;
+
+  @override
+  Future<AppResult<void>> loadModel(VerifiedAsrModelBundle bundle) async {
+    loadCalls += 1;
+    return const AppSuccess<void>(null);
+  }
+
+  @override
+  Future<AppResult<SpeechRecognitionHandle>> start() async {
+    startCalls += 1;
+    final handle = _TestSpeechRecognitionHandle();
+    _active = handle;
+    return AppSuccess<SpeechRecognitionHandle>(handle);
+  }
+
+  @override
+  Future<AppResult<void>> unload() async {
+    unloadCalls += 1;
+    final result = await _active?.stop() ?? const AppSuccess<void>(null);
+    if (result is AppSuccess<void>) _active = null;
+    return result;
+  }
+
+  @override
+  Future<AppResult<void>> close() async {
+    if (_closed) return const AppSuccess<void>(null);
+    closeCalls += 1;
+    if (closeFailures.isNotEmpty) {
+      return AppError<void>(closeFailures.removeAt(0));
+    }
+    final result = await unload();
+    if (result is AppSuccess<void>) _closed = true;
+    return result;
+  }
+}
+
+final class _TestSpeechRecognitionHandle implements SpeechRecognitionHandle {
+  final StreamController<SpeechRecognitionEvent> _events = StreamController.broadcast();
+  Future<AppResult<void>>? _stopTask;
+
+  int stopCalls = 0;
+
+  @override
+  Stream<SpeechRecognitionEvent> get events => _events.stream;
+
+  @override
+  Future<AppResult<void>> resetForNextSegment() async {
+    return const AppSuccess<void>(null);
+  }
+
+  @override
+  Future<AppResult<void>> stop() => _stopTask ??= _stopOnce();
+
+  Future<AppResult<void>> _stopOnce() async {
+    stopCalls += 1;
+    await _events.close();
+    return const AppSuccess<void>(null);
   }
 }
 

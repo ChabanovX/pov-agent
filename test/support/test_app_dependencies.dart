@@ -21,7 +21,9 @@ Future<AppRuntime> startTestAppRuntime(
     sceneSession: sceneSession,
     observerBloc: assistant.observerBloc,
     modelStore: assistant.modelStore,
+    asrModelStore: assistant.asrModelStore,
     commentGenerator: assistant.commentGenerator,
+    speechRecognizer: assistant.speechRecognizer,
     speechSynthesizer: assistant.speechSynthesizer,
   );
   appDependencies

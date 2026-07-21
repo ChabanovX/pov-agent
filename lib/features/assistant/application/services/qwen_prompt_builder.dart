@@ -20,12 +20,12 @@ final class QwenPromptBuilder {
   /// Creates a builder with explicit prompt copy and policies.
   QwenPromptBuilder({
     required String systemPrompt,
-    required this.manualOptions,
+    required this.dialogueOptions,
     required this.shortCommentOptions,
   }) : _systemPrompt = _requirePrompt(systemPrompt, 'systemPrompt'),
        assert(
-         manualOptions.maxTokens > 0,
-         'manualOptions must permit generation.',
+         dialogueOptions.maxTokens > 0,
+         'dialogueOptions must permit generation.',
        ),
        assert(
          shortCommentOptions.maxTokens > 0,
@@ -34,8 +34,8 @@ final class QwenPromptBuilder {
 
   final String _systemPrompt;
 
-  /// The injected sampling and output policy for manual dialogue.
-  final GenerationOptions manualOptions;
+  /// The sampling policy shared by typed and hands-free dialogue turns.
+  final GenerationOptions dialogueOptions;
 
   /// The injected sampling and output policy for short comments.
   final GenerationOptions shortCommentOptions;
@@ -49,7 +49,7 @@ final class QwenPromptBuilder {
       prompt: prompt,
       history: history,
       thinkingSwitch: '/think',
-      options: manualOptions,
+      options: dialogueOptions,
       prefillReasoning: true,
       completionPolicy: GenerationCompletionPolicy.modelOrTokenLimit,
     );

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pov_agent/app/di/assistant_build_configuration.dart';
+import 'package:pov_agent/app/di/assistant_environment_values.dart';
 
 void main() {
   test('pins the default artifact and decoding policy', () {
@@ -21,10 +22,10 @@ void main() {
     expect(configuration.runtime.batchTokens, 512);
     expect(configuration.runtime.threadCount, 4);
     expect(configuration.runtime.gpuLayers, 99);
-    expect(configuration.manualOptions.maxTokens, 512);
-    expect(configuration.manualOptions.temperature, 0.6);
-    expect(configuration.manualOptions.topP, 0.95);
-    expect(configuration.manualOptions.topK, 20);
+    expect(configuration.dialogueOptions.maxTokens, 512);
+    expect(configuration.dialogueOptions.temperature, 0.6);
+    expect(configuration.dialogueOptions.topP, 0.95);
+    expect(configuration.dialogueOptions.topK, 20);
     expect(configuration.commentOptions.maxTokens, 40);
     expect(configuration.commentOptions.temperature, 0.7);
     expect(configuration.commentOptions.topP, 0.8);
@@ -79,34 +80,102 @@ void main() {
     expect(configuration.piperRuntime.debug, isFalse);
   });
 
+  test('pins the default streaming ASR bundle and endpoint policy', () {
+    final configuration = AssistantBuildConfiguration.fromEnvironment();
+    final manifest = configuration.asrManifest;
+
+    expect(
+      manifest.downloadUri.toString(),
+      'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/'
+      'sherpa-onnx-nemo-streaming-fast-conformer-ctc-en-80ms-int8.tar.bz2',
+    );
+    expect(manifest.revision, 'asr-models');
+    expect(manifest.archiveByteSize, 99459493);
+    expect(
+      manifest.archiveSha256,
+      '479759fbd5c69c909e7175d7773105a1bfabf82fa533de68c546c89d85f234e8',
+    );
+    expect(manifest.expandedArchiveByteSize, 132891648);
+    expect(manifest.extractedByteSize, 132884963);
+    expect(manifest.extractedFileCount, 6);
+    expect(
+      manifest.bundleTreeSha256,
+      '8ec5fb017edb1fc389101bf235cbc13063185657b91752b9b17fa649eeade040',
+    );
+    expect(manifest.modelFilename, 'model.int8.onnx');
+    expect(manifest.tokensFilename, 'tokens.txt');
+    expect(manifest.license, 'NVIDIA-NGC-TOU');
+    expect(configuration.asrRuntime.provider, 'cpu');
+    expect(configuration.asrRuntime.threadCount, 2);
+    expect(configuration.asrRuntime.sampleRateHz, 16000);
+    expect(configuration.asrRuntime.featureDimension, 80);
+    expect(configuration.asrRuntime.decodingMethod, 'greedy_search');
+    expect(configuration.asrRuntime.maxActivePaths, 4);
+    expect(
+      configuration.asrRuntime.rule1MinTrailingSilence,
+      const Duration(milliseconds: 2400),
+    );
+    expect(
+      configuration.asrRuntime.rule2MinTrailingSilence,
+      const Duration(milliseconds: 1200),
+    );
+    expect(
+      configuration.asrRuntime.maxUtteranceDuration,
+      const Duration(seconds: 15),
+    );
+    expect(configuration.asrRuntime.maxPendingAudioChunks, 8);
+    expect(configuration.asrRuntime.debug, isFalse);
+    expect(configuration.asrWakePhrase, 'assistant');
+  });
+
   test('rejects malformed floating-point compile values', () {
     expect(
       () => AssistantBuildConfiguration.fromEnvironment(
-        manualTemperature: 'not-a-number',
+        values: const AssistantEnvironmentValues(
+          qwen: QwenEnvironmentValues(dialogueTemperature: 'not-a-number'),
+        ),
       ),
       throwsFormatException,
     );
     expect(
       () => AssistantBuildConfiguration.fromEnvironment(
-        commentTopP: 'Infinity',
+        values: const AssistantEnvironmentValues(
+          qwen: QwenEnvironmentValues(commentTopP: 'Infinity'),
+        ),
       ),
       throwsFormatException,
     );
     expect(
       () => AssistantBuildConfiguration.fromEnvironment(
-        contextTokens: 'not-an-integer',
+        values: const AssistantEnvironmentValues(
+          qwen: QwenEnvironmentValues(contextTokens: 'not-an-integer'),
+        ),
       ),
       throwsFormatException,
     );
     expect(
       () => AssistantBuildConfiguration.fromEnvironment(
-        piperSpeed: 'NaN',
+        values: const AssistantEnvironmentValues(
+          piper: PiperEnvironmentValues(speed: 'NaN'),
+        ),
       ),
       throwsFormatException,
     );
     expect(
       () => AssistantBuildConfiguration.fromEnvironment(
-        piperModelArchiveSizeBytes: 'twenty-megabytes',
+        values: const AssistantEnvironmentValues(
+          piper: PiperEnvironmentValues(
+            archiveSizeBytes: 'twenty-megabytes',
+          ),
+        ),
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => AssistantBuildConfiguration.fromEnvironment(
+        values: const AssistantEnvironmentValues(
+          asr: AsrEnvironmentValues(trailingSilenceSeconds: 'eventually'),
+        ),
       ),
       throwsFormatException,
     );
@@ -115,111 +184,215 @@ void main() {
   test('rejects unsafe runtime and sampling combinations', () {
     expect(
       () => AssistantBuildConfiguration.fromEnvironment(
-        contextTokens: '512',
-        batchTokens: '1024',
+        values: const AssistantEnvironmentValues(
+          qwen: QwenEnvironmentValues(
+            contextTokens: '512',
+            batchTokens: '1024',
+          ),
+        ),
       ),
       throwsArgumentError,
     );
     expect(
       () => AssistantBuildConfiguration.fromEnvironment(
-        randomSeed: '4294967296',
+        values: const AssistantEnvironmentValues(
+          qwen: QwenEnvironmentValues(randomSeed: '4294967296'),
+        ),
       ),
       throwsArgumentError,
     );
     expect(
       () => AssistantBuildConfiguration.fromEnvironment(
-        manualMinP: '1.1',
+        values: const AssistantEnvironmentValues(
+          qwen: QwenEnvironmentValues(dialogueMinP: '1.1'),
+        ),
       ),
       throwsArgumentError,
     );
     expect(
       () => AssistantBuildConfiguration.fromEnvironment(
-        contextTokens: '511',
+        values: const AssistantEnvironmentValues(
+          qwen: QwenEnvironmentValues(contextTokens: '511'),
+        ),
       ),
       throwsArgumentError,
     );
     expect(
       () => AssistantBuildConfiguration.fromEnvironment(
-        gpuLayers: '2147483648',
+        values: const AssistantEnvironmentValues(
+          qwen: QwenEnvironmentValues(gpuLayers: '2147483648'),
+        ),
       ),
       throwsArgumentError,
     );
     expect(
       () => AssistantBuildConfiguration.fromEnvironment(
-        piperProvider: 'coreml',
+        values: const AssistantEnvironmentValues(
+          piper: PiperEnvironmentValues(provider: 'coreml'),
+        ),
       ),
       throwsArgumentError,
     );
     expect(
       () => AssistantBuildConfiguration.fromEnvironment(
-        piperSpeakerId: '1',
+        values: const AssistantEnvironmentValues(
+          piper: PiperEnvironmentValues(speakerId: '1'),
+        ),
       ),
       throwsArgumentError,
     );
     expect(
       () => AssistantBuildConfiguration.fromEnvironment(
-        piperSpeed: '0',
+        values: const AssistantEnvironmentValues(
+          piper: PiperEnvironmentValues(speed: '0'),
+        ),
       ),
       throwsArgumentError,
     );
     expect(
       () => AssistantBuildConfiguration.fromEnvironment(
-        piperSilenceScale: '-0.1',
+        values: const AssistantEnvironmentValues(
+          piper: PiperEnvironmentValues(silenceScale: '-0.1'),
+        ),
       ),
       throwsArgumentError,
     );
     expect(
       () => AssistantBuildConfiguration.fromEnvironment(
-        piperNoiseScaleW: '-0.1',
+        values: const AssistantEnvironmentValues(
+          piper: PiperEnvironmentValues(noiseScaleW: '-0.1'),
+        ),
       ),
       throwsArgumentError,
     );
     expect(
       () => AssistantBuildConfiguration.fromEnvironment(
-        piperLengthScale: '0',
+        values: const AssistantEnvironmentValues(
+          piper: PiperEnvironmentValues(lengthScale: '0'),
+        ),
       ),
       throwsArgumentError,
     );
     expect(
       () => AssistantBuildConfiguration.fromEnvironment(
-        piperMaxSentences: '0',
+        values: const AssistantEnvironmentValues(
+          piper: PiperEnvironmentValues(maxSentences: '0'),
+        ),
       ),
       throwsArgumentError,
     );
     expect(
       () => AssistantBuildConfiguration.fromEnvironment(
-        piperDebug: 'FALSE',
+        values: const AssistantEnvironmentValues(
+          piper: PiperEnvironmentValues(debug: 'FALSE'),
+        ),
       ),
       throwsFormatException,
     );
     expect(
       () => AssistantBuildConfiguration.fromEnvironment(
-        piperModelArchiveSizeBytes: '9223372036854775807',
+        values: const AssistantEnvironmentValues(
+          piper: PiperEnvironmentValues(
+            archiveSizeBytes: '9223372036854775807',
+          ),
+        ),
       ),
       throwsArgumentError,
     );
     expect(
       () => AssistantBuildConfiguration.fromEnvironment(
-        piperModelExpandedArchiveSizeBytes: '0',
+        values: const AssistantEnvironmentValues(
+          piper: PiperEnvironmentValues(expandedArchiveSizeBytes: '0'),
+        ),
       ),
       throwsArgumentError,
     );
     expect(
       () => AssistantBuildConfiguration.fromEnvironment(
-        piperModelArchiveSha256: 'not-a-digest',
+        values: const AssistantEnvironmentValues(
+          piper: PiperEnvironmentValues(archiveSha256: 'not-a-digest'),
+        ),
       ),
       throwsArgumentError,
     );
     expect(
       () => AssistantBuildConfiguration.fromEnvironment(
-        piperModelArchiveFilename: 'Qwen3-0.6B-Q4_K_M.gguf',
+        values: const AssistantEnvironmentValues(
+          piper: PiperEnvironmentValues(
+            archiveFilename: 'Qwen3-0.6B-Q4_K_M.gguf',
+          ),
+        ),
       ),
       throwsArgumentError,
     );
     expect(
       () => AssistantBuildConfiguration.fromEnvironment(
-        modelFilename: 'VOICE.EXTRACTING.TAR',
-        piperModelArchiveRoot: 'voice',
+        values: const AssistantEnvironmentValues(
+          qwen: QwenEnvironmentValues(
+            modelFilename: 'VOICE.EXTRACTING.TAR',
+          ),
+          piper: PiperEnvironmentValues(archiveRoot: 'voice'),
+        ),
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => AssistantBuildConfiguration.fromEnvironment(
+        values: const AssistantEnvironmentValues(
+          asr: AsrEnvironmentValues(provider: 'coreml'),
+        ),
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => AssistantBuildConfiguration.fromEnvironment(
+        values: const AssistantEnvironmentValues(
+          asr: AsrEnvironmentValues(sampleRate: '44100'),
+        ),
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => AssistantBuildConfiguration.fromEnvironment(
+        values: const AssistantEnvironmentValues(
+          asr: AsrEnvironmentValues(featureDimension: '64'),
+        ),
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => AssistantBuildConfiguration.fromEnvironment(
+        values: const AssistantEnvironmentValues(
+          asr: AsrEnvironmentValues(
+            emptyTrailingSilenceSeconds: '1.0',
+          ),
+        ),
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => AssistantBuildConfiguration.fromEnvironment(
+        values: const AssistantEnvironmentValues(
+          asr: AsrEnvironmentValues(maximumUtteranceSeconds: '1.2'),
+        ),
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => AssistantBuildConfiguration.fromEnvironment(
+        values: const AssistantEnvironmentValues(
+          asr: AsrEnvironmentValues(wakePhrase: 'Ассистент'),
+        ),
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => AssistantBuildConfiguration.fromEnvironment(
+        values: const AssistantEnvironmentValues(
+          asr: AsrEnvironmentValues(
+            archiveFilename: 'Qwen3-0.6B-Q4_K_M.gguf',
+          ),
+        ),
       ),
       throwsArgumentError,
     );

@@ -1,4 +1,5 @@
 import 'package:pov_agent/features/assistant/application/models/model_store_state.dart';
+import 'package:pov_agent/features/assistant/application/models/verified_asr_model_bundle.dart';
 import 'package:pov_agent/features/assistant/application/models/verified_model_artifact.dart';
 import 'package:pov_agent/shared/domain/app_result.dart';
 
@@ -32,3 +33,6 @@ abstract interface class ModelStore<TArtifact extends Object> {
 
 /// The verified single-file model store consumed by Qwen generation.
 typedef QwenModelStore = ModelStore<VerifiedModelArtifact>;
+
+/// The verified extracted-bundle store consumed by streaming ASR.
+typedef AsrModelStore = ModelStore<VerifiedAsrModelBundle>;

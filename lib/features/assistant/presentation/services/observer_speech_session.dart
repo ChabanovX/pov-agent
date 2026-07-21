@@ -1,22 +1,35 @@
 import 'dart:async';
 
 import 'package:pov_agent/features/assistant/application/ports/speech_synthesizer.dart';
+import 'package:pov_agent/features/assistant/presentation/services/observer_speech_target.dart';
 import 'package:pov_agent/shared/domain/app_failure.dart';
 import 'package:pov_agent/shared/domain/app_result.dart';
 
-/// Metadata retained while one committed observer comment is being spoken.
+/// Metadata retained while one committed transcript entry is being spoken.
 final class ObserverActiveSpeech {
-  /// Creates a tagged utterance for [commentIndex].
+  /// Creates a tagged utterance for [target].
   const ObserverActiveSpeech({
     required this.runId,
-    required this.commentIndex,
+    required this.target,
   });
 
   /// Monotonic identifier used to reject stale terminal callbacks.
   final int runId;
 
-  /// Append-only index of the committed comment being spoken.
-  final int commentIndex;
+  /// Committed comment or hands-free answer being spoken.
+  final ObserverSpeechTarget target;
+
+  /// Comment index when [target] is an automatic comment.
+  int? get commentIndex => switch (target) {
+    ObserverCommentSpeechTarget(:final commentIndex) => commentIndex,
+    ObserverVoiceAnswerSpeechTarget() => null,
+  };
+
+  /// Voice turn when [target] is a hands-free answer.
+  int? get voiceTurnId => switch (target) {
+    ObserverCommentSpeechTarget() => null,
+    ObserverVoiceAnswerSpeechTarget(:final turnId) => turnId,
+  };
 }
 
 /// A terminal speech result tagged with the utterance that produced it.
@@ -61,13 +74,22 @@ final class ObserverSpeechSession {
   var _latestRunId = 0;
   var _closed = false;
   var _nativeStopRequired = false;
-  int? _stopRequiredCommentIndex;
+  ObserverSpeechTarget? _stopRequiredTarget;
 
   /// The utterance whose completion is still pending projection.
   ObserverActiveSpeech? get active => _active;
 
   /// The comment whose failed native stop remains available for UI recovery.
-  int? get stopRequiredCommentIndex => _stopRequiredCommentIndex;
+  int? get stopRequiredCommentIndex => switch (_stopRequiredTarget) {
+    ObserverCommentSpeechTarget(:final commentIndex) => commentIndex,
+    _ => null,
+  };
+
+  /// Voice turn whose failed native stop still occupies the speech slot.
+  int? get stopRequiredVoiceTurnId => switch (_stopRequiredTarget) {
+    ObserverVoiceAnswerSpeechTarget(:final turnId) => turnId,
+    _ => null,
+  };
 
   /// Whether speaking, stopping, or an unprojected completion owns the slot.
   bool get isActive => _active != null || _runTask != null || _stopTask != null || _nativeStopRequired;
@@ -77,13 +99,34 @@ final class ObserverSpeechSession {
     required int commentIndex,
     required String text,
   }) {
+    return _start(
+      target: ObserverCommentSpeechTarget(commentIndex),
+      text: text,
+    );
+  }
+
+  /// Starts [text] for a committed hands-free [turnId] when idle.
+  ObserverActiveSpeech? startVoice({
+    required int turnId,
+    required String text,
+  }) {
+    return _start(
+      target: ObserverVoiceAnswerSpeechTarget(turnId),
+      text: text,
+    );
+  }
+
+  ObserverActiveSpeech? _start({
+    required ObserverSpeechTarget target,
+    required String text,
+  }) {
     if (_closed || isActive) return null;
 
     final speech = ObserverActiveSpeech(
       runId: ++_latestRunId,
-      commentIndex: commentIndex,
+      target: target,
     );
-    _stopRequiredCommentIndex = null;
+    _stopRequiredTarget = null;
     _active = speech;
     late final Future<void> task;
     task = _speak(speech, text).whenComplete(() {
@@ -109,7 +152,7 @@ final class ObserverSpeechSession {
     if (existing != null) return existing;
     if (!isActive) return Future.value(const AppSuccess<void>(null));
 
-    _stopRequiredCommentIndex ??= _active?.commentIndex;
+    _stopRequiredTarget ??= _active?.target;
     _active = null;
     _latestRunId += 1;
     _nativeStopRequired = true;
@@ -118,7 +161,7 @@ final class ObserverSpeechSession {
         .then((result) {
           if (result is AppSuccess<void>) {
             _nativeStopRequired = false;
-            _stopRequiredCommentIndex = null;
+            _stopRequiredTarget = null;
           }
           return result;
         })
@@ -135,7 +178,7 @@ final class ObserverSpeechSession {
     if (existing != null) return existing;
 
     _closed = true;
-    _stopRequiredCommentIndex ??= _active?.commentIndex;
+    _stopRequiredTarget ??= _active?.target;
     _active = null;
     _latestRunId += 1;
     _nativeStopRequired = true;
@@ -143,7 +186,7 @@ final class ObserverSpeechSession {
     task = _stopOnce().then((result) {
       if (result is AppSuccess<void>) {
         _nativeStopRequired = false;
-        _stopRequiredCommentIndex = null;
+        _stopRequiredTarget = null;
       }
       if (result is AppError<void> && identical(_closeTask, task)) {
         _closeTask = null;

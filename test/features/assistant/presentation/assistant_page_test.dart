@@ -128,7 +128,7 @@ void main() {
     );
     expect(find.byKey(assistantModelRetryButtonKey), findsOneWidget);
 
-    await tester.tap(find.byKey(assistantModelRetryButtonKey));
+    await _tapVisible(tester, find.byKey(assistantModelRetryButtonKey));
     await _pumpUntilState(
       tester,
       bloc,
@@ -170,7 +170,7 @@ void main() {
       'Explain the scene',
     );
     await tester.pump();
-    await tester.tap(find.byKey(assistantSubmitControlKey));
+    await _tapVisible(tester, find.byKey(assistantSubmitControlKey));
     await _pumpUntil(tester, () => generator.requests.length == 1);
 
     expect(find.text('Explain the scene'), findsOneWidget);
@@ -214,7 +214,7 @@ void main() {
       'Cancel this answer',
     );
     await tester.pump();
-    await tester.tap(find.byKey(assistantSubmitControlKey));
+    await _tapVisible(tester, find.byKey(assistantSubmitControlKey));
     await _pumpUntil(tester, () => generator.requests.length == 1);
     handle.emit('Uncommitted prefix');
     await _pumpUntilState(
@@ -223,7 +223,7 @@ void main() {
       (state) => state.manualDraftResponse == 'Uncommitted prefix',
     );
 
-    await tester.tap(find.byKey(assistantSubmitControlKey));
+    await _tapVisible(tester, find.byKey(assistantSubmitControlKey));
     await tester.runAsync(() async {
       await handle.cancel();
       await Future<void>.delayed(Duration.zero);
@@ -266,7 +266,7 @@ void main() {
       'Retry this prompt',
     );
     await tester.pump();
-    await tester.tap(find.byKey(assistantSubmitControlKey));
+    await _tapVisible(tester, find.byKey(assistantSubmitControlKey));
     await _pumpUntil(tester, () => generator.requests.length == 1);
     await tester.runAsync(() async {
       failedHandle.fail(
@@ -287,7 +287,7 @@ void main() {
     expect(find.byKey(assistantAnswerRetryButtonKey), findsOneWidget);
 
     await tester.ensureVisible(find.byKey(assistantAnswerRetryButtonKey));
-    await tester.tap(find.byKey(assistantAnswerRetryButtonKey));
+    await _tapVisible(tester, find.byKey(assistantAnswerRetryButtonKey));
     await _pumpUntil(tester, () => generator.requests.length == 2);
     await tester.runAsync(() async {
       retryHandle.succeed('Recovered in the UI');
@@ -360,7 +360,7 @@ void main() {
     expect(find.text('A person is standing in the center.'), findsOneWidget);
 
     await tester.ensureVisible(find.text('30s'));
-    await tester.tap(find.text('30s'));
+    await _tapVisible(tester, find.text('30s'));
     await _pumpUntilState(
       tester,
       bloc,
@@ -369,7 +369,7 @@ void main() {
     expect(find.text('Watching every 30 seconds'), findsOneWidget);
 
     await tester.ensureVisible(find.byKey(observerToggleButtonKey));
-    await tester.tap(find.byKey(observerToggleButtonKey));
+    await _tapVisible(tester, find.byKey(observerToggleButtonKey));
     await _pumpUntilState(tester, bloc, (state) => !state.observationEnabled);
     expect(find.text('Automatic observation is stopped.'), findsOneWidget);
 
@@ -421,14 +421,14 @@ void main() {
     await tester.ensureVisible(commentControl);
     expect(find.descendant(of: commentControl, matching: find.text('Stop')), findsOneWidget);
 
-    await tester.tap(commentControl);
+    await _tapVisible(tester, commentControl);
     await _pumpUntilState(tester, bloc, (state) => !state.isSpeaking);
     expect(speech.stopCalls, 1);
     expect(find.descendant(of: commentControl, matching: find.text('Replay')), findsOneWidget);
 
     final replaySpeech = FakeSpeechAttempt();
     speech.enqueueAttempt(replaySpeech);
-    await tester.tap(commentControl);
+    await _tapVisible(tester, commentControl);
     await _pumpUntilState(tester, bloc, (state) => state.isSpeaking);
     expect(speech.spokenTexts, [
       'A completed spoken comment.',
@@ -437,7 +437,7 @@ void main() {
 
     final muteControl = find.byKey(observerSpeechMuteButtonKey);
     await tester.ensureVisible(muteControl);
-    await tester.tap(muteControl);
+    await _tapVisible(tester, muteControl);
     await _pumpUntilState(
       tester,
       bloc,
@@ -445,7 +445,7 @@ void main() {
     );
     expect(speech.stopCalls, 2);
 
-    await tester.tap(muteControl);
+    await _tapVisible(tester, muteControl);
     await _pumpUntilState(tester, bloc, (state) => !state.speechMuted);
     expect(speech.spokenTexts, hasLength(2));
 
@@ -506,7 +506,7 @@ void main() {
       'Do not lose this prompt',
     );
     await tester.pump();
-    await tester.tap(find.byKey(assistantSubmitControlKey));
+    await _tapVisible(tester, find.byKey(assistantSubmitControlKey));
     await _pumpUntilState(
       tester,
       bloc,
@@ -531,13 +531,13 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(commentControl);
+    await _tapVisible(tester, commentControl);
     await _pumpUntilState(
       tester,
       bloc,
       (state) => !state.isSpeaking && state.speechFailure == null,
     );
-    await tester.tap(find.byKey(assistantSubmitControlKey));
+    await _tapVisible(tester, find.byKey(assistantSubmitControlKey));
     await _pumpUntilState(
       tester,
       bloc,
@@ -582,16 +582,25 @@ ObserverBloc _createBloc(
   ObserverPeriodicTimerFactory? periodicTimerFactory,
 }) {
   return ObserverBloc(
-    sceneSource: sceneSource ?? FakeSceneSource(),
-    modelStore: store,
-    commentGenerator: generator,
-    speechSynthesizer: speechSynthesizer ?? FakeSpeechSynthesizer(),
-    requestBuilder: ObserverRequestBuilder(
-      qwenPromptBuilder: QwenPromptBuilder(
-        systemPrompt: 'You are a concise local assistant.',
-        manualOptions: _testManualOptions,
-        shortCommentOptions: _testShortCommentOptions,
+    generation: ObserverGenerationDependencies(
+      sceneSource: sceneSource ?? FakeSceneSource(),
+      qwenModelStore: store,
+      commentGenerator: generator,
+      requestBuilder: ObserverRequestBuilder(
+        qwenPromptBuilder: QwenPromptBuilder(
+          systemPrompt: 'You are a concise local assistant.',
+          dialogueOptions: _testManualOptions,
+          shortCommentOptions: _testShortCommentOptions,
+        ),
       ),
+    ),
+    voice: ObserverVoiceDependencies(
+      asrModelStore: FakeAsrModelStore(),
+      microphonePermissionGateway: FakeMicrophonePermissionGateway(),
+      speechRecognizer: FakeSpeechRecognizer(),
+      speechSynthesizer: speechSynthesizer ?? FakeSpeechSynthesizer(),
+      wakePhrase: 'assistant',
+      questionDeadline: testVoiceQuestionDeadline,
     ),
     periodicTimerFactory: periodicTimerFactory ?? (_, _) => _DormantTimer(),
   );
@@ -612,12 +621,27 @@ final class _DormantTimer implements Timer {
   }
 }
 
+Future<void> _tapVisible(WidgetTester tester, Finder finder) async {
+  await tester.ensureVisible(finder);
+  await tester.tap(finder);
+}
+
 Future<void> _pumpUntilState(
   WidgetTester tester,
   ObserverBloc bloc,
   bool Function(ObserverState state) predicate,
-) {
-  return _pumpUntil(tester, () => predicate(bloc.state));
+) async {
+  try {
+    await _pumpUntil(tester, () => predicate(bloc.state));
+  } on TestFailure {
+    final state = bloc.state;
+    throw TestFailure(
+      'Condition did not become true. '
+      'model=${state.modelStatus}, voice=${state.voicePhase}, '
+      'generation=${state.activeGeneration}, speaking=${state.isSpeaking}, '
+      'comments=${state.comments.length}, messages=${state.messages.length}.',
+    );
+  }
 }
 
 Future<void> _pumpUntil(
@@ -626,7 +650,11 @@ Future<void> _pumpUntil(
 ) async {
   for (var attempt = 0; attempt < 100; attempt += 1) {
     await tester.pump(AppAnimations.regular.fast);
-    if (predicate()) return;
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    if (predicate()) {
+      await tester.pump();
+      return;
+    }
   }
   throw TestFailure('Condition did not become true.');
 }

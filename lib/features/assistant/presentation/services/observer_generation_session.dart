@@ -5,14 +5,14 @@ import 'package:pov_agent/features/assistant/presentation/services/assistant_gen
 import 'package:pov_agent/shared/domain/app_result.dart';
 import 'package:pov_agent/shared/domain/scene_snapshot.dart';
 
-/// Metadata retained while one automatic or manual generation is active.
+/// Metadata retained while one automatic or dialogue generation is active.
 sealed class ObserverActiveGeneration {
   const ObserverActiveGeneration(this.runId);
 
   /// Monotonic identifier assigned by the underlying generation runner.
   final int runId;
 
-  /// Whether the run belongs to the timer or a manual prompt.
+  /// Whether the run belongs to the timer, typed dialogue, or voice dialogue.
   ObserverGenerationKind get kind;
 
   /// The scene sampled for an automatic run.
@@ -34,6 +34,16 @@ final class _ManualGeneration extends ObserverActiveGeneration {
 
   @override
   ObserverGenerationKind get kind => ObserverGenerationKind.manual;
+
+  @override
+  SceneSnapshot? get scene => null;
+}
+
+final class _VoiceGeneration extends ObserverActiveGeneration {
+  const _VoiceGeneration(super.runId);
+
+  @override
+  ObserverGenerationKind get kind => ObserverGenerationKind.voice;
 
   @override
   SceneSnapshot? get scene => null;
@@ -122,6 +132,14 @@ final class ObserverGenerationSession {
     final runId = _runner.start(request);
     if (runId == null) return null;
     return _active = _ManualGeneration(runId);
+  }
+
+  /// Starts a hands-free dialogue run without automatic scene metadata.
+  ObserverActiveGeneration? startVoice(CommentGenerationRequest request) {
+    if (isActive) return null;
+    final runId = _runner.start(request);
+    if (runId == null) return null;
+    return _active = _VoiceGeneration(runId);
   }
 
   /// Releases metadata after the owner consumes [runId]'s completion.

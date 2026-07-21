@@ -6,6 +6,7 @@ import 'package:pov_agent/features/assistant/domain/entities/conversation_messag
 import 'package:pov_agent/features/assistant/domain/entities/observer_interval.dart';
 import 'package:pov_agent/features/assistant/presentation/bloc/observer_state.dart';
 import 'package:pov_agent/features/assistant/presentation/widgets/assistant_model_status.dart';
+import 'package:pov_agent/features/assistant/presentation/widgets/hands_free_agent_panel.dart';
 import 'package:pov_agent/features/assistant/presentation/widgets/observer_session_panel.dart';
 
 /// Renders committed dialogue plus the active, uncommitted generation draft.
@@ -16,6 +17,7 @@ final class AssistantConversation extends StatelessWidget {
     required this.scrollController,
     required this.onRetryAnswer,
     required this.onModelRetry,
+    required this.onVoiceRetry,
     required this.onIntervalSelected,
     required this.onObservationStart,
     required this.onObservationStop,
@@ -36,6 +38,9 @@ final class AssistantConversation extends StatelessWidget {
 
   /// Retries a recoverable model preparation failure.
   final VoidCallback onModelRetry;
+
+  /// Retries recoverable hands-free model, permission, or input setup.
+  final VoidCallback onVoiceRetry;
 
   /// Replaces the session-only automatic cadence.
   final ValueChanged<ObserverInterval> onIntervalSelected;
@@ -59,14 +64,21 @@ final class AssistantConversation extends StatelessWidget {
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context);
     final children = <Widget>[
-      ObserverSessionPanel(
+      HandsFreeAgentPanel(
         state: state,
-        onIntervalSelected: onIntervalSelected,
-        onStart: onObservationStart,
-        onStop: onObservationStop,
-        onSpeechMutedChanged: onSpeechMutedChanged,
-        onCommentReplay: onCommentReplay,
-        onSpeechStop: onSpeechStop,
+        onRetry: onVoiceRetry,
+      ),
+      Padding(
+        padding: AppSpacing.regular.topMd,
+        child: ObserverSessionPanel(
+          state: state,
+          onIntervalSelected: onIntervalSelected,
+          onStart: onObservationStart,
+          onStop: onObservationStop,
+          onSpeechMutedChanged: onSpeechMutedChanged,
+          onCommentReplay: onCommentReplay,
+          onSpeechStop: onSpeechStop,
+        ),
       ),
       if (state.modelStatus != ObserverModelStatus.ready) AssistantModelStatusView(state: state, onRetry: onModelRetry),
       if (state.modelStatus == ObserverModelStatus.ready && state.messages.isEmpty && state.manualDraftPrompt.isEmpty)

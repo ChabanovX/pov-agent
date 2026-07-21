@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:pov_agent/core/logging/app_logger.dart';
 import 'package:pov_agent/features/assistant/application/ports/comment_generator.dart';
 import 'package:pov_agent/features/assistant/application/ports/model_store.dart';
+import 'package:pov_agent/features/assistant/application/ports/speech_recognizer.dart';
 import 'package:pov_agent/features/assistant/application/ports/speech_synthesizer.dart';
 import 'package:pov_agent/features/assistant/presentation/bloc/observer_bloc.dart';
 import 'package:pov_agent/features/camera/application/services/observation_scene_session.dart';
@@ -31,13 +32,15 @@ final class AppRuntimeCloseException implements Exception {
 /// boundary. Shutdown wins an overlap with startup: it invalidates the startup
 /// wait before either owned resource begins closing.
 final class AppRuntime with WidgetsBindingObserver {
-  /// Creates a runtime for [cameraBloc] and [sceneSession].
+  /// Creates the process owner for camera, generation, ASR, and speech ports.
   AppRuntime({
     required this.cameraBloc,
     required this.sceneSession,
     required this.observerBloc,
     required this.modelStore,
+    required this.asrModelStore,
     required this.commentGenerator,
+    required this.speechRecognizer,
     required this.speechSynthesizer,
   });
 
@@ -53,8 +56,14 @@ final class AppRuntime with WidgetsBindingObserver {
   /// The process-owned verified model lifecycle.
   final QwenModelStore modelStore;
 
+  /// The process-owned verified streaming-ASR bundle lifecycle.
+  final AsrModelStore asrModelStore;
+
   /// The process-owned native text-generation runtime.
   final CommentGenerator commentGenerator;
+
+  /// The process-owned microphone capture and native ASR runtime.
+  final SpeechRecognizer speechRecognizer;
 
   /// The process-owned foreground system speech runtime.
   final SpeechSynthesizer speechSynthesizer;
@@ -267,6 +276,7 @@ final class AppRuntime with WidgetsBindingObserver {
         ]);
         await Future.wait<void>([
           closeOwner(_closeModelResources),
+          closeOwner(_closeVoiceInputResources),
           closeOwner(_closeSpeechResource),
         ]);
       }
@@ -304,6 +314,37 @@ final class AppRuntime with WidgetsBindingObserver {
 
   Future<void> _closeSpeechResource() async {
     final result = await speechSynthesizer.close();
+    if (result case AppError<void>(:final failure)) {
+      throw AppRuntimeCloseException(failure);
+    }
+  }
+
+  Future<void> _closeVoiceInputResources() async {
+    Object? firstError;
+    StackTrace? firstStackTrace;
+
+    Future<void> closeResource(Future<void> Function() close) async {
+      try {
+        await close();
+      } on Object catch (error, stackTrace) {
+        firstError ??= error;
+        firstStackTrace ??= stackTrace;
+      }
+    }
+
+    // The Bloc has stopped capture and detached its model-state subscription.
+    // Close preparation before native recognition so a late verified bundle
+    // can no longer be handed to a recognizer that is being destroyed.
+    await closeResource(asrModelStore.close);
+    await closeResource(_closeSpeechRecognizerResource);
+
+    if (firstError case final error?) {
+      Error.throwWithStackTrace(error, firstStackTrace!);
+    }
+  }
+
+  Future<void> _closeSpeechRecognizerResource() async {
+    final result = await speechRecognizer.close();
     if (result case AppError<void>(:final failure)) {
       throw AppRuntimeCloseException(failure);
     }

@@ -60,6 +60,12 @@ final class ObserverAnswerRetryRequested extends ObserverEvent {
   const ObserverAnswerRetryRequested();
 }
 
+/// Clears a recoverable hands-free failure and re-arms recognition.
+final class ObserverVoiceRetryRequested extends ObserverEvent {
+  /// Requests verified ASR preparation, permission, and capture again.
+  const ObserverVoiceRetryRequested();
+}
+
 /// Changes the session-only automatic speech mute preference.
 final class ObserverSpeechMutedChanged extends ObserverEvent {
   /// Sets whether completed automatic comments may be spoken.
@@ -128,4 +134,10 @@ final class _SpeechUpdateReceived extends ObserverEvent {
   const _SpeechUpdateReceived(this.update);
 
   final ObserverSpeechCompleted update;
+}
+
+final class _VoiceInputUpdateReceived extends ObserverEvent {
+  const _VoiceInputUpdateReceived(this.update);
+
+  final ObserverVoiceInputUpdate update;
 }

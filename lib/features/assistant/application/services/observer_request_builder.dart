@@ -64,4 +64,19 @@ final class ObserverRequestBuilder {
       history: contextualPrompt.dialogueHistory,
     );
   }
+
+  /// Builds a hands-free question with the same bounded scene-aware context.
+  CommentGenerationRequest voiceQuestion({
+    required String question,
+    required SceneSnapshot scene,
+    required List<ConversationMessage> dialogue,
+    String? previousComment,
+  }) {
+    return manual(
+      prompt: question,
+      scene: scene,
+      dialogue: dialogue,
+      previousComment: previousComment,
+    );
+  }
 }
