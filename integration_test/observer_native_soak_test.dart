@@ -93,6 +93,14 @@ void main() {
           timeout: _stateTransitionTimeout,
         );
         await tester.pump();
+        // Model loading can outlive a transient live detection. Reacquire a
+        // non-empty scene immediately before the correlated generation starts.
+        await _waitForScene(
+          runtime,
+          tester,
+          timeout: _liveSceneTimeout,
+          sourceLabel: 'Live YOLO after model readiness',
+        );
         final initialCommentCount = runtime.observerBloc.state.comments.length;
         observerSubscription = runtime.observerBloc.stream.listen((state) {
           if (state.activeGeneration != ObserverGenerationKind.automatic) {
