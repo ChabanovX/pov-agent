@@ -63,10 +63,10 @@ void main() {
   });
 
   test('represents model preparation without ambiguous nullable fields', () {
-    const downloading = ModelStoreState.downloading(0.4);
-    final ready = ModelStoreState.ready(artifact);
+    const downloading = QwenModelStoreState.downloading(0.4);
+    final ready = QwenModelStoreState.ready(artifact);
     const failure = CacheFailure(code: 'model_checksum');
-    final failed = ModelStoreState.failure(failure);
+    final failed = QwenModelStoreState.failure(failure);
 
     expect(downloading.phase, ModelStorePhase.downloading);
     expect(downloading.downloadProgress, 0.4);
@@ -76,6 +76,16 @@ void main() {
     expect(ready.downloadProgress, isNull);
     expect(failed.phase, ModelStorePhase.failure);
     expect(failed.failure, same(failure));
+  });
+
+  test('retains a multi-file bundle as a typed model artifact', () {
+    const bundle = (
+      modelPath: '/models/piper.onnx',
+      tokensPath: '/models/tokens.txt',
+    );
+    final state = ModelStoreState<({String modelPath, String tokensPath})>.ready(bundle);
+
+    expect(state.artifact, bundle);
   });
 
   test('requires a non-empty formatted generation prompt', () {

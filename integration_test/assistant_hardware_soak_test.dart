@@ -61,7 +61,7 @@ void main() {
       StreamSubscription<CameraState>? cameraSubscription;
       // The model listener uses the same transfer-before-await ownership.
       // ignore: cancel_subscriptions
-      StreamSubscription<ModelStoreState>? modelSubscription;
+      StreamSubscription<QwenModelStoreState>? modelSubscription;
       var generationActive = false;
       var qwenPreparationActive = false;
       var latestYoloFrameNumber = 0;
@@ -781,7 +781,7 @@ Future<void> _cancelSubscription<T>(
   await subscription.cancel().timeout(_subscriptionCancelTimeout);
 }
 
-StreamSubscription<ModelStoreState> _logModelStoreStates(
+StreamSubscription<QwenModelStoreState> _logModelStoreStates(
   WidgetTester tester,
   AppRuntime runtime,
   Stopwatch watch, {

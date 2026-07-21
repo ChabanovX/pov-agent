@@ -106,7 +106,7 @@ AppRuntime _configureDependencies({
     ..registerSingleton<ObservationController>(controller)
     ..registerSingleton<SceneSource>(sceneSession)
     ..registerSingleton<CommentGenerator>(commentGenerator)
-    ..registerSingleton<ModelStore>(modelStore)
+    ..registerSingleton<QwenModelStore>(modelStore)
     ..registerSingleton<SpeechSynthesizer>(systemSpeechSynthesizer)
     ..registerSingleton<ObserverBloc>(observerBloc)
     ..registerSingleton<AppRuntime>(runtime);

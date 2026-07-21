@@ -23,7 +23,7 @@ import 'package:pov_agent/shared/domain/app_result.dart';
 /// before cancelling transport and native work, so stale progress, failure, or
 /// readiness can never replace the suspended state. Prepares requested during
 /// suspension wait until transport and native cleanup have both settled.
-final class VerifiedQwenModelStore implements ModelStore {
+final class VerifiedQwenModelStore implements QwenModelStore {
   /// Creates a model store from explicit transport and storage policies.
   factory VerifiedQwenModelStore({
     required QwenModelManifest manifest,
@@ -59,10 +59,10 @@ final class VerifiedQwenModelStore implements ModelStore {
   final ModelChecksumVerifier _checksumVerifier;
   final CommentGenerator _commentGenerator;
 
-  final StreamController<ModelStoreState> _statesController = StreamController.broadcast(
+  final StreamController<QwenModelStoreState> _statesController = StreamController.broadcast(
     sync: true,
   );
-  ModelStoreState _current = const ModelStoreState.idle();
+  QwenModelStoreState _current = const QwenModelStoreState.idle();
 
   bool _isClosed = false;
   bool _isSuspended = false;
@@ -76,10 +76,10 @@ final class VerifiedQwenModelStore implements ModelStore {
   // ── ModelStore lifecycle ─────────────────────────────────────────
 
   @override
-  ModelStoreState get current => _current;
+  QwenModelStoreState get current => _current;
 
   @override
-  Stream<ModelStoreState> get states => _statesController.stream;
+  Stream<QwenModelStoreState> get states => _statesController.stream;
 
   @override
   Future<AppResult<VerifiedModelArtifact>> prepare() {
@@ -193,14 +193,14 @@ final class VerifiedQwenModelStore implements ModelStore {
               stackTrace,
             );
       if (_isCurrentEpoch(epoch)) {
-        _publishForEpoch(epoch, ModelStoreState.failure(failure));
+        _publishForEpoch(epoch, QwenModelStoreState.failure(failure));
       }
       return AppError(failure);
     }
   }
 
   Future<AppResult<VerifiedModelArtifact>> _performPreparation(int epoch) async {
-    _publishForEpoch(epoch, const ModelStoreState.loading());
+    _publishForEpoch(epoch, const QwenModelStoreState.loading());
     final directory = await _directoryProvider.resolve();
     _ensureCurrentEpoch(epoch);
     await directory.create(recursive: true);
@@ -255,7 +255,7 @@ final class VerifiedQwenModelStore implements ModelStore {
   }
 
   Future<bool> _matchesManifest(File file, int epoch) async {
-    _publishForEpoch(epoch, const ModelStoreState.verifying());
+    _publishForEpoch(epoch, const QwenModelStoreState.verifying());
     final byteSize = await file.length();
     _ensureCurrentEpoch(epoch);
     if (byteSize != _manifest.byteSize) return false;
@@ -281,7 +281,7 @@ final class VerifiedQwenModelStore implements ModelStore {
     final cancellation = ModelDownloadCancellation();
     _activeDownloadCancellation = cancellation;
     var lastPublishedProgress = 0.0;
-    _publishForEpoch(epoch, const ModelStoreState.downloading(0));
+    _publishForEpoch(epoch, const QwenModelStoreState.downloading(0));
 
     try {
       await _downloader.download(
@@ -294,7 +294,7 @@ final class VerifiedQwenModelStore implements ModelStore {
           final progress = (receivedBytes / _manifest.byteSize).clamp(0.0, 1.0);
           if (progress <= lastPublishedProgress) return;
           lastPublishedProgress = progress;
-          _publishForEpoch(epoch, ModelStoreState.downloading(progress));
+          _publishForEpoch(epoch, QwenModelStoreState.downloading(progress));
         },
       );
       _ensureCurrentEpoch(epoch);
@@ -309,7 +309,7 @@ final class VerifiedQwenModelStore implements ModelStore {
     VerifiedModelArtifact artifact,
     int epoch,
   ) async {
-    _publishForEpoch(epoch, const ModelStoreState.loading());
+    _publishForEpoch(epoch, const QwenModelStoreState.loading());
     final loadResult = await _commentGenerator.loadModel(artifact);
     _ensureCurrentEpoch(epoch);
     return switch (loadResult) {
@@ -322,7 +322,7 @@ final class VerifiedQwenModelStore implements ModelStore {
     VerifiedModelArtifact artifact,
     int epoch,
   ) {
-    _publishForEpoch(epoch, ModelStoreState.ready(artifact));
+    _publishForEpoch(epoch, QwenModelStoreState.ready(artifact));
     return AppSuccess(artifact);
   }
 
@@ -330,7 +330,7 @@ final class VerifiedQwenModelStore implements ModelStore {
     AppFailure failure,
     int epoch,
   ) {
-    _publishForEpoch(epoch, ModelStoreState.failure(failure));
+    _publishForEpoch(epoch, QwenModelStoreState.failure(failure));
     return AppError(failure);
   }
 
@@ -395,7 +395,7 @@ final class VerifiedQwenModelStore implements ModelStore {
     return !_isClosed && !_isSuspended && epoch == _preparationEpoch;
   }
 
-  void _publishForEpoch(int epoch, ModelStoreState state) {
+  void _publishForEpoch(int epoch, QwenModelStoreState state) {
     if (!_isCurrentEpoch(epoch)) return;
     _current = state;
     _statesController.add(state);
@@ -403,7 +403,7 @@ final class VerifiedQwenModelStore implements ModelStore {
 
   void _publishSuspended() {
     if (_isClosed) return;
-    const state = ModelStoreState.suspended();
+    const state = QwenModelStoreState.suspended();
     _current = state;
     _statesController.add(state);
   }

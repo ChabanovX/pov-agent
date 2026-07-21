@@ -50,9 +50,9 @@ final class FakeSceneSource implements SceneSource {
   Future<void> close() => _changes.close();
 }
 
-final class FakeAssistantModelStore implements ModelStore {
+final class FakeAssistantModelStore implements QwenModelStore {
   factory FakeAssistantModelStore({
-    ModelStoreState current = const ModelStoreState.idle(),
+    QwenModelStoreState current = const QwenModelStoreState.idle(),
     Future<AppResult<VerifiedModelArtifact>> Function()? onPrepare,
     Future<void> Function()? onSuspend,
   }) {
@@ -65,10 +65,10 @@ final class FakeAssistantModelStore implements ModelStore {
     this.onSuspend,
   );
 
-  final StreamController<ModelStoreState> _states = StreamController.broadcast(
+  final StreamController<QwenModelStoreState> _states = StreamController.broadcast(
     sync: true,
   );
-  ModelStoreState _current;
+  QwenModelStoreState _current;
 
   Future<AppResult<VerifiedModelArtifact>> Function()? onPrepare;
   Future<void> Function()? onSuspend;
@@ -77,12 +77,12 @@ final class FakeAssistantModelStore implements ModelStore {
   int closeCalls = 0;
 
   @override
-  ModelStoreState get current => _current;
+  QwenModelStoreState get current => _current;
 
   @override
-  Stream<ModelStoreState> get states => _states.stream;
+  Stream<QwenModelStoreState> get states => _states.stream;
 
-  void emit(ModelStoreState state) {
+  void emit(QwenModelStoreState state) {
     _current = state;
     if (!_states.isClosed) _states.add(state);
   }
@@ -92,7 +92,7 @@ final class FakeAssistantModelStore implements ModelStore {
     prepareCalls += 1;
     final callback = onPrepare;
     if (callback != null) return callback();
-    emit(ModelStoreState.ready(testQwenArtifact));
+    emit(QwenModelStoreState.ready(testQwenArtifact));
     return const AppSuccess(testQwenArtifact);
   }
 
@@ -100,7 +100,7 @@ final class FakeAssistantModelStore implements ModelStore {
   Future<void> suspend() async {
     suspendCalls += 1;
     await onSuspend?.call();
-    emit(const ModelStoreState.suspended());
+    emit(const QwenModelStoreState.suspended());
   }
 
   @override

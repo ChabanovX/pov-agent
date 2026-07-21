@@ -51,7 +51,7 @@ final class AppRuntime with WidgetsBindingObserver {
   final ObserverBloc observerBloc;
 
   /// The process-owned verified model lifecycle.
-  final ModelStore modelStore;
+  final QwenModelStore modelStore;
 
   /// The process-owned native text-generation runtime.
   final CommentGenerator commentGenerator;

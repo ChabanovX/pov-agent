@@ -32,7 +32,7 @@ void main() {
         same(runtime.observerBloc),
       );
       expect(
-        appDependencies<ModelStore>(),
+        appDependencies<QwenModelStore>(),
         same(runtime.modelStore),
       );
       expect(

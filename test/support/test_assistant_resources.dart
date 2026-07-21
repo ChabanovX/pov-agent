@@ -77,7 +77,7 @@ final class _EmptySceneSource implements SceneSource {
 }
 
 /// In-memory model store that becomes ready immediately.
-final class TestModelStore implements ModelStore {
+final class TestModelStore implements QwenModelStore {
   static const _artifact = VerifiedModelArtifact(
     modelId: 'test-model',
     revision: 'test-revision',
@@ -86,8 +86,8 @@ final class TestModelStore implements ModelStore {
     sha256: 'test-sha',
   );
 
-  final StreamController<ModelStoreState> _states = StreamController<ModelStoreState>.broadcast(sync: true);
-  ModelStoreState _current = const ModelStoreState.idle();
+  final StreamController<QwenModelStoreState> _states = StreamController<QwenModelStoreState>.broadcast(sync: true);
+  QwenModelStoreState _current = const QwenModelStoreState.idle();
 
   /// Number of preparation requests.
   int prepareCalls = 0;
@@ -99,15 +99,15 @@ final class TestModelStore implements ModelStore {
   int closeCalls = 0;
 
   @override
-  ModelStoreState get current => _current;
+  QwenModelStoreState get current => _current;
 
   @override
-  Stream<ModelStoreState> get states => _states.stream;
+  Stream<QwenModelStoreState> get states => _states.stream;
 
   @override
   Future<AppResult<VerifiedModelArtifact>> prepare() async {
     prepareCalls += 1;
-    _current = ModelStoreState.ready(_artifact);
+    _current = QwenModelStoreState.ready(_artifact);
     _states.add(_current);
     return const AppSuccess(_artifact);
   }
@@ -115,7 +115,7 @@ final class TestModelStore implements ModelStore {
   @override
   Future<void> suspend() async {
     suspendCalls += 1;
-    _current = const ModelStoreState.suspended();
+    _current = const QwenModelStoreState.suspended();
     _states.add(_current);
   }
 

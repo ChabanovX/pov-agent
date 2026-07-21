@@ -820,7 +820,7 @@ void main() {
 
     bloc.add(const ObserverForegroundDeactivated());
     await _waitForState(bloc, (state) => !state.foregroundActive);
-    store.emit(ModelStoreState.ready(testQwenArtifact));
+    store.emit(QwenModelStoreState.ready(testQwenArtifact));
     preparation.complete(const AppSuccess(testQwenArtifact));
     await _flushEvents();
 

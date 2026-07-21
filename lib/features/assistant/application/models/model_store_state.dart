@@ -25,8 +25,8 @@ enum ModelStorePhase {
   suspended,
 }
 
-/// The latest observable model-store state.
-final class ModelStoreState {
+/// The latest observable preparation state for a verified [TArtifact].
+final class ModelStoreState<TArtifact extends Object> {
   /// Creates the initial state.
   const ModelStoreState.idle() : phase = ModelStorePhase.idle, downloadProgress = null, artifact = null, failure = null;
 
@@ -56,8 +56,8 @@ final class ModelStoreState {
       failure = null;
 
   /// Creates a state containing the verified [artifact].
-  factory ModelStoreState.ready(VerifiedModelArtifact artifact) {
-    return ModelStoreState._(
+  factory ModelStoreState.ready(TArtifact artifact) {
+    return ModelStoreState<TArtifact>._(
       phase: ModelStorePhase.ready,
       artifact: artifact,
     );
@@ -65,7 +65,7 @@ final class ModelStoreState {
 
   /// Creates a recoverable model-preparation failure state.
   factory ModelStoreState.failure(AppFailure failure) {
-    return ModelStoreState._(
+    return ModelStoreState<TArtifact>._(
       phase: ModelStorePhase.failure,
       failure: failure,
     );
@@ -91,8 +91,11 @@ final class ModelStoreState {
   final double? downloadProgress;
 
   /// The verified artifact, present only when [phase] is ready.
-  final VerifiedModelArtifact? artifact;
+  final TArtifact? artifact;
 
   /// The normalized failure, present only when [phase] is failure.
   final AppFailure? failure;
 }
+
+/// The preparation state of the verified model consumed by Qwen generation.
+typedef QwenModelStoreState = ModelStoreState<VerifiedModelArtifact>;

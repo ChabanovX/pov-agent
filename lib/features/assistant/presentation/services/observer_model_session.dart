@@ -17,7 +17,7 @@ final class ObserverModelStateChanged extends ObserverModelUpdate {
   const ObserverModelStateChanged(this.state);
 
   /// The latest normalized store state.
-  final ModelStoreState state;
+  final QwenModelStoreState state;
 }
 
 /// The terminal result of one epoch-guarded preparation request.
@@ -37,7 +37,7 @@ final class ObserverModelPreparationCompleted extends ObserverModelUpdate {
 final class ObserverModelSession {
   /// Creates an inactive model session.
   factory ObserverModelSession({
-    required ModelStore modelStore,
+    required QwenModelStore modelStore,
     required void Function(ObserverModelUpdate update) onUpdate,
   }) {
     return ObserverModelSession._(modelStore, onUpdate);
@@ -45,17 +45,17 @@ final class ObserverModelSession {
 
   ObserverModelSession._(this._modelStore, this._onUpdate);
 
-  final ModelStore _modelStore;
+  final QwenModelStore _modelStore;
   final void Function(ObserverModelUpdate update) _onUpdate;
   // This session retains the subscription until its terminal close boundary.
   // ignore: cancel_subscriptions
-  StreamSubscription<ModelStoreState>? _subscription;
+  StreamSubscription<QwenModelStoreState>? _subscription;
   Future<void>? _preparationTask;
   var _preparationEpoch = 0;
   var _closed = false;
 
   /// The store state synchronously available to a newly started observer.
-  ModelStoreState get current => _modelStore.current;
+  QwenModelStoreState get current => _modelStore.current;
 
   /// Whether one preparation request is still settling.
   bool get preparationActive => _preparationTask != null;

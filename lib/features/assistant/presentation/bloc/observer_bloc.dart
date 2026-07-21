@@ -43,7 +43,7 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
   /// Creates an idle observer without starting model or timer work.
   factory ObserverBloc({
     required SceneSource sceneSource,
-    required ModelStore modelStore,
+    required QwenModelStore modelStore,
     required CommentGenerator commentGenerator,
     required SpeechSynthesizer speechSynthesizer,
     required ObserverRequestBuilder requestBuilder,
@@ -61,7 +61,7 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
 
   ObserverBloc._(
     this._sceneSource,
-    ModelStore modelStore,
+    QwenModelStore modelStore,
     this._requestBuilder,
     ObserverPeriodicTimerFactory? periodicTimerFactory,
     CommentGenerator commentGenerator,
@@ -388,7 +388,7 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
   }
 
   Future<void> _onModelStoreStateReceived(
-    ModelStoreState storeState,
+    QwenModelStoreState storeState,
     Emitter<ObserverState> emit,
   ) async {
     if (_closing || !state.started) return;
@@ -594,7 +594,7 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
 
   ObserverState _projectModelState(
     ObserverState current,
-    ModelStoreState storeState,
+    QwenModelStoreState storeState,
   ) {
     return current.copyWith(
       modelStatus: _observerStatusFor(storeState.phase),

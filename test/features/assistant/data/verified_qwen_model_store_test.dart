@@ -30,8 +30,8 @@ void main() {
   late _FakeDiskCapacityGateway diskCapacity;
   late _FakeCommentGenerator generator;
   late VerifiedQwenModelStore store;
-  late StreamSubscription<ModelStoreState> stateSubscription;
-  late List<ModelStoreState> publishedStates;
+  late StreamSubscription<QwenModelStoreState> stateSubscription;
+  late List<QwenModelStoreState> publishedStates;
 
   QwenModelManifest manifest({String? digest}) {
     return QwenModelManifest(

@@ -48,13 +48,13 @@ void main() {
     late final FakeAssistantModelStore store;
     store = FakeAssistantModelStore(
       onPrepare: () async {
-        store.emit(const ModelStoreState.loading());
+        store.emit(const QwenModelStoreState.loading());
         await loadingGate.future;
-        store.emit(const ModelStoreState.downloading(0.37));
+        store.emit(const QwenModelStoreState.downloading(0.37));
         await downloadGate.future;
-        store.emit(const ModelStoreState.verifying());
+        store.emit(const QwenModelStoreState.verifying());
         await verificationGate.future;
-        store.emit(ModelStoreState.ready(testQwenArtifact));
+        store.emit(QwenModelStoreState.ready(testQwenArtifact));
         return const AppSuccess(testQwenArtifact);
       },
     );
@@ -105,10 +105,10 @@ void main() {
     store = FakeAssistantModelStore(
       onPrepare: () async {
         if (store.prepareCalls == 1) {
-          store.emit(ModelStoreState.failure(failure));
+          store.emit(QwenModelStoreState.failure(failure));
           return const AppError(failure);
         }
-        store.emit(ModelStoreState.ready(testQwenArtifact));
+        store.emit(QwenModelStoreState.ready(testQwenArtifact));
         return const AppSuccess(testQwenArtifact);
       },
     );
