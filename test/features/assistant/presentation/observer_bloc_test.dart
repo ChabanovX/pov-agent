@@ -77,7 +77,7 @@ void main() {
 
     fixture.timers.current.fire();
     await _waitForRequests(fixture.generator, 1);
-    expect(fixture.generator.requests.single.prompt, contains('backpack #7'));
+    expect(fixture.generator.requests.single.prompt, contains('center: backpack'));
     expect(
       fixture.bloc.state.activeGeneration,
       ObserverGenerationKind.automatic,
@@ -120,7 +120,7 @@ void main() {
     await _waitForRequests(fixture.generator, 2);
     expect(
       fixture.generator.requests.last.prompt,
-      contains('Previous automatic comment: A person is standing in view.'),
+      contains('Previous: A person is standing in view.'),
     );
 
     second.succeed('The scene remains calm and still.');

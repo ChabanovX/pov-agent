@@ -26,12 +26,11 @@ final class ObserverPromptBuilder {
   }) {
     final buffer = StringBuffer()
       ..writeln(
-        'Make one natural, conversational observation about the current '
-        'camera scene. You may interpret what the visible arrangement could '
-        'mean, but do not invent objects that are not listed.',
+        'Make one natural observation about this scene. Interpret it if '
+        'useful, but invent no objects.',
       )
       ..writeln()
-      ..writeln('Current stable scene:')
+      ..writeln('Scene:')
       ..writeln(_formatScene(scene));
 
     final normalizedPrevious = previousComment?.trim();
@@ -39,10 +38,10 @@ final class ObserverPromptBuilder {
       buffer
         ..writeln()
         ..writeln(
-          'Previous automatic comment: '
+          'Previous: '
           '${_truncate(normalizedPrevious, _previousCommentCharacterLimit)}',
         )
-        ..writeln('Avoid merely repeating that comment.');
+        ..writeln('Avoid repetition.');
     }
 
     return ObserverPrompt(
@@ -84,12 +83,16 @@ final class ObserverPromptBuilder {
 String _formatScene(SceneSnapshot scene) {
   if (scene.isEmpty) return '- No stable objects are currently visible.';
 
-  final visibleObjects = scene.objects.take(_sceneObjectLimit);
-  final lines = visibleObjects.map((object) {
+  final visibleObjects = scene.objects.take(_sceneObjectLimit).toList(growable: false);
+  final objectsByRegion = <SceneRegion, List<String>>{};
+  for (final object in visibleObjects) {
     final label = _truncate(object.label.trim(), _objectLabelCharacterLimit);
-    return '- $label #${object.id} at ${_regionLabel(object.region)}';
-  }).toList();
-  final omitted = scene.objects.length - lines.length;
+    (objectsByRegion[object.region] ??= []).add(label);
+  }
+  final lines = objectsByRegion.entries
+      .map((entry) => '- ${_regionLabel(entry.key)}: ${entry.value.join(', ')}')
+      .toList();
+  final omitted = scene.objects.length - visibleObjects.length;
   if (omitted > 0) lines.add('- $omitted additional stable objects omitted');
   return lines.join('\n');
 }

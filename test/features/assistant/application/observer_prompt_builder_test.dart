@@ -15,7 +15,7 @@ void main() {
     );
 
     expect(prompt.text, contains('No stable objects are currently visible'));
-    expect(prompt.text, isNot(contains('Previous automatic comment')));
+    expect(prompt.text, isNot(contains('Previous:')));
     expect(prompt.dialogueHistory, isEmpty);
   });
 
@@ -43,13 +43,36 @@ void main() {
 
     expect(
       prompt.text,
-      contains('- person #2 at center\n- backpack #8 at lower right'),
+      contains('- center: person\n- lower right: backpack'),
     );
     expect(
       prompt.text,
-      contains('Previous automatic comment: Someone is standing in the room.'),
+      contains('Previous: Someone is standing in the room.'),
     );
-    expect(prompt.text, contains('Avoid merely repeating'));
+    expect(prompt.text, contains('Avoid repetition.'));
+  });
+
+  test('groups labels by region and reports objects beyond the prompt bound', () {
+    final prompt = builder.automaticComment(
+      scene: SceneSnapshot(
+        objects: [
+          for (var id = 1; id <= 26; id += 1)
+            TrackedObject(
+              id: id,
+              classId: id,
+              label: 'object$id',
+              region: SceneRegion.leftTop,
+            ),
+        ],
+      ),
+      dialogue: const [],
+    );
+
+    expect(prompt.text, contains('- upper left: object1, object2'));
+    expect(prompt.text, contains('object24'));
+    expect(prompt.text, isNot(contains('object25')));
+    expect(prompt.text, contains('- 2 additional stable objects omitted'));
+    expect(prompt.text, isNot(contains('#1')));
   });
 
   test('retains only the newest four complete bounded dialogue pairs', () {
@@ -99,7 +122,7 @@ void main() {
       previousComment: 'A person has entered the frame.',
     );
 
-    expect(prompt.text, contains('- person #1 at middle left'));
+    expect(prompt.text, contains('- middle left: person'));
     expect(prompt.text, contains('A person has entered the frame.'));
     expect(prompt.text, endsWith('What is happening?'));
     expect(prompt.dialogueHistory, isEmpty);
