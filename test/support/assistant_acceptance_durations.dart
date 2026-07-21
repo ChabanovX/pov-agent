@@ -26,4 +26,8 @@ abstract final class AssistantAcceptanceDurations {
   static const observerLiveScene = Duration(minutes: 3);
   static const observerTickWait = Duration(seconds: 20);
   static const observerStopSilence = Duration(seconds: 12);
+
+  /// Polls short native ownership transitions that can complete between UI
+  /// frame pumps on fast simulator hosts.
+  static const nativeProbePoll = Duration(milliseconds: 20);
 }

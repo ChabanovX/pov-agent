@@ -55,12 +55,14 @@ flutter test \
   integration_test/recorded_yolo_replay_test.dart \
   integration_test/recorded_app_flow_test.dart \
   integration_test/assistant_native_smoke_test.dart \
+  integration_test/piper_speech_native_test.dart \
   integration_test/system_speech_native_test.dart \
   -d "$device_id" \
   --dart-define-from-file=.env.example \
   --dart-define=USE_RECORDED_VIDEO=true \
   --dart-define=RUN_RECORDED_YOLO_REPLAY_TEST=true \
   --dart-define=RUN_NATIVE_ASSISTANT_TEST=true \
+  --dart-define=RUN_NATIVE_PIPER_TEST=true \
   --dart-define=RUN_SYSTEM_SPEECH_TEST=true
 
 flutter build apk --debug --target-platform android-arm64
