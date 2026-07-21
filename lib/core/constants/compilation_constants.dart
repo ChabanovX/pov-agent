@@ -162,6 +162,12 @@ abstract final class CompilationConstants {
     'QWEN_COMMENT_MIN_P',
     defaultValue: '0.0',
   );
+
+  /// Preferred English locale requested from the system speech runtime.
+  static const String systemSpeechLanguage = String.fromEnvironment(
+    'SYSTEM_SPEECH_LANGUAGE',
+    defaultValue: 'en-US',
+  );
 }
 
 bool _parseCompileTimeBoolean(String name, String value) {

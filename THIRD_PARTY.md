@@ -1,7 +1,19 @@
 # Third-party native and model components
 
-This file records reproducibility and license information for components that
-are fetched or built outside the Dart dependency graph.
+This file records reproducibility, runtime, and license information for the
+project's selected plugins, native components, and model artifacts.
+
+## flutter_tts
+
+- Upstream: <https://github.com/dlutton/flutter_tts>
+- Dart package: `flutter_tts` 4.2.5
+- License: MIT
+
+The application uses this plugin as a foreground bridge to the system speech
+services provided by iOS and Android. It does not bundle a voice model or add
+application-owned speech transport. Voice availability and any engine-level
+network behavior remain device capabilities; the adapter validates an
+installed English locale before speaking.
 
 ## llama.cpp
 
