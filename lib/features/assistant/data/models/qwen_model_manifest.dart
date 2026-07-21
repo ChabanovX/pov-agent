@@ -25,7 +25,11 @@ final class QwenModelManifest {
     if (revision.trim().isEmpty) {
       throw ArgumentError.value(revision, 'revision', 'The revision must not be empty.');
     }
-    if (filename.trim().isEmpty || filename.contains('/') || filename.contains(r'\')) {
+    if (filename.trim().isEmpty ||
+        filename == '.' ||
+        filename == '..' ||
+        filename.contains('/') ||
+        filename.contains(r'\')) {
       throw ArgumentError.value(
         filename,
         'filename',

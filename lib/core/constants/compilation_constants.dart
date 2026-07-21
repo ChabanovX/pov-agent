@@ -163,6 +163,164 @@ abstract final class CompilationConstants {
     defaultValue: '0.0',
   );
 
+  /// Stable upstream identifier for the selected Piper voice bundle.
+  static const String piperModelId = String.fromEnvironment(
+    'PIPER_MODEL_ID',
+    defaultValue: 'k2-fsa/sherpa-onnx/vits-piper-en_US-ljspeech-medium-int8',
+  );
+
+  /// Download URL for the checksum-pinned Piper voice archive.
+  static const String piperModelUrl = String.fromEnvironment(
+    'PIPER_MODEL_URL',
+    defaultValue:
+        'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/'
+        'vits-piper-en_US-ljspeech-medium-int8.tar.bz2',
+  );
+
+  /// Upstream release tag containing the selected voice archive.
+  static const String piperModelRevision = String.fromEnvironment(
+    'PIPER_MODEL_REVISION',
+    defaultValue: 'tts-models',
+  );
+
+  /// Cached filename of the selected voice archive.
+  static const String piperModelArchiveFilename = String.fromEnvironment(
+    'PIPER_MODEL_ARCHIVE_FILENAME',
+    defaultValue: 'vits-piper-en_US-ljspeech-medium-int8.tar.bz2',
+  );
+
+  /// Exact compressed byte length required before extraction.
+  static const String piperModelArchiveSizeBytes = String.fromEnvironment(
+    'PIPER_MODEL_ARCHIVE_SIZE_BYTES',
+    defaultValue: '21090429',
+  );
+
+  /// SHA-256 required before the voice archive can be extracted.
+  static const String piperModelArchiveSha256 = String.fromEnvironment(
+    'PIPER_MODEL_ARCHIVE_SHA256',
+    defaultValue: '24dc3bd77dd48c291e52c297878d3437c9492f245d823d7f6a06c4bbb67f4b6b',
+  );
+
+  /// Exact tar length temporarily materialized during bzip2 extraction.
+  static const String piperModelExpandedArchiveSizeBytes = String.fromEnvironment(
+    'PIPER_MODEL_EXPANDED_ARCHIVE_SIZE_BYTES',
+    defaultValue: '37662720',
+  );
+
+  /// Exact byte length of all regular files in the extracted bundle.
+  static const String piperModelExtractedSizeBytes = String.fromEnvironment(
+    'PIPER_MODEL_EXTRACTED_SIZE_BYTES',
+    defaultValue: '37347875',
+  );
+
+  /// Exact number of regular files in the extracted bundle.
+  static const String piperModelExtractedFileCount = String.fromEnvironment(
+    'PIPER_MODEL_EXTRACTED_FILE_COUNT',
+    defaultValue: '359',
+  );
+
+  /// Canonical tree SHA-256 required before the bundle can be published.
+  static const String piperModelBundleTreeSha256 = String.fromEnvironment(
+    'PIPER_MODEL_BUNDLE_TREE_SHA256',
+    defaultValue: 'a38256a8fada764a1e7b450c5f307b7b5de159e137af1a6aae0b2326f355bc3b',
+  );
+
+  /// Single archive root that contains the selected Piper bundle.
+  static const String piperModelArchiveRoot = String.fromEnvironment(
+    'PIPER_MODEL_ARCHIVE_ROOT',
+    defaultValue: 'vits-piper-en_US-ljspeech-medium-int8',
+  );
+
+  /// ONNX graph filename inside the extracted bundle root.
+  static const String piperModelFilename = String.fromEnvironment(
+    'PIPER_MODEL_FILENAME',
+    defaultValue: 'en_US-ljspeech-medium.onnx',
+  );
+
+  /// Token-table filename inside the extracted bundle root.
+  static const String piperTokensFilename = String.fromEnvironment(
+    'PIPER_TOKENS_FILENAME',
+    defaultValue: 'tokens.txt',
+  );
+
+  /// eSpeak data directory inside the extracted bundle root.
+  static const String piperEspeakDataDirectory = String.fromEnvironment(
+    'PIPER_ESPEAK_DATA_DIRECTORY',
+    defaultValue: 'espeak-ng-data',
+  );
+
+  /// License identifier recorded by the pinned voice repository.
+  static const String piperModelLicense = String.fromEnvironment(
+    'PIPER_MODEL_LICENSE',
+    defaultValue: 'Public-Domain',
+  );
+
+  /// Free-space reserve retained beyond archive and extracted bundle bytes.
+  static const String piperDownloadReserveBytes = String.fromEnvironment(
+    'PIPER_DOWNLOAD_RESERVE_BYTES',
+    defaultValue: '33554432',
+  );
+
+  /// sherpa-onnx execution provider used by the local Piper runtime.
+  static const String piperProvider = String.fromEnvironment(
+    'PIPER_PROVIDER',
+    defaultValue: 'cpu',
+  );
+
+  /// CPU thread count used while synthesizing one utterance.
+  static const String piperThreadCount = String.fromEnvironment(
+    'PIPER_THREAD_COUNT',
+    defaultValue: '1',
+  );
+
+  /// Voice speaker selected from the single-speaker LJSpeech model.
+  static const String piperSpeakerId = String.fromEnvironment(
+    'PIPER_SPEAKER_ID',
+    defaultValue: '0',
+  );
+
+  /// VITS waveform-noise scale used while loading the voice model.
+  static const String piperNoiseScale = String.fromEnvironment(
+    'PIPER_NOISE_SCALE',
+    defaultValue: '0.667',
+  );
+
+  /// VITS duration-noise scale used while loading the voice model.
+  static const String piperNoiseScaleW = String.fromEnvironment(
+    'PIPER_NOISE_SCALE_W',
+    defaultValue: '0.8',
+  );
+
+  /// VITS duration multiplier used while loading the voice model.
+  static const String piperLengthScale = String.fromEnvironment(
+    'PIPER_LENGTH_SCALE',
+    defaultValue: '1.0',
+  );
+
+  /// Piper speech-rate multiplier.
+  static const String piperSpeed = String.fromEnvironment(
+    'PIPER_SPEED',
+    defaultValue: '1.0',
+  );
+
+  /// Silence scale applied by the Piper generator.
+  static const String piperSilenceScale = String.fromEnvironment(
+    'PIPER_SILENCE_SCALE',
+    defaultValue: '0.2',
+  );
+
+  /// Maximum number of sentence chunks synthesized per native request.
+  static const String piperMaxSentences = String.fromEnvironment(
+    'PIPER_MAX_SENTENCES',
+    defaultValue: '1',
+  );
+
+  /// Whether sherpa-onnx emits native diagnostic logging.
+  static const String piperDebug = String.fromEnvironment(
+    'PIPER_DEBUG',
+    defaultValue: 'false',
+  );
+
   /// Preferred English locale requested from the system speech runtime.
   static const String systemSpeechLanguage = String.fromEnvironment(
     'SYSTEM_SPEECH_LANGUAGE',
