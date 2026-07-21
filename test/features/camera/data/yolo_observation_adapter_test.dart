@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pov_agent/features/camera/application/models/observation_event.dart';
 import 'package:pov_agent/features/camera/application/ports/camera_permission_gateway.dart';
@@ -10,6 +11,8 @@ import 'package:ultralytics_yolo/core/yolo_model_manager.dart';
 import 'package:ultralytics_yolo/ultralytics_yolo.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('close cancels an active model download', () async {
     const modelId = 'yolo26n';
     final adapter = YoloObservationAdapter(
@@ -94,6 +97,43 @@ void main() {
 
     await subscription.cancel();
     await adapter.close();
+  });
+
+  test('lets a newly attached native surface own its initial camera start', () async {
+    const channel = MethodChannel('test/yolo_initial_camera_start');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      channel,
+      (call) async {
+        calls.add(call);
+        return null;
+      },
+    );
+    addTearDown(() async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        null,
+      );
+    });
+    final adapter = YoloObservationAdapter(
+      cameraPermissionGateway: const _FakeCameraPermissionGateway(),
+    );
+    addTearDown(adapter.close);
+
+    await adapter.init();
+    await adapter.enable(CameraLens.back);
+    adapter.viewController.init(channel, 7);
+    await pumpEventQueue();
+    calls.clear();
+
+    adapter.handleModelLoaded(
+      revision: adapter.surfaceRevision.value,
+      attachedLens: CameraLens.back,
+      modelPath: adapter.configuration.modelPath,
+    );
+    await pumpEventQueue();
+
+    expect(calls, isEmpty);
   });
 
   test('rejects observation callbacks from a superseded retry revision', () async {
