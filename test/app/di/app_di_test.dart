@@ -5,6 +5,10 @@ import 'package:pov_agent/features/assistant/application/models/model_store_stat
 import 'package:pov_agent/features/assistant/application/ports/comment_generator.dart';
 import 'package:pov_agent/features/assistant/application/ports/model_store.dart';
 import 'package:pov_agent/features/assistant/application/ports/speech_synthesizer.dart';
+import 'package:pov_agent/features/assistant/data/adapters/fallback_speech_synthesizer.dart';
+import 'package:pov_agent/features/assistant/data/adapters/just_audio_generated_speech_player.dart';
+import 'package:pov_agent/features/assistant/data/adapters/piper_speech_synthesizer.dart';
+import 'package:pov_agent/features/assistant/data/repositories/verified_piper_model_store.dart';
 import 'package:pov_agent/features/assistant/presentation/bloc/observer_bloc.dart';
 import 'package:pov_agent/features/camera/application/ports/observation_controller.dart';
 import 'package:pov_agent/features/camera/application/ports/recorded_observation_frame_source.dart';
@@ -42,6 +46,18 @@ void main() {
       expect(
         appDependencies<SpeechSynthesizer>(),
         same(runtime.speechSynthesizer),
+      );
+      expect(
+        runtime.speechSynthesizer,
+        same(appDependencies<FallbackSpeechSynthesizer>()),
+      );
+      expect(
+        appDependencies<PiperSpeechSynthesizer>().modelStore,
+        same(appDependencies<VerifiedPiperModelStore>()),
+      );
+      expect(
+        appDependencies<JustAudioGeneratedSpeechPlayer>().playbackProbe.isPlaying,
+        isFalse,
       );
       expect(runtime.observerBloc.state.started, isFalse);
       expect(runtime.modelStore.current.phase, ModelStorePhase.idle);

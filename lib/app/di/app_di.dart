@@ -8,13 +8,20 @@ import 'package:pov_agent/features/assistant/application/ports/model_store.dart'
 import 'package:pov_agent/features/assistant/application/ports/speech_synthesizer.dart';
 import 'package:pov_agent/features/assistant/application/services/observer_request_builder.dart';
 import 'package:pov_agent/features/assistant/application/services/qwen_prompt_builder.dart';
+import 'package:pov_agent/features/assistant/data/adapters/fallback_speech_synthesizer.dart';
 import 'package:pov_agent/features/assistant/data/adapters/flutter_tts_speech_synthesizer.dart';
+import 'package:pov_agent/features/assistant/data/adapters/just_audio_generated_speech_player.dart';
 import 'package:pov_agent/features/assistant/data/adapters/llama_comment_generator.dart';
+import 'package:pov_agent/features/assistant/data/adapters/piper_speech_synthesizer.dart';
 import 'package:pov_agent/features/assistant/data/datasources/model_artifact_downloader.dart';
 import 'package:pov_agent/features/assistant/data/datasources/model_checksum_verifier.dart';
 import 'package:pov_agent/features/assistant/data/datasources/model_directory_provider.dart';
 import 'package:pov_agent/features/assistant/data/datasources/model_disk_capacity_gateway.dart';
+import 'package:pov_agent/features/assistant/data/datasources/piper_bundle_extractor.dart';
+import 'package:pov_agent/features/assistant/data/datasources/piper_bundle_verifier.dart';
 import 'package:pov_agent/features/assistant/data/ffi/llama_inference_worker.dart';
+import 'package:pov_agent/features/assistant/data/ffi/sherpa_piper_speech_generator.dart';
+import 'package:pov_agent/features/assistant/data/repositories/verified_piper_model_store.dart';
 import 'package:pov_agent/features/assistant/data/repositories/verified_qwen_model_store.dart';
 import 'package:pov_agent/features/assistant/presentation/bloc/observer_bloc.dart';
 import 'package:pov_agent/features/camera/application/ports/observation_controller.dart';
@@ -42,16 +49,19 @@ AppRuntime configureDependencies() => _configureDependencies();
 @visibleForTesting
 AppRuntime configureDependenciesForTesting({
   required ModelArtifactDownloader modelArtifactDownloader,
+  ModelArtifactDownloader? piperModelArtifactDownloader,
   SpeechSynthesizer? speechSynthesizer,
 }) {
   return _configureDependencies(
     modelArtifactDownloader: modelArtifactDownloader,
+    piperModelArtifactDownloader: piperModelArtifactDownloader,
     speechSynthesizer: speechSynthesizer,
   );
 }
 
 AppRuntime _configureDependencies({
   ModelArtifactDownloader? modelArtifactDownloader,
+  ModelArtifactDownloader? piperModelArtifactDownloader,
   SpeechSynthesizer? speechSynthesizer,
 }) {
   final assistantConfiguration = AssistantBuildConfiguration.fromEnvironment();
@@ -75,16 +85,18 @@ AppRuntime _configureDependencies({
     checksumVerifier: const IsolateModelChecksumVerifier(),
     commentGenerator: commentGenerator,
   );
-  final systemSpeechSynthesizer =
+  final effectiveSpeechSynthesizer =
       speechSynthesizer ??
-      FlutterTtsSpeechSynthesizer(
-        preferredLanguage: CompilationConstants.systemSpeechLanguage,
+      _registerLocalSpeech(
+        configuration: assistantConfiguration,
+        modelArtifactDownloader:
+            piperModelArtifactDownloader ?? modelArtifactDownloader ?? HttpModelArtifactDownloader(),
       );
   final observerBloc = ObserverBloc(
     sceneSource: sceneSession,
     modelStore: modelStore,
     commentGenerator: commentGenerator,
-    speechSynthesizer: systemSpeechSynthesizer,
+    speechSynthesizer: effectiveSpeechSynthesizer,
     requestBuilder: ObserverRequestBuilder(
       qwenPromptBuilder: QwenPromptBuilder(
         systemPrompt: assistantConfiguration.systemPrompt,
@@ -99,7 +111,7 @@ AppRuntime _configureDependencies({
     observerBloc: observerBloc,
     modelStore: modelStore,
     commentGenerator: commentGenerator,
-    speechSynthesizer: systemSpeechSynthesizer,
+    speechSynthesizer: effectiveSpeechSynthesizer,
   );
 
   appDependencies
@@ -107,10 +119,47 @@ AppRuntime _configureDependencies({
     ..registerSingleton<SceneSource>(sceneSession)
     ..registerSingleton<CommentGenerator>(commentGenerator)
     ..registerSingleton<QwenModelStore>(modelStore)
-    ..registerSingleton<SpeechSynthesizer>(systemSpeechSynthesizer)
+    ..registerSingleton<SpeechSynthesizer>(effectiveSpeechSynthesizer)
     ..registerSingleton<ObserverBloc>(observerBloc)
     ..registerSingleton<AppRuntime>(runtime);
   return runtime;
+}
+
+FallbackSpeechSynthesizer _registerLocalSpeech({
+  required AssistantBuildConfiguration configuration,
+  required ModelArtifactDownloader modelArtifactDownloader,
+}) {
+  final modelStore = VerifiedPiperModelStore(
+    manifest: configuration.piperManifest,
+    directoryProvider: const ApplicationSupportModelDirectoryProvider(),
+    diskCapacityGateway: MethodChannelModelDiskCapacityGateway(),
+    downloader: modelArtifactDownloader,
+    checksumVerifier: const IsolateModelChecksumVerifier(),
+    bundleExtractor: const IsolatePiperBundleExtractor(),
+    bundleVerifier: const IsolatePiperBundleVerifier(),
+  );
+  final audioPlayer = JustAudioGeneratedSpeechPlayer();
+  final piper = PiperSpeechSynthesizer(
+    modelStore: modelStore,
+    generator: const SherpaPiperSpeechGenerator(),
+    audioPlayer: audioPlayer,
+    configuration: configuration.piperRuntime,
+  );
+  final systemFallback = FlutterTtsSpeechSynthesizer(
+    preferredLanguage: CompilationConstants.systemSpeechLanguage,
+  );
+  final coordinator = FallbackSpeechSynthesizer(
+    primary: piper,
+    fallback: systemFallback,
+    shouldFallback: isPiperFallbackEligible,
+  );
+
+  appDependencies
+    ..registerSingleton<VerifiedPiperModelStore>(modelStore)
+    ..registerSingleton<PiperSpeechSynthesizer>(piper)
+    ..registerSingleton<JustAudioGeneratedSpeechPlayer>(audioPlayer)
+    ..registerSingleton<FallbackSpeechSynthesizer>(coordinator);
+  return coordinator;
 }
 
 YoloObservationAdapter _registerCameraObservation() {
