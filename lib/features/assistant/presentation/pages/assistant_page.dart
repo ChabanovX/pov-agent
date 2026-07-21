@@ -4,17 +4,16 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pov_agent/core/design_system/tokens/tokens.dart';
 import 'package:pov_agent/core/l10n/app_localizations.dart';
-import 'package:pov_agent/features/assistant/presentation/bloc/assistant_bloc.dart';
-import 'package:pov_agent/features/assistant/presentation/bloc/assistant_state.dart';
+import 'package:pov_agent/features/assistant/presentation/bloc/observer_bloc.dart';
+import 'package:pov_agent/features/assistant/presentation/bloc/observer_state.dart';
 import 'package:pov_agent/features/assistant/presentation/widgets/assistant_composer.dart';
 import 'package:pov_agent/features/assistant/presentation/widgets/assistant_conversation.dart';
-import 'package:pov_agent/features/assistant/presentation/widgets/assistant_model_status.dart';
 
-/// The manual, session-only on-device assistant tab.
+/// The continuous observer and manual, session-only on-device assistant tab.
 ///
-/// Model preparation is started by app routing on first tab selection. This
-/// page owns only editable and scroll controllers; all model and generation
-/// effects enter through [AssistantBloc] events.
+/// Process startup owns model and timer activation. This page owns only
+/// editable and scroll controllers; all effects enter through [ObserverBloc]
+/// events.
 final class AssistantPage extends StatefulWidget {
   /// Creates the assistant page.
   const AssistantPage({super.key});
@@ -49,23 +48,12 @@ final class _AssistantPageState extends State<AssistantPage> {
             constraints: BoxConstraints(
               maxWidth: AppSizes.regular.maxContentWidth,
             ),
-            child: BlocListener<AssistantBloc, AssistantState>(
+            child: BlocListener<ObserverBloc, ObserverState>(
               listenWhen: _transcriptChanged,
               listener: (_, _) => _scheduleScrollToLatest(),
-              child: BlocBuilder<AssistantBloc, AssistantState>(
+              child: BlocBuilder<ObserverBloc, ObserverState>(
                 builder: (context, state) {
-                  if (state.modelStatus != AssistantModelStatus.ready) {
-                    return AssistantModelStatusView(
-                      state: state,
-                      onRetry: () {
-                        context.read<AssistantBloc>().add(
-                          const AssistantModelRetryRequested(),
-                        );
-                      },
-                    );
-                  }
-
-                  final generating = state.generationStatus == AssistantGenerationStatus.generating;
+                  final manualGenerating = state.activeGeneration == ObserverGenerationKind.manual;
                   return Column(
                     children: [
                       Expanded(
@@ -73,23 +61,44 @@ final class _AssistantPageState extends State<AssistantPage> {
                           state: state,
                           scrollController: _scrollController,
                           onRetryAnswer: () {
-                            context.read<AssistantBloc>().add(
-                              const AssistantAnswerRetryRequested(),
+                            context.read<ObserverBloc>().add(
+                              const ObserverAnswerRetryRequested(),
+                            );
+                          },
+                          onModelRetry: () {
+                            context.read<ObserverBloc>().add(
+                              const ObserverModelRetryRequested(),
+                            );
+                          },
+                          onIntervalSelected: (interval) {
+                            context.read<ObserverBloc>().add(
+                              ObservationIntervalSelected(interval),
+                            );
+                          },
+                          onObservationStart: () {
+                            context.read<ObserverBloc>().add(
+                              const ObservationStarted(),
+                            );
+                          },
+                          onObservationStop: () {
+                            context.read<ObserverBloc>().add(
+                              const ObservationStopped(),
                             );
                           },
                         ),
                       ),
-                      AssistantComposer(
-                        controller: _promptController,
-                        generating: generating,
-                        canSubmit: state.canSubmit,
-                        onSend: _submitPrompt,
-                        onStop: () {
-                          context.read<AssistantBloc>().add(
-                            const AssistantGenerationCancelled(),
-                          );
-                        },
-                      ),
+                      if (state.modelStatus == ObserverModelStatus.ready)
+                        AssistantComposer(
+                          controller: _promptController,
+                          generating: manualGenerating,
+                          canSubmit: state.canSubmit,
+                          onSend: _submitPrompt,
+                          onStop: () {
+                            context.read<ObserverBloc>().add(
+                              const ObserverManualGenerationCancelled(),
+                            );
+                          },
+                        ),
                     ],
                   );
                 },
@@ -102,11 +111,11 @@ final class _AssistantPageState extends State<AssistantPage> {
   }
 
   void _submitPrompt() {
-    final bloc = context.read<AssistantBloc>();
+    final bloc = context.read<ObserverBloc>();
     final prompt = _promptController.text.trim();
     if (!bloc.state.canSubmit || prompt.isEmpty) return;
 
-    bloc.add(AssistantPromptSubmitted(prompt));
+    bloc.add(ObserverPromptSubmitted(prompt));
     _promptController.clear();
   }
 
@@ -124,12 +133,14 @@ final class _AssistantPageState extends State<AssistantPage> {
   }
 
   static bool _transcriptChanged(
-    AssistantState previous,
-    AssistantState current,
+    ObserverState previous,
+    ObserverState current,
   ) {
     return previous.messages.length != current.messages.length ||
-        previous.draftPrompt != current.draftPrompt ||
-        previous.draftResponse != current.draftResponse ||
-        previous.generationStatus != current.generationStatus;
+        previous.comments.length != current.comments.length ||
+        previous.manualDraftPrompt != current.manualDraftPrompt ||
+        previous.manualDraftResponse != current.manualDraftResponse ||
+        previous.automaticDraft != current.automaticDraft ||
+        previous.activeGeneration != current.activeGeneration;
   }
 }

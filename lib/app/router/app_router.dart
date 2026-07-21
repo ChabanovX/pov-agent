@@ -5,18 +5,16 @@ import 'package:pov_agent/app/di/app_di.dart';
 import 'package:pov_agent/core/constants/compilation_constants.dart';
 import 'package:pov_agent/core/design_system/tokens/tokens.dart';
 import 'package:pov_agent/core/l10n/app_localizations.dart';
-import 'package:pov_agent/features/assistant/presentation/bloc/assistant_bloc.dart';
 import 'package:pov_agent/features/assistant/presentation/pages/assistant_page.dart';
 import 'package:pov_agent/features/camera/application/ports/recorded_observation_frame_source.dart';
 import 'package:pov_agent/features/camera/data/adapters/yolo_observation_adapter.dart';
-import 'package:pov_agent/features/camera/presentation/bloc/camera_bloc.dart';
 import 'package:pov_agent/features/camera/presentation/pages/camera_page.dart';
 import 'package:pov_agent/features/camera/presentation/widgets/recorded_observation_surface.dart';
 import 'package:pov_agent/features/camera/presentation/widgets/yolo_observation_surface.dart';
 
 enum _AppTab { camera, assistant }
 
-/// The tab router that coordinates observation-surface activity.
+/// The tab router that keeps the app-owned observation surface mounted.
 final class AppRouter extends StatefulWidget {
   /// Creates the application router.
   const AppRouter({
@@ -32,18 +30,15 @@ final class AppRouter extends StatefulWidget {
   State<AppRouter> createState() => _AppRouterState();
 }
 
-final class _AppRouterState extends State<AppRouter> with WidgetsBindingObserver {
+final class _AppRouterState extends State<AppRouter> {
   late final AppRuntime _runtime;
   late WidgetBuilder _observationSurfaceBuilder;
 
   _AppTab _selectedTab = _AppTab.camera;
-  bool _appForegrounded = true;
-  bool _assistantStarted = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _runtime = appDependencies<AppRuntime>();
     _observationSurfaceBuilder = widget.observationSurfaceBuilder ?? _resolveObservationSurfaceBuilder();
   }
@@ -58,24 +53,6 @@ final class _AppRouterState extends State<AppRouter> with WidgetsBindingObserver
       return;
     }
     _observationSurfaceBuilder = widget.observationSurfaceBuilder ?? _resolveObservationSurfaceBuilder();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    _appForegrounded = state == AppLifecycleState.resumed;
-    final cameraBloc = _runtime.cameraBloc;
-    if (cameraBloc.isClosed) return;
-    cameraBloc.add(
-      CameraSurfaceActivityChanged(
-        active: _appForegrounded && _selectedTab == _AppTab.camera,
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
   }
 
   @override
@@ -96,7 +73,7 @@ final class _AppRouterState extends State<AppRouter> with WidgetsBindingObserver
                   ),
                 ),
                 BlocProvider.value(
-                  value: _runtime.assistantBloc,
+                  value: _runtime.observerBloc,
                   child: const AssistantPage(),
                 ),
               ],
@@ -129,20 +106,6 @@ final class _AppRouterState extends State<AppRouter> with WidgetsBindingObserver
     if (selectedTab == _selectedTab) return;
 
     setState(() => _selectedTab = selectedTab);
-    if (selectedTab == _AppTab.assistant && !_assistantStarted) {
-      _assistantStarted = true;
-      final assistantBloc = _runtime.assistantBloc;
-      if (!assistantBloc.isClosed) {
-        assistantBloc.add(const AssistantStarted());
-      }
-    }
-    final cameraBloc = _runtime.cameraBloc;
-    if (cameraBloc.isClosed) return;
-    cameraBloc.add(
-      CameraSurfaceActivityChanged(
-        active: _appForegrounded && selectedTab == _AppTab.camera,
-      ),
-    );
   }
 
   WidgetBuilder _resolveObservationSurfaceBuilder() {

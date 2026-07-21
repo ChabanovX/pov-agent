@@ -6,8 +6,8 @@ as context.
 
 > **Project status:** early prototype. Live and recorded camera input,
 > on-device YOLO detection, stable scene tracking, and manual conversation with
-> a local Qwen model work today. Speech recognition, automatic observation, and
-> spoken responses remain on the roadmap.
+> a local Qwen model work today. Automatic scene observation also works;
+> speech recognition and spoken responses remain on the roadmap.
 
 <p align="center">
   <img
@@ -46,11 +46,13 @@ be persisted between launches.
   repository's own llama.cpp FFI bridge and persistent inference isolate.
 - Verified model download, retry, offline cache reuse, streaming answers,
   cancellation, and removal of model reasoning from visible/session history.
+- A foreground automatic observer that samples the latest stable scene every
+  10 seconds by default, streams local Qwen comments, retains session-only
+  context, and supports 10/30/60/120/300-second cadences.
 - Unit, widget, and repository-boundary tests enforced by the checked-in
   Flutter Agentic Harness, plus explicit device integration lanes.
 
-The repository does not yet capture microphone audio, generate automatic scene
-comments, or synthesize speech.
+The repository does not yet capture microphone audio or synthesize speech.
 
 ## Target interaction
 
@@ -59,7 +61,7 @@ flowchart LR
     Camera --> YOLO["On-device YOLO<br/>working"]
     YOLO --> Scene["Stable scene model<br/>working"]
     Microphone -.-> ASR["Wake phrase and local ASR<br/>planned"]
-    Scene -.-> LLM["Automatic scene prompt<br/>planned"]
+    Scene --> LLM["Automatic scene prompt<br/>working"]
     UserText --> LLM["Local Qwen language model<br/>working"]
     ASR -.-> LLM
     LLM -.-> TTS["On-device speech<br/>planned"]
@@ -74,7 +76,7 @@ planned local agent loop.
 - [x] Live YOLO camera observation.
 - [x] Stable scene state derived from noisy detections.
 - [x] Local Qwen language model and manual text conversation.
-- [ ] Periodic scene-aware observations.
+- [x] Periodic scene-aware observations.
 - [ ] System text-to-speech, followed by local Piper speech.
 - [ ] Wake phrase and local streaming speech recognition.
 - [ ] End-to-end hands-free question and answer flow.
@@ -107,10 +109,19 @@ cp .env.example .env
 
 The first build compiles the pinned llama.cpp submodule locally through the
 Dart build hook. It does not download native sources or binaries. Both
-platforms require CMake and Ninja. iOS additionally requires Xcode; Android
-requires Java 17, the Android SDK, and NDK `28.2.13676358` below
-`ANDROID_HOME` or `ANDROID_SDK_ROOT` (an explicit `ANDROID_NDK*` path is also
-accepted).
+platforms require CMake and Ninja. iOS additionally requires Xcode with the
+selected iOS SDK and the separate Metal Toolchain component; Android requires
+Java 17, the Android SDK, and NDK `28.2.13676358` below `ANDROID_HOME` or
+`ANDROID_SDK_ROOT` (an explicit `ANDROID_NDK*` path is also accepted).
+
+Install the Metal Toolchain once before building the iOS app, then verify that
+both shader tools are discoverable:
+
+```sh
+xcodebuild -downloadComponent MetalToolchain
+xcrun --find metal
+xcrun --find metallib
+```
 
 All Qwen artifact, context, sampling, and decoding policy is compile-time
 configuration. Run the app with the checked example values (or a reviewed
@@ -120,11 +131,12 @@ copy):
 flutter run -d <device-id> --dart-define-from-file=.env
 ```
 
-Opening the Assistant tab starts preparation lazily. The default GGUF is about
-397 MB, so the first run requires network access and enough free space for the
-download plus the configured reserve. The app writes a staging file, verifies
-the exact byte length and SHA-256, and only then makes the cache loadable.
-Later launches can use the verified cache without network access.
+Foreground runtime startup prepares the observer and local model while camera
+observation begins. The default GGUF is about 397 MB, so the first run requires
+network access and enough free space for the download plus the configured
+reserve. The app writes a staging file, verifies the exact byte length and
+SHA-256, and only then makes the cache loadable. Later launches can use the
+verified cache without network access.
 
 The iOS Simulator uses CPU inference intentionally. On iOS 15 and newer, a
 physical iPhone requests Metal offload and falls back to CPU if native
@@ -220,6 +232,14 @@ the verified Application Support cache:
 tool/verify_assistant_ios.sh <simulator-id>
 ```
 
+Milestone 4 adds a Bloc-driven ten-minute acceptance lane. It keeps recorded
+YOLO active behind the Assistant tab, verifies stable-scene prompts, automatic
+streaming, repeated non-overlapping comments, and stop/cancel behavior:
+
+```sh
+tool/verify_observer_ios.sh <simulator-id>
+```
+
 This lane is skipped by the normal test suite so routine verification never
 causes an unexpected model download. Simulator inference is CPU-only; physical
 device acceptance is a separate ten-minute gate. It rejects CPU fallback,
@@ -231,6 +251,23 @@ rebuilds the in-process runtime graph from verified cache with transport disable
 
 ```sh
 tool/verify_assistant_device_ios.sh <physical-device-id>
+```
+
+The observer device lane proves a non-empty live YOLO scene reaches a streamed
+and committed Metal-backed Observer comment and cancels a subsequent active
+generation. It finishes with the same deterministic ten-minute observer
+session while still requiring Metal-backed Qwen generation. Camera control
+acceptance remains available independently in
+[`camera_hardware_test.dart`](integration_test/camera_hardware_test.dart) so
+this lane does not preload and unload the eager Qwen runtime in a redundant
+app invocation immediately before the live Observer check. The device lane
+uses Flutter Profile mode so its ten-second latency contract measures
+production-like execution rather than Debug runtime overhead. The lane also
+disables the Dart sampling profiler so the acceptance load is the app's own
+camera and inference work:
+
+```sh
+tool/verify_observer_device_ios.sh <physical-device-id>
 ```
 
 Capture an Instruments Activity Monitor or Time Profiler trace alongside that

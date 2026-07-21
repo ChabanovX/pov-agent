@@ -7,7 +7,7 @@ import 'support/fake_camera_controller.dart';
 import 'support/test_app_dependencies.dart';
 
 void main() {
-  testWidgets('suspends the camera while the Assistant tab is visible', (
+  testWidgets('keeps camera observation active behind the Assistant tab', (
     tester,
   ) async {
     final controller = FakeCameraController();
@@ -35,7 +35,7 @@ void main() {
 
       expect(find.byKey(testObservationSurfaceKey), findsNothing);
       expect(find.byKey(assistantPromptFieldKey), findsOneWidget);
-      expect(controller.disableCalls, 1);
+      expect(controller.disableCalls, 0);
       expect(
         tester.widget<CupertinoTabBar>(find.byType(CupertinoTabBar)).currentIndex,
         1,
@@ -45,7 +45,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(testObservationSurfaceKey), findsOneWidget);
-      expect(controller.enableCalls, hasLength(2));
+      expect(controller.enableCalls, hasLength(1));
 
       tester.binding.handleAppLifecycleStateChanged(
         AppLifecycleState.inactive,
@@ -57,7 +57,7 @@ void main() {
         AppLifecycleState.paused,
       );
       await tester.pumpAndSettle();
-      expect(controller.disableCalls, 2);
+      expect(controller.disableCalls, 1);
 
       tester.binding.handleAppLifecycleStateChanged(
         AppLifecycleState.hidden,
@@ -69,7 +69,7 @@ void main() {
         AppLifecycleState.resumed,
       );
       await tester.pumpAndSettle();
-      expect(controller.enableCalls, hasLength(3));
+      expect(controller.enableCalls, hasLength(2));
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

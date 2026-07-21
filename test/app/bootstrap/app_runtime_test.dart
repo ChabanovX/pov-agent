@@ -3,15 +3,17 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pov_agent/app/bootstrap/app_runtime.dart';
-import 'package:pov_agent/features/assistant/presentation/bloc/assistant_bloc.dart';
-import 'package:pov_agent/features/assistant/presentation/bloc/assistant_state.dart';
+import 'package:pov_agent/features/assistant/presentation/bloc/observer_bloc.dart';
+import 'package:pov_agent/features/assistant/presentation/bloc/observer_state.dart';
 import 'package:pov_agent/features/camera/application/models/observation_event.dart';
 import 'package:pov_agent/features/camera/application/services/observation_scene_session.dart';
 import 'package:pov_agent/features/camera/domain/entities/detection.dart';
 import 'package:pov_agent/features/camera/domain/entities/normalized_box.dart';
 import 'package:pov_agent/features/camera/domain/services/scene_stabilizer.dart';
 import 'package:pov_agent/features/camera/presentation/bloc/camera_bloc.dart';
+import 'package:pov_agent/shared/domain/app_result.dart';
 
+import '../../support/fake_assistant_runtime.dart';
 import '../../support/fake_camera_controller.dart';
 import '../../support/test_assistant_resources.dart';
 
@@ -30,7 +32,7 @@ void main() {
     final runtime = AppRuntime(
       cameraBloc: CameraBloc(controller),
       sceneSession: sceneSession,
-      assistantBloc: assistant.assistantBloc,
+      observerBloc: assistant.observerBloc,
       modelStore: assistant.modelStore,
       commentGenerator: assistant.commentGenerator,
     );
@@ -92,7 +94,7 @@ void main() {
     final runtime = AppRuntime(
       cameraBloc: CameraBloc(controller),
       sceneSession: sceneSession,
-      assistantBloc: assistant.assistantBloc,
+      observerBloc: assistant.observerBloc,
       modelStore: assistant.modelStore,
       commentGenerator: assistant.commentGenerator,
     );
@@ -123,7 +125,7 @@ void main() {
     final runtime = AppRuntime(
       cameraBloc: CameraBloc(controller),
       sceneSession: sceneSession,
-      assistantBloc: assistant.assistantBloc,
+      observerBloc: assistant.observerBloc,
       modelStore: assistant.modelStore,
       commentGenerator: assistant.commentGenerator,
     );
@@ -161,7 +163,7 @@ void main() {
     final runtime = AppRuntime(
       cameraBloc: CameraBloc(controller),
       sceneSession: sceneSession,
-      assistantBloc: assistant.assistantBloc,
+      observerBloc: assistant.observerBloc,
       modelStore: assistant.modelStore,
       commentGenerator: assistant.commentGenerator,
     );
@@ -180,7 +182,7 @@ void main() {
   });
 
   testWidgets(
-    'suspends and reloads only a lazily started assistant session',
+    'suspends and reloads the eager observer session',
     (tester) async {
       final controller = FakeCameraController();
       final sceneSession = ObservationSceneSession(
@@ -191,7 +193,7 @@ void main() {
       final runtime = AppRuntime(
         cameraBloc: CameraBloc(controller),
         sceneSession: sceneSession,
-        assistantBloc: assistant.assistantBloc,
+        observerBloc: assistant.observerBloc,
         modelStore: assistant.modelStore,
         commentGenerator: assistant.commentGenerator,
       );
@@ -202,7 +204,8 @@ void main() {
         ..didChangeAppLifecycleState(AppLifecycleState.hidden)
         ..didChangeAppLifecycleState(AppLifecycleState.paused);
       await tester.pumpAndSettle();
-      expect(assistant.modelStore.suspendCalls, 0);
+      expect(assistant.modelStore.suspendCalls, 1);
+      expect(controller.disableCalls, 1);
 
       runtime
         ..didChangeAppLifecycleState(AppLifecycleState.hidden)
@@ -210,23 +213,23 @@ void main() {
         ..didChangeAppLifecycleState(AppLifecycleState.resumed);
       await tester.pumpAndSettle();
 
-      assistant.assistantBloc.add(const AssistantStarted());
-      await tester.pumpAndSettle();
-      expect(assistant.modelStore.prepareCalls, 1);
+      expect(assistant.modelStore.prepareCalls, 2);
       expect(
-        assistant.assistantBloc.state.modelStatus,
-        AssistantModelStatus.ready,
+        assistant.observerBloc.state.modelStatus,
+        ObserverModelStatus.ready,
       );
+      expect(controller.enableCalls, hasLength(2));
 
       runtime
         ..didChangeAppLifecycleState(AppLifecycleState.inactive)
         ..didChangeAppLifecycleState(AppLifecycleState.hidden)
         ..didChangeAppLifecycleState(AppLifecycleState.paused);
       await tester.pumpAndSettle();
-      expect(assistant.modelStore.suspendCalls, 1);
+      expect(assistant.modelStore.suspendCalls, 2);
+      expect(controller.disableCalls, 2);
       expect(
-        assistant.assistantBloc.state.modelStatus,
-        AssistantModelStatus.suspended,
+        assistant.observerBloc.state.modelStatus,
+        ObserverModelStatus.suspended,
       );
 
       runtime
@@ -234,11 +237,68 @@ void main() {
         ..didChangeAppLifecycleState(AppLifecycleState.inactive)
         ..didChangeAppLifecycleState(AppLifecycleState.resumed);
       await tester.pumpAndSettle();
-      expect(assistant.modelStore.prepareCalls, 2);
+      expect(assistant.modelStore.prepareCalls, 3);
       expect(
-        assistant.assistantBloc.state.modelStatus,
-        AssistantModelStatus.ready,
+        assistant.observerBloc.state.modelStatus,
+        ObserverModelStatus.ready,
       );
+      expect(controller.enableCalls, hasLength(3));
+
+      await tester.runAsync(runtime.close);
+    },
+  );
+
+  testWidgets(
+    'quiesces generation before deactivating the camera',
+    (tester) async {
+      final releaseCancellation = Completer<void>();
+      final cameraDeactivationStarted = Completer<void>();
+      final handle = FakeGenerationHandle()..onCancel = () => releaseCancellation.future;
+      final controller = FakeCameraController(
+        onDisable: () async {
+          cameraDeactivationStarted.complete();
+        },
+      );
+      final sceneSession = ObservationSceneSession(
+        controller: controller,
+        stabilizer: SceneStabilizer(),
+      );
+      final assistant = TestAssistantResources();
+      assistant.commentGenerator.onGenerate = (_) async => AppSuccess(handle);
+      final runtime = AppRuntime(
+        cameraBloc: CameraBloc(controller),
+        sceneSession: sceneSession,
+        observerBloc: assistant.observerBloc,
+        modelStore: assistant.modelStore,
+        commentGenerator: assistant.commentGenerator,
+      );
+      await runtime.start();
+      await tester.pumpAndSettle();
+      assistant.observerBloc.add(
+        const ObserverPromptSubmitted('Describe the scene'),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        assistant.observerBloc.state.activeGeneration,
+        ObserverGenerationKind.manual,
+      );
+
+      runtime.didChangeAppLifecycleState(AppLifecycleState.inactive);
+      await tester.pump();
+
+      expect(handle.cancelCalls, 1);
+      expect(controller.disableCalls, 0);
+      await tester.runAsync(() async {
+        releaseCancellation.complete();
+        await handle.cancel();
+        await Future<void>.delayed(Duration.zero);
+      });
+      await tester.pumpAndSettle();
+      expect(assistant.observerBloc.state.foregroundActive, isFalse);
+      expect(assistant.observerBloc.state.activeGeneration, isNull);
+      expect(cameraDeactivationStarted.isCompleted, isTrue);
+      expect(controller.disableCalls, 1);
+      expect(assistant.modelStore.suspendCalls, 1);
 
       await tester.runAsync(runtime.close);
     },
@@ -263,12 +323,12 @@ void main() {
       final runtime = AppRuntime(
         cameraBloc: CameraBloc(controller),
         sceneSession: sceneSession,
-        assistantBloc: assistant.assistantBloc,
+        observerBloc: assistant.observerBloc,
         modelStore: assistant.modelStore,
         commentGenerator: assistant.commentGenerator,
       );
       await runtime.start();
-      assistant.assistantBloc.add(const AssistantStarted());
+      assistant.observerBloc.add(const ObserverStarted());
       await tester.pumpAndSettle();
 
       runtime.didChangeAppLifecycleState(AppLifecycleState.inactive);
@@ -277,8 +337,8 @@ void main() {
 
       expect(assistant.modelStore.suspendCalls, 0);
       expect(
-        assistant.assistantBloc.state.modelStatus,
-        AssistantModelStatus.ready,
+        assistant.observerBloc.state.modelStatus,
+        ObserverModelStatus.ready,
       );
 
       releaseDisable.complete();
@@ -286,8 +346,8 @@ void main() {
 
       expect(assistant.modelStore.suspendCalls, 1);
       expect(
-        assistant.assistantBloc.state.modelStatus,
-        AssistantModelStatus.suspended,
+        assistant.observerBloc.state.modelStatus,
+        ObserverModelStatus.suspended,
       );
 
       await tester.runAsync(runtime.close);
@@ -313,12 +373,12 @@ void main() {
       final runtime = AppRuntime(
         cameraBloc: CameraBloc(controller),
         sceneSession: sceneSession,
-        assistantBloc: assistant.assistantBloc,
+        observerBloc: assistant.observerBloc,
         modelStore: assistant.modelStore,
         commentGenerator: assistant.commentGenerator,
       );
       await runtime.start();
-      assistant.assistantBloc.add(const AssistantStarted());
+      assistant.observerBloc.add(const ObserverStarted());
       await tester.pumpAndSettle();
 
       runtime.didChangeAppLifecycleState(AppLifecycleState.inactive);
@@ -330,8 +390,8 @@ void main() {
 
       expect(assistant.modelStore.suspendCalls, 0);
       expect(
-        assistant.assistantBloc.state.modelStatus,
-        AssistantModelStatus.ready,
+        assistant.observerBloc.state.modelStatus,
+        ObserverModelStatus.ready,
       );
 
       await tester.runAsync(runtime.close);
@@ -357,7 +417,7 @@ void main() {
       final runtime = AppRuntime(
         cameraBloc: CameraBloc(controller),
         sceneSession: sceneSession,
-        assistantBloc: assistant.assistantBloc,
+        observerBloc: assistant.observerBloc,
         modelStore: assistant.modelStore,
         commentGenerator: assistant.commentGenerator,
       );
@@ -398,7 +458,7 @@ void main() {
       final runtime = AppRuntime(
         cameraBloc: CameraBloc(controller),
         sceneSession: sceneSession,
-        assistantBloc: assistant.assistantBloc,
+        observerBloc: assistant.observerBloc,
         modelStore: assistant.modelStore,
         commentGenerator: assistant.commentGenerator,
       );
@@ -432,7 +492,7 @@ void main() {
     final runtime = AppRuntime(
       cameraBloc: CameraBloc(controller),
       sceneSession: sceneSession,
-      assistantBloc: assistant.assistantBloc,
+      observerBloc: assistant.observerBloc,
       modelStore: assistant.modelStore,
       commentGenerator: assistant.commentGenerator,
     );

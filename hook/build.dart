@@ -8,7 +8,9 @@ Future<void> main(List<String> arguments) async {
     if (!input.config.buildCodeAssets) return;
 
     final code = input.config.code;
-    if (code.targetOS != OS.iOS && code.targetOS != OS.macOS && code.targetOS != OS.android) {
+    if (code.targetOS != OS.iOS &&
+        code.targetOS != OS.macOS &&
+        code.targetOS != OS.android) {
       throw UnsupportedError(
         'The POV llama.cpp runtime supports iOS, macOS, and Android only.',
       );
@@ -140,10 +142,12 @@ List<String> _backendArguments(OS targetOS) {
       '-DGGML_METAL_EMBED_LIBRARY=OFF',
     ];
   }
-  return const [
+  // Xcode compiles the iOS shader into Runner.app/default.metallib. Embedded
+  // source compilation can fail intermittently on-device.
+  return [
     '-DGGML_ACCELERATE=ON',
     '-DGGML_METAL=ON',
-    '-DGGML_METAL_EMBED_LIBRARY=ON',
+    '-DGGML_METAL_EMBED_LIBRARY=${targetOS == OS.iOS ? 'OFF' : 'ON'}',
     '-DGGML_METAL_NDEBUG=ON',
   ];
 }

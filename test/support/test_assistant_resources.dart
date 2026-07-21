@@ -7,10 +7,13 @@ import 'package:pov_agent/features/assistant/application/models/verified_model_a
 import 'package:pov_agent/features/assistant/application/ports/comment_generator.dart';
 import 'package:pov_agent/features/assistant/application/ports/generation_handle.dart';
 import 'package:pov_agent/features/assistant/application/ports/model_store.dart';
+import 'package:pov_agent/features/assistant/application/services/observer_request_builder.dart';
 import 'package:pov_agent/features/assistant/application/services/qwen_prompt_builder.dart';
-import 'package:pov_agent/features/assistant/presentation/bloc/assistant_bloc.dart';
+import 'package:pov_agent/features/assistant/presentation/bloc/observer_bloc.dart';
 import 'package:pov_agent/shared/domain/app_failure.dart';
 import 'package:pov_agent/shared/domain/app_result.dart';
+import 'package:pov_agent/shared/domain/scene_snapshot.dart';
+import 'package:pov_agent/shared/domain/scene_source.dart';
 
 const _testManualOptions = GenerationOptions(
   maxTokens: 32,
@@ -30,14 +33,19 @@ const _testShortCommentOptions = GenerationOptions(
 /// Assistant owners used by app-shell and lifecycle tests.
 final class TestAssistantResources {
   /// Creates a coherent test assistant dependency graph.
-  TestAssistantResources() : modelStore = TestModelStore(), commentGenerator = TestCommentGenerator() {
-    assistantBloc = AssistantBloc(
+  TestAssistantResources({SceneSource? sceneSource})
+    : modelStore = TestModelStore(),
+      commentGenerator = TestCommentGenerator() {
+    observerBloc = ObserverBloc(
+      sceneSource: sceneSource ?? const _EmptySceneSource(),
       modelStore: modelStore,
       commentGenerator: commentGenerator,
-      promptBuilder: QwenPromptBuilder(
-        systemPrompt: 'Test system prompt.',
-        manualOptions: _testManualOptions,
-        shortCommentOptions: _testShortCommentOptions,
+      requestBuilder: ObserverRequestBuilder(
+        qwenPromptBuilder: QwenPromptBuilder(
+          systemPrompt: 'Test system prompt.',
+          manualOptions: _testManualOptions,
+          shortCommentOptions: _testShortCommentOptions,
+        ),
       ),
     );
   }
@@ -49,7 +57,17 @@ final class TestAssistantResources {
   final TestCommentGenerator commentGenerator;
 
   /// Process-style presentation owner built from the test ports.
-  late final AssistantBloc assistantBloc;
+  late final ObserverBloc observerBloc;
+}
+
+final class _EmptySceneSource implements SceneSource {
+  const _EmptySceneSource();
+
+  @override
+  SceneSnapshot get current => const SceneSnapshot.empty();
+
+  @override
+  Stream<SceneSnapshot> get changes => const Stream.empty();
 }
 
 /// In-memory model store that becomes ready immediately.
@@ -105,6 +123,9 @@ final class TestModelStore implements ModelStore {
 
 /// Generation boundary that records lifecycle ownership in app tests.
 final class TestCommentGenerator implements CommentGenerator {
+  /// Optional generation behavior for orchestration tests.
+  Future<AppResult<GenerationHandle>> Function(CommentGenerationRequest request)? onGenerate;
+
   /// Number of native unload requests.
   int unloadCalls = 0;
 
@@ -125,6 +146,8 @@ final class TestCommentGenerator implements CommentGenerator {
   Future<AppResult<GenerationHandle>> generate(
     CommentGenerationRequest request,
   ) async {
+    final callback = onGenerate;
+    if (callback != null) return callback(request);
     return const AppError(
       UnexpectedFailure(
         code: 'test_generation_not_configured',

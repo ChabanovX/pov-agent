@@ -4,7 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:pov_agent/core/logging/app_logger.dart';
 import 'package:pov_agent/features/assistant/application/ports/comment_generator.dart';
 import 'package:pov_agent/features/assistant/application/ports/model_store.dart';
-import 'package:pov_agent/features/assistant/presentation/bloc/assistant_bloc.dart';
+import 'package:pov_agent/features/assistant/presentation/bloc/observer_bloc.dart';
 import 'package:pov_agent/features/camera/application/services/observation_scene_session.dart';
 import 'package:pov_agent/features/camera/presentation/bloc/camera_bloc.dart';
 import 'package:pov_agent/features/camera/presentation/bloc/camera_state.dart';
@@ -20,7 +20,7 @@ final class AppRuntime with WidgetsBindingObserver {
   AppRuntime({
     required this.cameraBloc,
     required this.sceneSession,
-    required this.assistantBloc,
+    required this.observerBloc,
     required this.modelStore,
     required this.commentGenerator,
   });
@@ -31,8 +31,8 @@ final class AppRuntime with WidgetsBindingObserver {
   /// The process-owned stable-scene publisher.
   final ObservationSceneSession sceneSession;
 
-  /// The process-owned manual assistant state machine.
-  final AssistantBloc assistantBloc;
+  /// The process-owned automatic observer and manual assistant state machine.
+  final ObserverBloc observerBloc;
 
   /// The process-owned verified model lifecycle.
   final ModelStore modelStore;
@@ -87,10 +87,17 @@ final class AppRuntime with WidgetsBindingObserver {
       ]);
       if (_closeRequested.isCompleted) return;
 
-      final settled = cameraBloc.stream.firstWhere(_isCameraSettled);
+      final observerStarted = observerBloc.state.started
+          ? null
+          : observerBloc.stream.firstWhere((state) => state.started);
+      final cameraSettled = cameraBloc.stream.firstWhere(_isCameraSettled);
+      observerBloc.add(const ObserverStarted());
       cameraBloc.add(const CameraStarted());
       await Future.any<void>([
-        settled.then<void>((_) {}),
+        Future.wait<void>([
+          cameraSettled.then<void>((_) {}),
+          ?observerStarted?.then<void>((_) {}),
+        ]),
         _closeRequested.future,
       ]);
       if (_closeRequested.isCompleted) return;
@@ -116,14 +123,19 @@ final class AppRuntime with WidgetsBindingObserver {
         if (_appForegrounded) return;
         _appForegrounded = true;
         _lifecycleEpoch += 1;
-        if (!assistantBloc.isClosed) {
-          assistantBloc.add(const AssistantResumed());
+        if (!observerBloc.isClosed) {
+          observerBloc.add(const ObserverResumed());
+        }
+        if (!cameraBloc.isClosed) {
+          cameraBloc.add(
+            const CameraSurfaceActivityChanged(active: true),
+          );
         }
       case AppLifecycleState.inactive || AppLifecycleState.hidden || AppLifecycleState.paused:
         if (!_appForegrounded) return;
         _appForegrounded = false;
         final epoch = ++_lifecycleEpoch;
-        unawaited(_suspendAssistantAfterCamera(epoch));
+        unawaited(_quiesceObserverThenSuspendAfterCamera(epoch));
       case AppLifecycleState.detached:
         _appForegrounded = false;
         _lifecycleEpoch += 1;
@@ -131,8 +143,17 @@ final class AppRuntime with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _suspendAssistantAfterCamera(int epoch) async {
+  Future<void> _quiesceObserverThenSuspendAfterCamera(int epoch) async {
     try {
+      if (!observerBloc.isClosed && observerBloc.state.foregroundActive) {
+        final observerQuiesced = observerBloc.stream.firstWhere(
+          (state) => !state.foregroundActive && !state.isGenerating,
+        );
+        observerBloc.add(const ObserverForegroundDeactivated());
+        await observerQuiesced;
+      }
+
+      if (epoch != _lifecycleEpoch || _appForegrounded) return;
       if (!cameraBloc.isClosed) {
         final cameraSettled = _isCameraInactive(cameraBloc.state)
             ? null
@@ -147,19 +168,19 @@ final class AppRuntime with WidgetsBindingObserver {
           _appForegrounded ||
           _phase == _AppRuntimePhase.closing ||
           _phase == _AppRuntimePhase.closed ||
-          assistantBloc.isClosed) {
+          observerBloc.isClosed) {
         return;
       }
-      // Both runtimes can submit native accelerator work. Let the camera
-      // controller settle before freeing llama.cpp so background teardown
-      // never races a final camera inference command buffer.
-      assistantBloc.add(const AssistantSuspended());
+      // Both runtimes can submit native accelerator work. Ticks and generation
+      // are already quiescent; let the camera controller settle before freeing
+      // llama.cpp so teardown cannot race its final inference submission.
+      observerBloc.add(const ObserverSuspended());
     } on Object catch (error, stackTrace) {
       if (_phase == _AppRuntimePhase.closing || _phase == _AppRuntimePhase.closed) {
         return;
       }
       _logger.e(
-        'Failed to settle camera resources before assistant suspension.',
+        'Failed to quiesce observer and camera resources before suspension.',
         error: error,
         stackTrace: stackTrace,
       );
@@ -217,14 +238,15 @@ final class AppRuntime with WidgetsBindingObserver {
         firstStackTrace ??= stackTrace;
       } finally {
         _bindingObserverRegistered = false;
-        // Stop both camera-side owners before llama.cpp teardown. They may close
-        // concurrently with each other, but assistant resources start only once
-        // neither owner can submit or observe another camera inference result.
+        // Stop the timer and generation owner before camera shutdown so it can
+        // no longer submit work from a late tick. Camera-side owners may then
+        // close concurrently before app-owned model ports are destroyed.
+        await closeOwner(observerBloc.close);
         await Future.wait<void>([
           closeOwner(sceneSession.close),
           closeOwner(cameraBloc.close),
         ]);
-        await closeOwner(_closeAssistantResources);
+        await closeOwner(_closeModelResources);
       }
 
       if (firstError case final error?) {
@@ -235,7 +257,7 @@ final class AppRuntime with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _closeAssistantResources() async {
+  Future<void> _closeModelResources() async {
     Object? firstError;
     StackTrace? firstStackTrace;
 
@@ -248,9 +270,8 @@ final class AppRuntime with WidgetsBindingObserver {
       }
     }
 
-    // The Bloc stops consuming first, then the store stops preparation and
-    // unloads, and finally the generator destroys its isolate/native handles.
-    await closeResource(assistantBloc.close);
+    // The already-quiescent Bloc no longer consumes these ports. The store
+    // stops preparation and unloads before the generator destroys native state.
     await closeResource(modelStore.close);
     await closeResource(commentGenerator.close);
 

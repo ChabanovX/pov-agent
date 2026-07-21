@@ -3,7 +3,10 @@ import 'package:pov_agent/core/constants/ui_constants.dart';
 import 'package:pov_agent/core/design_system/tokens/tokens.dart';
 import 'package:pov_agent/core/l10n/app_localizations.dart';
 import 'package:pov_agent/features/assistant/domain/entities/conversation_message.dart';
-import 'package:pov_agent/features/assistant/presentation/bloc/assistant_state.dart';
+import 'package:pov_agent/features/assistant/domain/entities/observer_interval.dart';
+import 'package:pov_agent/features/assistant/presentation/bloc/observer_state.dart';
+import 'package:pov_agent/features/assistant/presentation/widgets/assistant_model_status.dart';
+import 'package:pov_agent/features/assistant/presentation/widgets/observer_session_panel.dart';
 
 /// Renders committed dialogue plus the active, uncommitted generation draft.
 final class AssistantConversation extends StatelessWidget {
@@ -12,11 +15,15 @@ final class AssistantConversation extends StatelessWidget {
     required this.state,
     required this.scrollController,
     required this.onRetryAnswer,
+    required this.onModelRetry,
+    required this.onIntervalSelected,
+    required this.onObservationStart,
+    required this.onObservationStop,
     super.key,
   });
 
   /// The committed messages and optional generation draft to render.
-  final AssistantState state;
+  final ObserverState state;
 
   /// Controls transcript scrolling and is owned by the page.
   final ScrollController scrollController;
@@ -24,29 +31,46 @@ final class AssistantConversation extends StatelessWidget {
   /// Retries the failed uncommitted turn.
   final VoidCallback onRetryAnswer;
 
+  /// Retries a recoverable model preparation failure.
+  final VoidCallback onModelRetry;
+
+  /// Replaces the session-only automatic cadence.
+  final ValueChanged<ObserverInterval> onIntervalSelected;
+
+  /// Enables periodic automatic comments.
+  final VoidCallback onObservationStart;
+
+  /// Disables periodic comments and cancels automatic generation.
+  final VoidCallback onObservationStop;
+
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context);
-    if (state.messages.isEmpty && state.draftPrompt.isEmpty) {
-      return const _AssistantEmptyState();
-    }
-
     final children = <Widget>[
+      ObserverSessionPanel(
+        state: state,
+        onIntervalSelected: onIntervalSelected,
+        onStart: onObservationStart,
+        onStop: onObservationStop,
+      ),
+      if (state.modelStatus != ObserverModelStatus.ready) AssistantModelStatusView(state: state, onRetry: onModelRetry),
+      if (state.modelStatus == ObserverModelStatus.ready && state.messages.isEmpty && state.manualDraftPrompt.isEmpty)
+        const _AssistantEmptyState(),
       for (final message in state.messages)
         _MessageBubble(
           role: message.role,
           content: message.content,
         ),
-      if (state.draftPrompt.isNotEmpty)
+      if (state.manualDraftPrompt.isNotEmpty)
         _MessageBubble(
           role: ConversationRole.user,
-          content: state.draftPrompt,
+          content: state.manualDraftPrompt,
         ),
-      if (state.draftResponse.isNotEmpty || state.generationStatus == AssistantGenerationStatus.generating)
+      if (state.manualDraftResponse.isNotEmpty || state.activeGeneration == ObserverGenerationKind.manual)
         _DraftResponseBubble(
-          content: state.draftResponse,
+          content: state.manualDraftResponse,
         ),
-      if (state.generationStatus == AssistantGenerationStatus.failure)
+      if (state.manualFailure != null)
         _GenerationFailure(
           onRetry: onRetryAnswer,
         ),
@@ -55,12 +79,15 @@ final class AssistantConversation extends StatelessWidget {
     return Semantics(
       container: true,
       label: localizations.assistantConversationLabel,
-      child: ListView(
+      child: SingleChildScrollView(
         key: assistantConversationKey,
         controller: scrollController,
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: AppSpacing.regular.page,
-        children: children,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: children,
+        ),
       ),
     );
   }
@@ -77,35 +104,33 @@ final class _AssistantEmptyState extends StatelessWidget {
     const typography = AppTypography.regular;
     final localizations = AppLocalizations.of(context);
 
-    return Center(
-      child: SingleChildScrollView(
-        padding: spacing.page,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              CupertinoIcons.sparkles,
-              color: colors.primary,
-              size: sizes.heroIcon,
+    return Padding(
+      padding: spacing.page,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            CupertinoIcons.sparkles,
+            color: colors.primary,
+            size: sizes.heroIcon,
+          ),
+          Padding(
+            padding: spacing.topMd,
+            child: Text(
+              localizations.assistantReadyTitle,
+              style: typography.title.copyWith(color: colors.onSurface),
+              textAlign: TextAlign.center,
             ),
-            Padding(
-              padding: spacing.topMd,
-              child: Text(
-                localizations.assistantReadyTitle,
-                style: typography.title.copyWith(color: colors.onSurface),
-                textAlign: TextAlign.center,
-              ),
+          ),
+          Padding(
+            padding: spacing.topMd,
+            child: Text(
+              localizations.assistantReadyMessage,
+              style: typography.body.copyWith(color: colors.muted),
+              textAlign: TextAlign.center,
             ),
-            Padding(
-              padding: spacing.topMd,
-              child: Text(
-                localizations.assistantReadyMessage,
-                style: typography.body.copyWith(color: colors.muted),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

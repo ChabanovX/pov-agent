@@ -20,10 +20,16 @@ const _eventGenerationError = 'generationError';
 /// Native model-load result returned by [LlamaInferenceWorker].
 final class LlamaWorkerLoadResult {
   /// Creates a load result containing the selected execution backend.
-  const LlamaWorkerLoadResult({required this.usesGpu});
+  const LlamaWorkerLoadResult({
+    required this.usesGpu,
+    this.backendDiagnostic,
+  });
 
   /// Whether llama.cpp successfully offloaded the model to an accelerator.
   final bool usesGpu;
+
+  /// Native explanation when the requested backend changed during loading.
+  final String? backendDiagnostic;
 }
 
 /// Coordinates terminal worker cleanup without losing retryable native state.
@@ -215,7 +221,16 @@ final class NativeLlamaInferenceWorker implements LlamaInferenceWorker {
       configuration.gpuLayers,
     ]);
     await Future.wait(activeGenerations);
-    return LlamaWorkerLoadResult(usesGpu: response == true);
+    return switch (response) {
+      [final bool usesGpu, final String? backendDiagnostic] => LlamaWorkerLoadResult(
+        usesGpu: usesGpu,
+        backendDiagnostic: backendDiagnostic,
+      ),
+      _ => throw const LlamaWorkerException(
+        status: -7,
+        message: 'The native worker returned an invalid model-load result.',
+      ),
+    };
   }
 
   @override
@@ -566,7 +581,10 @@ final class _LlamaWorkerHost {
       }
       final runtime = LlamaNativeRuntime.load(modelPath, configuration);
       _runtime = runtime;
-      _respond(requestId, value: runtime.usesGpu);
+      _respond(
+        requestId,
+        value: [runtime.usesGpu, runtime.backendDiagnostic],
+      );
     } on Object catch (error) {
       _respondError(requestId, error);
     }

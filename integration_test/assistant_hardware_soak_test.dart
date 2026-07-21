@@ -15,8 +15,8 @@ import 'package:pov_agent/features/assistant/application/services/first_complete
 import 'package:pov_agent/features/assistant/application/services/qwen_prompt_builder.dart';
 import 'package:pov_agent/features/assistant/data/adapters/llama_comment_generator.dart';
 import 'package:pov_agent/features/assistant/data/datasources/model_artifact_downloader.dart';
-import 'package:pov_agent/features/assistant/presentation/bloc/assistant_bloc.dart';
-import 'package:pov_agent/features/assistant/presentation/bloc/assistant_state.dart';
+import 'package:pov_agent/features/assistant/presentation/bloc/observer_bloc.dart';
+import 'package:pov_agent/features/assistant/presentation/bloc/observer_state.dart';
 import 'package:pov_agent/features/camera/presentation/bloc/camera_state.dart';
 import 'package:pov_agent/shared/domain/app_result.dart';
 
@@ -97,13 +97,17 @@ void main() {
 
         tester.printToConsole('IPHONE_ACCEPTANCE stage=model_prepare');
         qwenPreparationActive = true;
-        runtime.assistantBloc.add(const AssistantStarted());
+        runtime.observerBloc.add(const ObserverStarted());
         await tester.pump();
         await _expectModelReady(
-          runtime.assistantBloc,
+          runtime.observerBloc,
           timeout: _modelPreparationTimeout,
           context: 'initial preparation',
         );
+        // This legacy lane benchmarks the generator port directly. Disable the
+        // eager observer first so its timer cannot contend for the same native
+        // single-flight slot and invalidate the latency measurements.
+        await _stopAutomaticObservation(runtime.observerBloc);
         qwenPreparationActive = false;
         expect(
           yoloFramesDuringQwenPreparation,
@@ -239,6 +243,11 @@ void main() {
           reason: 'Recorded YOLO must continue publishing while Qwen decodes.',
         );
         expect(
+          generator.generationBusyRejections,
+          0,
+          reason: 'The direct soak and observer timer must never overlap.',
+        );
+        expect(
           retainedGrowth,
           lessThanOrEqualTo(_maxRetainedGrowthBytes),
           reason: 'Repeated generations must not retain unbounded memory.',
@@ -267,8 +276,8 @@ void main() {
         // frame. Await the lifecycle-owned streams directly; pumping here can
         // deadlock after suspension has already completed.
         await _expectModelStatus(
-          runtime.assistantBloc,
-          AssistantModelStatus.suspended,
+          runtime.observerBloc,
+          ObserverModelStatus.suspended,
           timeout: _stateTransitionTimeout,
           context: 'suspend',
         );
@@ -295,7 +304,7 @@ void main() {
         _sendApplicationToForeground(tester.binding);
         await tester.pump();
         await _expectModelReady(
-          runtime.assistantBloc,
+          runtime.observerBloc,
           timeout: _modelReloadTimeout,
           context: 'foreground reload',
         );
@@ -350,13 +359,14 @@ void main() {
         await runtime.start().timeout(_runtimeStartTimeout);
         await tester.pumpWidget(const PovAgentApp());
         await _pumpUntilRecordedYoloIsVisible(tester);
-        runtime.assistantBloc.add(const AssistantStarted());
+        runtime.observerBloc.add(const ObserverStarted());
         await tester.pump();
         await _expectModelReady(
-          runtime.assistantBloc,
+          runtime.observerBloc,
           timeout: _modelReloadTimeout,
           context: 'offline process-graph restart',
         );
+        await _stopAutomaticObservation(runtime.observerBloc);
         final restartedGenerator = _expectGpuBackedGenerator(
           runtime.commentGenerator,
         );
@@ -369,6 +379,7 @@ void main() {
               'restart from the verified model cache.',
         );
         _expectValidShortComment(restartedComment);
+        expect(restartedGenerator.generationBusyRejections, 0);
         expect(transport.downloadCalls, downloadCallsBeforeRestart);
         tester.printToConsole(
           'IPHONE_ACCEPTANCE stage=complete offline_restart_ms='
@@ -454,17 +465,17 @@ LlamaCommentGenerator _expectGpuBackedGenerator(CommentGenerator generator) {
 }
 
 Future<void> _expectModelReady(
-  AssistantBloc bloc, {
+  ObserverBloc bloc, {
   required Duration timeout,
   required String context,
 }) async {
-  final state = await _waitForAssistantState(
+  final state = await _waitForObserverState(
     bloc,
     (candidate) =>
-        candidate.modelStatus == AssistantModelStatus.ready || candidate.modelStatus == AssistantModelStatus.failure,
+        candidate.modelStatus == ObserverModelStatus.ready || candidate.modelStatus == ObserverModelStatus.failure,
     timeout: timeout,
   );
-  if (state.modelStatus == AssistantModelStatus.failure) {
+  if (state.modelStatus == ObserverModelStatus.failure) {
     fail(
       'Model $context failed: ${state.modelFailure?.code ?? 'unknown'}; '
       'cause=${state.modelFailure?.cause ?? 'unavailable'}.',
@@ -473,17 +484,27 @@ Future<void> _expectModelReady(
 }
 
 Future<void> _expectModelStatus(
-  AssistantBloc bloc,
-  AssistantModelStatus status, {
+  ObserverBloc bloc,
+  ObserverModelStatus status, {
   required Duration timeout,
   required String context,
 }) async {
-  final state = await _waitForAssistantState(
+  final state = await _waitForObserverState(
     bloc,
     (candidate) => candidate.modelStatus == status,
     timeout: timeout,
   );
   expect(state.modelStatus, status, reason: 'Unexpected $context state.');
+}
+
+Future<void> _stopAutomaticObservation(ObserverBloc bloc) async {
+  bloc.add(const ObservationStopped());
+  final state = await _waitForObserverState(
+    bloc,
+    (candidate) => !candidate.observationEnabled && candidate.activeGeneration != ObserverGenerationKind.automatic,
+    timeout: _stateTransitionTimeout,
+  );
+  expect(state.activeGeneration, isNull);
 }
 
 Future<void> _expectYoloAdvancedAfterResume(
@@ -505,9 +526,9 @@ Future<void> _expectYoloAdvancedAfterResume(
   expect(resumedState.status, CameraStatus.enabled);
 }
 
-Future<AssistantState> _waitForAssistantState(
-  AssistantBloc bloc,
-  bool Function(AssistantState state) predicate, {
+Future<ObserverState> _waitForObserverState(
+  ObserverBloc bloc,
+  bool Function(ObserverState state) predicate, {
   required Duration timeout,
 }) {
   if (predicate(bloc.state)) return Future.value(bloc.state);
@@ -601,7 +622,14 @@ Future<_GenerationMeasurement> _generateShortCommentOnce(
     final answer = _successValue(completion, 'generation completion');
     await chunksDone.future.timeout(_streamSettlementTimeout);
     watch.stop();
-    expect(streamedAnswer.toString(), answer);
+    final preview = streamedAnswer.toString();
+    expect(
+      preview,
+      contains(answer),
+      reason: 'The provisional stream must expose the committed sentence.',
+    );
+    expect(preview, isNot(contains('<think>')));
+    expect(preview, isNot(contains('</think>')));
     expect(
       firstVisibleChunk,
       isNotNull,

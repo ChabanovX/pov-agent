@@ -1,6 +1,7 @@
 #include "llama_bridge.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <mutex>
@@ -33,6 +34,19 @@ namespace {
 
 constexpr std::size_t kMaxCapturedLogBytes = 16384;
 constexpr std::size_t kMaxFailureLogBytes = 1536;
+
+void configure_ios_metal_capabilities() {
+#if defined(TARGET_OS_IOS) && TARGET_OS_IOS
+  static std::once_flag configure_once;
+  std::call_once(configure_once, []() {
+    // The bundled Metal 2.3 library cannot contain llama.cpp's BF16 or tensor
+    // kernels, which require newer language revisions. Do not advertise
+    // runtime capabilities that the precompiled library cannot provide.
+    setenv("GGML_METAL_BF16_DISABLE", "1", 0);
+    setenv("GGML_METAL_TENSOR_DISABLE", "1", 0);
+  });
+#endif
+}
 
 struct llama_log_dispatcher {
   std::mutex capture_mutex;
@@ -117,6 +131,22 @@ std::string load_failure_message(
   std::string message = requested_gpu ? "Metal " : "CPU ";
   message.append(stage);
   message.append(" failed");
+  if (!native_log.empty()) {
+    message.append(": ");
+    const std::size_t first_byte = native_log.size() > kMaxFailureLogBytes
+        ? native_log.size() - kMaxFailureLogBytes
+        : 0;
+    message.append(native_log.substr(first_byte));
+  }
+  return message;
+}
+
+std::string no_gpu_buffer_message(
+    int32_t requested_gpu_layers,
+    const std::string& native_log) {
+  std::string message = "Metal offload verification failed: requested ";
+  message.append(std::to_string(requested_gpu_layers));
+  message.append(" GPU layers, but llama.cpp allocated no GPU model buffer");
   if (!native_log.empty()) {
     message.append(": ");
     const std::size_t first_byte = native_log.size() > kMaxFailureLogBytes
@@ -377,6 +407,7 @@ pov_llama_runtime* pov_llama_create_impl(
     }
 
     scoped_llama_log_capture native_log;
+    configure_ios_metal_capabilities();
     llama_backend_init();
     backend_initialized = true;
     runtime = new (std::nothrow) pov_llama_runtime();
@@ -388,6 +419,9 @@ pov_llama_runtime* pov_llama_create_impl(
     }
     runtime->batch_tokens = std::min(batch_tokens, context_tokens);
 
+    const int32_t requested_gpu_layers = gpu_layers;
+    std::string backend_diagnostic;
+
 #if defined(POV_LLAMA_CPU_ONLY)
     // The Android artifact intentionally ships the portable CPU backend. Keep
     // the shared Dart configuration platform-neutral without loading twice in
@@ -396,6 +430,11 @@ pov_llama_runtime* pov_llama_create_impl(
 #elif defined(TARGET_OS_SIMULATOR) && TARGET_OS_SIMULATOR
     // Simulator Metal does not model iPhone memory or command scheduling. Keep
     // its acceptance lane deterministic and reserve Metal validation for device.
+    if (gpu_layers > 0) {
+      backend_diagnostic = "Metal disabled by iOS Simulator policy; requested ";
+      backend_diagnostic.append(std::to_string(gpu_layers));
+      backend_diagnostic.append(" GPU layers");
+    }
     gpu_layers = 0;
 #elif defined(TARGET_OS_IOS) && TARGET_OS_IOS
     // This pinned Metal backend synchronizes with an API introduced in iOS 15.
@@ -405,6 +444,10 @@ pov_llama_runtime* pov_llama_create_impl(
       metal_runtime_available = true;
     }
     if (!metal_runtime_available) {
+      if (gpu_layers > 0) {
+        backend_diagnostic =
+            "Metal disabled because the runtime requires iOS 15 or newer";
+      }
       gpu_layers = 0;
     }
 #endif
@@ -421,10 +464,22 @@ pov_llama_runtime* pov_llama_create_impl(
         &failure_stage);
     if (loaded_with_requested_backend &&
         (!requested_gpu || runtime->uses_gpu)) {
+      copy_string(backend_diagnostic, error_buffer, error_buffer_length);
       return runtime;
     }
 
     if (requested_gpu) {
+      const std::string metal_log = native_log.snapshot();
+      if (loaded_with_requested_backend) {
+        backend_diagnostic =
+            no_gpu_buffer_message(requested_gpu_layers, metal_log);
+      } else {
+        backend_diagnostic = "Requested ";
+        backend_diagnostic.append(std::to_string(requested_gpu_layers));
+        backend_diagnostic.append(" GPU layers; ");
+        backend_diagnostic.append(
+            load_failure_message(true, failure_stage, metal_log));
+      }
       release_loaded_model(runtime);
       runtime->uses_gpu = false;
       failure_stage = "model load";
@@ -436,14 +491,19 @@ pov_llama_runtime* pov_llama_create_impl(
           thread_count,
           0,
           &failure_stage)) {
+        copy_string(backend_diagnostic, error_buffer, error_buffer_length);
         return runtime;
       }
     }
 
-    const std::string diagnostic = load_failure_message(
+    std::string diagnostic = load_failure_message(
         false,
         failure_stage,
         native_log.snapshot());
+    if (!backend_diagnostic.empty()) {
+      diagnostic.insert(0, "; ");
+      diagnostic.insert(0, backend_diagnostic);
+    }
     release_loaded_model(runtime);
     copy_string(diagnostic, error_buffer, error_buffer_length);
     delete runtime;

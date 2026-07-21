@@ -21,4 +21,9 @@ abstract final class AssistantAcceptanceDurations {
   static const hardwareScenario = Duration(minutes: 55);
   static const smokeScenario = Duration(minutes: 40);
   static const offlineScenario = Duration(minutes: 20);
+  static const observerScenario = Duration(minutes: 30);
+  static const observerLiveSmokeScenario = Duration(minutes: 40);
+  static const observerLiveScene = Duration(minutes: 3);
+  static const observerTickWait = Duration(seconds: 20);
+  static const observerStopSilence = Duration(seconds: 12);
 }

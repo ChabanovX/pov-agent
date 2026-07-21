@@ -7,9 +7,9 @@ const _chatStart = '<|im_start|>';
 const _chatEnd = '<|im_end|>';
 const _endOfText = '<|endoftext|>';
 const _shortCommentSystemInstruction =
-    'For this request, output only one brief complete English sentence of at '
-    'least three words. '
-    'Do not introduce or explain it.';
+    'For this request, output only one brief complete English sentence of 3 to '
+    '18 words. '
+    'Do not add an "Observation:" label, introduction, or explanation.';
 
 /// Formats assistant requests with Qwen3's pinned ChatML conversation shape.
 ///

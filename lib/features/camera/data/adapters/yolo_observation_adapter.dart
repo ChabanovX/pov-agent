@@ -294,9 +294,11 @@ final class YoloObservationAdapter implements ObservationController {
           await _viewController.pause();
         } else if (_attachedLens != _desiredLens) {
           if (!await _switchAttachedLens(revision, _desiredLens)) return;
-        } else {
-          await _viewController.resume();
         }
+        // A newly attached YOLOView starts itself only after committing its
+        // AVCaptureSession configuration. A redundant resume here can race
+        // that setup and make iOS call startRunning inside the configuration
+        // window. Later foreground and user resumes still enter through enable.
         return;
       }
       await Future<void>.delayed(AppAnimations.regular.fast);

@@ -75,9 +75,10 @@ void main() {
       request.prompt,
       '<|im_start|>system\n'
       'Always answer in English.\n'
-      'For this request, output only one brief complete English sentence of at '
-      'least three words. '
-      'Do not introduce or explain it.<|im_end|>\n'
+      'For this request, output only one brief complete English sentence of 3 '
+      'to 18 words. '
+      'Do not add an "Observation:" label, introduction, or '
+      'explanation.<|im_end|>\n'
       '<|im_start|>user\n'
       'Describe the stable scene. /think\n'
       '/no_think<|im_end|>\n'
@@ -94,7 +95,8 @@ void main() {
   test('keeps the short output bound out of manual dialogue', () {
     final request = builder.manualDialogue(prompt: 'Explain the scene.');
 
-    expect(request.prompt, isNot(contains('Do not introduce or explain it.')));
+    expect(request.prompt, isNot(contains('3 to 18 words')));
+    expect(request.prompt, isNot(contains('"Observation:" label')));
   });
 
   test('accepts injected policies instead of reading shared constants', () {

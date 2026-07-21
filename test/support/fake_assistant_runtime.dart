@@ -8,6 +8,8 @@ import 'package:pov_agent/features/assistant/application/ports/generation_handle
 import 'package:pov_agent/features/assistant/application/ports/model_store.dart';
 import 'package:pov_agent/shared/domain/app_failure.dart';
 import 'package:pov_agent/shared/domain/app_result.dart';
+import 'package:pov_agent/shared/domain/scene_snapshot.dart';
+import 'package:pov_agent/shared/domain/scene_source.dart';
 
 const testQwenArtifact = VerifiedModelArtifact(
   modelId: 'unsloth/Qwen3-0.6B-GGUF',
@@ -16,6 +18,36 @@ const testQwenArtifact = VerifiedModelArtifact(
   byteSize: 396705472,
   sha256: 'test-sha256',
 );
+
+final class FakeSceneSource implements SceneSource {
+  factory FakeSceneSource({
+    SceneSnapshot current = const SceneSnapshot.empty(),
+  }) {
+    return FakeSceneSource._(current);
+  }
+
+  FakeSceneSource._(this._current);
+
+  final StreamController<SceneSnapshot> _changes = StreamController<SceneSnapshot>.broadcast(sync: true);
+  SceneSnapshot _current;
+
+  @override
+  SceneSnapshot get current => _current;
+
+  @override
+  Stream<SceneSnapshot> get changes => _changes.stream;
+
+  void emit(SceneSnapshot scene) {
+    _current = scene;
+    _changes.add(scene);
+  }
+
+  set current(SceneSnapshot scene) {
+    _current = scene;
+  }
+
+  Future<void> close() => _changes.close();
+}
 
 final class FakeAssistantModelStore implements ModelStore {
   factory FakeAssistantModelStore({

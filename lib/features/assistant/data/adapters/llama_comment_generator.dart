@@ -13,6 +13,8 @@ import 'package:pov_agent/features/assistant/data/ffi/llama_native_runtime.dart'
 import 'package:pov_agent/shared/domain/app_failure.dart';
 import 'package:pov_agent/shared/domain/app_result.dart';
 
+const _llamaRandomSeedSentinel = 0xFFFFFFFF;
+
 /// Owns the lazy llama.cpp worker and its currently loaded model.
 ///
 /// Equivalent loads share one task. A new load first joins cancellation of the
@@ -38,22 +40,25 @@ final class LlamaCommentGenerator implements CommentGenerator {
     this._createWorker,
     this._runtimeConfiguration,
     this._randomSeed,
-  );
+  ) : _nextShortGenerationSeed = _randomSeed;
 
   static final AppLogger _logger = AppLogger('LlamaCommentGenerator');
 
   final Future<LlamaInferenceWorker> Function() _createWorker;
   final LlamaRuntimeConfiguration _runtimeConfiguration;
   final int _randomSeed;
+  int _nextShortGenerationSeed;
 
   Future<LlamaInferenceWorker>? _workerTask;
   Future<AppResult<void>>? _loadTask;
   VerifiedModelArtifact? _loadingArtifact;
   VerifiedModelArtifact? _loadedArtifact;
   bool? _loadedModelUsesGpu;
+  String? _loadedModelBackendDiagnostic;
   bool? _lastUnloadSucceeded;
   _LlamaGenerationHandle? _activeGeneration;
   Future<void>? _closeTask;
+  var _generationBusyRejections = 0;
   var _closed = false;
 
   /// Whether the currently loaded model uses the native GPU backend.
@@ -62,11 +67,23 @@ final class LlamaCommentGenerator implements CommentGenerator {
   /// acceptance tests use it to reject CPU fallback on supported iOS devices.
   bool? get loadedModelUsesGpu => _loadedModelUsesGpu;
 
+  /// Native explanation when loading selected a different execution backend.
+  ///
+  /// This stays null for an unmodified successful load and is cleared with the
+  /// loaded model. It is diagnostic context rather than presentation copy.
+  String? get loadedModelBackendDiagnostic => _loadedModelBackendDiagnostic;
+
   /// Whether the latest requested model unload completed without native error.
   ///
   /// This diagnostic is `null` before an unload or after a new load starts.
   /// Product-facing lifecycle remains normalized through [CommentGenerator].
   bool? get lastUnloadSucceeded => _lastUnloadSucceeded;
+
+  /// Number of requests rejected because native generation was already active.
+  ///
+  /// Long-running acceptance lanes assert this remains zero. Product
+  /// concurrency still enters through the normalized generation result.
+  int get generationBusyRejections => _generationBusyRejections;
 
   @override
   Future<AppResult<void>> loadModel(VerifiedModelArtifact artifact) async {
@@ -108,6 +125,7 @@ final class LlamaCommentGenerator implements CommentGenerator {
       await _activeGeneration?.cancel();
       _activeGeneration = null;
       _loadedModelUsesGpu = null;
+      _loadedModelBackendDiagnostic = null;
       _lastUnloadSucceeded = null;
       worker = await _obtainWorker();
       final loadResult = await worker.load(
@@ -125,10 +143,12 @@ final class LlamaCommentGenerator implements CommentGenerator {
       }
       _loadedArtifact = artifact;
       _loadedModelUsesGpu = loadResult.usesGpu;
+      _loadedModelBackendDiagnostic = loadResult.backendDiagnostic;
       return const AppSuccess<void>(null);
     } on Object catch (error, stackTrace) {
       _loadedArtifact = null;
       _loadedModelUsesGpu = null;
+      _loadedModelBackendDiagnostic = null;
       if (worker != null) await _retireWorkerAfterLoadFailure(worker);
       return AppError<void>(
         _nativeFailure(
@@ -194,6 +214,7 @@ final class LlamaCommentGenerator implements CommentGenerator {
     }
     if (_activeGeneration case final active?) {
       if (!active.isSettled) {
+        _generationBusyRejections += 1;
         return const AppError<GenerationHandle>(
           ValidationFailure(
             code: 'assistant_generation_busy',
@@ -205,6 +226,7 @@ final class LlamaCommentGenerator implements CommentGenerator {
 
     try {
       final worker = await _obtainWorker();
+      final seed = _seedFor(request.completionPolicy);
       final nativeGeneration = await worker.generate(
         request.prompt,
         LlamaSamplingConfiguration(
@@ -213,9 +235,10 @@ final class LlamaCommentGenerator implements CommentGenerator {
           topP: request.options.topP,
           topK: request.options.topK,
           minP: request.options.minP,
-          seed: _randomSeed,
+          seed: seed,
         ),
       );
+      _advanceSeedAfterAcceptedStart(request.completionPolicy);
       late final _LlamaGenerationHandle handle;
       handle = _LlamaGenerationHandle(
         nativeGeneration,
@@ -243,6 +266,29 @@ final class LlamaCommentGenerator implements CommentGenerator {
     }
   }
 
+  int _seedFor(GenerationCompletionPolicy completionPolicy) {
+    if (completionPolicy != GenerationCompletionPolicy.firstSubstantiveEnglishSentence ||
+        _randomSeed == _llamaRandomSeedSentinel) {
+      return _randomSeed;
+    }
+    return _nextShortGenerationSeed;
+  }
+
+  void _advanceSeedAfterAcceptedStart(
+    GenerationCompletionPolicy completionPolicy,
+  ) {
+    if (completionPolicy != GenerationCompletionPolicy.firstSubstantiveEnglishSentence ||
+        _randomSeed == _llamaRandomSeedSentinel) {
+      return;
+    }
+    // Reusing one explicit seed with an unchanged prompt can reproduce a
+    // token-limit failure forever. A deterministic sequence preserves replay
+    // while ensuring the next periodic short comment explores another sample.
+    _nextShortGenerationSeed = _nextShortGenerationSeed == _llamaRandomSeedSentinel - 1
+        ? 0
+        : _nextShortGenerationSeed + 1;
+  }
+
   @override
   Future<void> unload() async {
     if (_closed) return;
@@ -254,10 +300,12 @@ final class LlamaCommentGenerator implements CommentGenerator {
       if (workerTask != null) await (await workerTask).unload();
       _loadedArtifact = null;
       _loadedModelUsesGpu = null;
+      _loadedModelBackendDiagnostic = null;
       _lastUnloadSucceeded = true;
     } on Object catch (error, stackTrace) {
       _loadedArtifact = null;
       _loadedModelUsesGpu = null;
+      _loadedModelBackendDiagnostic = null;
       _lastUnloadSucceeded = false;
       _logger.e(
         'Failed to unload the native model.',
@@ -305,6 +353,7 @@ final class LlamaCommentGenerator implements CommentGenerator {
     } finally {
       _loadedArtifact = null;
       _loadedModelUsesGpu = null;
+      _loadedModelBackendDiagnostic = null;
     }
   }
 }
@@ -349,6 +398,10 @@ final class _LlamaGenerationHandle implements GenerationHandle {
       await for (final chunk in decoded) {
         final visible = _filter.add(chunk);
         if (_completionPolicy == GenerationCompletionPolicy.firstSubstantiveEnglishSentence) {
+          // Short-comment completion still commits only the validated first
+          // sentence, but its reasoning-filtered prefix may be projected as a
+          // disposable UI draft while native decoding is active.
+          _publishPreview(visible);
           completedSentence = _sentenceAccumulator.add(visible);
           if (completedSentence != null) {
             // Observe cancellation immediately: leaving an await-for loop may
@@ -396,6 +449,7 @@ final class _LlamaGenerationHandle implements GenerationHandle {
       var sentence = completedSentence;
       final tail = _filter.finish();
       if (_completionPolicy == GenerationCompletionPolicy.firstSubstantiveEnglishSentence) {
+        _publishPreview(tail);
         sentence ??= _sentenceAccumulator.add(tail);
         sentence ??= _sentenceAccumulator.finish();
         if (sentence == null) {
@@ -406,7 +460,7 @@ final class _LlamaGenerationHandle implements GenerationHandle {
             ),
           );
         }
-        _publish(sentence);
+        return AppSuccess<String>(sentence);
       } else {
         _publish(tail);
       }
@@ -439,6 +493,11 @@ final class _LlamaGenerationHandle implements GenerationHandle {
   void _publish(String chunk) {
     if (chunk.isEmpty || _chunks.isClosed) return;
     _visibleAnswer.write(chunk);
+    _chunks.add(chunk);
+  }
+
+  void _publishPreview(String chunk) {
+    if (chunk.isEmpty || _chunks.isClosed) return;
     _chunks.add(chunk);
   }
 

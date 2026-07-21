@@ -5,6 +5,7 @@ import 'package:pov_agent/app/di/assistant_build_configuration.dart';
 import 'package:pov_agent/core/constants/compilation_constants.dart';
 import 'package:pov_agent/features/assistant/application/ports/comment_generator.dart';
 import 'package:pov_agent/features/assistant/application/ports/model_store.dart';
+import 'package:pov_agent/features/assistant/application/services/observer_request_builder.dart';
 import 'package:pov_agent/features/assistant/application/services/qwen_prompt_builder.dart';
 import 'package:pov_agent/features/assistant/data/adapters/llama_comment_generator.dart';
 import 'package:pov_agent/features/assistant/data/datasources/model_artifact_downloader.dart';
@@ -13,7 +14,7 @@ import 'package:pov_agent/features/assistant/data/datasources/model_directory_pr
 import 'package:pov_agent/features/assistant/data/datasources/model_disk_capacity_gateway.dart';
 import 'package:pov_agent/features/assistant/data/ffi/llama_inference_worker.dart';
 import 'package:pov_agent/features/assistant/data/repositories/verified_qwen_model_store.dart';
-import 'package:pov_agent/features/assistant/presentation/bloc/assistant_bloc.dart';
+import 'package:pov_agent/features/assistant/presentation/bloc/observer_bloc.dart';
 import 'package:pov_agent/features/camera/application/ports/observation_controller.dart';
 import 'package:pov_agent/features/camera/application/ports/recorded_observation_frame_source.dart';
 import 'package:pov_agent/features/camera/application/services/observation_scene_session.dart';
@@ -67,19 +68,22 @@ AppRuntime _configureDependencies({
     checksumVerifier: const IsolateModelChecksumVerifier(),
     commentGenerator: commentGenerator,
   );
-  final assistantBloc = AssistantBloc(
+  final observerBloc = ObserverBloc(
+    sceneSource: sceneSession,
     modelStore: modelStore,
     commentGenerator: commentGenerator,
-    promptBuilder: QwenPromptBuilder(
-      systemPrompt: assistantConfiguration.systemPrompt,
-      manualOptions: assistantConfiguration.manualOptions,
-      shortCommentOptions: assistantConfiguration.commentOptions,
+    requestBuilder: ObserverRequestBuilder(
+      qwenPromptBuilder: QwenPromptBuilder(
+        systemPrompt: assistantConfiguration.systemPrompt,
+        manualOptions: assistantConfiguration.manualOptions,
+        shortCommentOptions: assistantConfiguration.commentOptions,
+      ),
     ),
   );
   final runtime = AppRuntime(
     cameraBloc: CameraBloc(controller),
     sceneSession: sceneSession,
-    assistantBloc: assistantBloc,
+    observerBloc: observerBloc,
     modelStore: modelStore,
     commentGenerator: commentGenerator,
   );
@@ -89,7 +93,7 @@ AppRuntime _configureDependencies({
     ..registerSingleton<SceneSource>(sceneSession)
     ..registerSingleton<CommentGenerator>(commentGenerator)
     ..registerSingleton<ModelStore>(modelStore)
-    ..registerSingleton<AssistantBloc>(assistantBloc)
+    ..registerSingleton<ObserverBloc>(observerBloc)
     ..registerSingleton<AppRuntime>(runtime);
   return runtime;
 }
