@@ -25,7 +25,7 @@ final class LlamaWorkerLoadResult {
     this.backendDiagnostic,
   });
 
-  /// Whether llama.cpp successfully offloaded the model to Metal.
+  /// Whether llama.cpp successfully offloaded the model to an accelerator.
   final bool usesGpu;
 
   /// Native explanation when the requested backend changed during loading.

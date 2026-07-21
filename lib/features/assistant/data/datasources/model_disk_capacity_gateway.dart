@@ -11,7 +11,7 @@ abstract interface class ModelDiskCapacityGateway {
   Future<int> availableBytes(String directoryPath);
 }
 
-/// Reads iOS filesystem capacity through the app-owned method channel.
+/// Reads platform filesystem capacity through the app-owned method channel.
 final class MethodChannelModelDiskCapacityGateway implements ModelDiskCapacityGateway {
   /// Creates a gateway using the production model-storage channel.
   factory MethodChannelModelDiskCapacityGateway() {

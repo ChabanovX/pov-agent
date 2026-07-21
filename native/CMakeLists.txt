@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(pov_llama LANGUAGES C CXX OBJC ASM)
+project(pov_llama LANGUAGES C CXX ASM)
+
+if(APPLE)
+  enable_language(OBJC)
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -22,13 +26,23 @@ set(LLAMA_BUILD_UI OFF CACHE BOOL "" FORCE)
 set(LLAMA_USE_PREBUILT_UI OFF CACHE BOOL "" FORCE)
 set(LLAMA_OPENSSL OFF CACHE BOOL "" FORCE)
 set(GGML_BACKEND_DL OFF CACHE BOOL "" FORCE)
-set(GGML_ACCELERATE ON CACHE BOOL "" FORCE)
 set(GGML_BLAS OFF CACHE BOOL "" FORCE)
-set(GGML_METAL ON CACHE BOOL "" FORCE)
-set(GGML_METAL_EMBED_LIBRARY ON CACHE BOOL "")
-set(GGML_METAL_NDEBUG ON CACHE BOOL "" FORCE)
 set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
 set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
+
+if(APPLE)
+  set(GGML_ACCELERATE ON CACHE BOOL "" FORCE)
+  set(GGML_METAL ON CACHE BOOL "" FORCE)
+  set(GGML_METAL_EMBED_LIBRARY ON CACHE BOOL "")
+  set(GGML_METAL_NDEBUG ON CACHE BOOL "" FORCE)
+elseif(ANDROID)
+  set(GGML_ACCELERATE OFF CACHE BOOL "" FORCE)
+  set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)
+  set(GGML_METAL OFF CACHE BOOL "" FORCE)
+  set(GGML_METAL_EMBED_LIBRARY OFF CACHE BOOL "" FORCE)
+else()
+  message(FATAL_ERROR "pov_llama supports Apple and Android targets only")
+endif()
 
 add_subdirectory(${LLAMA_CPP_DIR} ${CMAKE_BINARY_DIR}/llama_cpp_build)
 
@@ -46,23 +60,28 @@ target_compile_options(pov_llama PRIVATE
   -fvisibility=hidden
 )
 
-find_library(ACCELERATE_FRAMEWORK Accelerate REQUIRED)
-find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
-find_library(METAL_FRAMEWORK Metal REQUIRED)
-find_library(METALKIT_FRAMEWORK MetalKit REQUIRED)
-
 target_link_libraries(pov_llama PRIVATE
   llama
-  ${ACCELERATE_FRAMEWORK}
-  ${FOUNDATION_FRAMEWORK}
-  ${METAL_FRAMEWORK}
-  ${METALKIT_FRAMEWORK}
 )
 
 if(APPLE)
+  find_library(ACCELERATE_FRAMEWORK Accelerate REQUIRED)
+  find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
+  find_library(METAL_FRAMEWORK Metal REQUIRED)
+  find_library(METALKIT_FRAMEWORK MetalKit REQUIRED)
+  target_link_libraries(pov_llama PRIVATE
+    ${ACCELERATE_FRAMEWORK}
+    ${FOUNDATION_FRAMEWORK}
+    ${METAL_FRAMEWORK}
+    ${METALKIT_FRAMEWORK}
+  )
   target_link_options(pov_llama PRIVATE
     "LINKER:-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/llama_bridge/exports.txt"
   )
+elseif(ANDROID)
+  target_compile_definitions(pov_llama PRIVATE POV_LLAMA_CPU_ONLY=1)
+  find_library(LOG_LIBRARY log REQUIRED)
+  target_link_libraries(pov_llama PRIVATE ${LOG_LIBRARY})
 endif()
 
 set_target_properties(pov_llama PROPERTIES

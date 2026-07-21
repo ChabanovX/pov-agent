@@ -28,7 +28,7 @@ final class LlamaRuntimeConfiguration {
   /// CPU thread count used by llama.cpp.
   final int threadCount;
 
-  /// Metal layers requested on device before native CPU fallback.
+  /// Accelerator layers requested before native CPU fallback.
   final int gpuLayers;
 }
 
@@ -168,13 +168,13 @@ final class LlamaNativeRuntime {
   final Pointer<Int32> _tokenLength;
   final Pointer<Uint8> _errorBuffer;
 
-  /// Whether the loaded model is currently offloaded to Metal.
+  /// Whether the loaded model is currently offloaded to an accelerator.
   final bool usesGpu;
 
   /// Native explanation when the requested backend was changed or rejected.
   ///
   /// A non-null value accompanies a usable runtime, for example after the
-  /// bridge deliberately falls back from Metal to CPU.
+  /// bridge deliberately falls back from an accelerator to CPU.
   final String? backendDiagnostic;
 
   /// Starts a fresh generation after clearing previous native state.

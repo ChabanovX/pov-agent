@@ -13,6 +13,7 @@ import 'package:pov_agent/features/assistant/domain/entities/conversation_messag
 import 'package:pov_agent/features/assistant/presentation/bloc/observer_bloc.dart';
 import 'package:pov_agent/features/assistant/presentation/bloc/observer_state.dart';
 import 'package:pov_agent/features/camera/presentation/bloc/camera_state.dart';
+import 'package:pov_agent/shared/domain/app_failure.dart';
 
 import '../test/support/assistant_acceptance_durations.dart';
 
@@ -67,7 +68,7 @@ void main() {
         if (readyState.modelStatus == ObserverModelStatus.failure) {
           fail(
             'Qwen preparation failed: '
-            '${readyState.modelFailure?.code ?? 'unknown'}.',
+            '${_failureDescription(readyState.modelFailure)}.',
           );
         }
         final downloadCallsAtReady = offlineGuard.downloadCalls;
@@ -87,8 +88,8 @@ void main() {
         });
         await tester.enterText(
           find.byKey(assistantPromptFieldKey),
-          'Reply with one short English sentence confirming that the iOS '
-          'runtime is ready.',
+          'Reply with one short English sentence confirming that the '
+          'on-device runtime is ready.',
         );
         await tester.pump();
         await tester.tap(find.byKey(assistantSubmitControlKey));
@@ -102,7 +103,7 @@ void main() {
         if (completedState.manualFailure != null) {
           fail(
             'Qwen generation failed: '
-            '${completedState.manualFailure?.code ?? 'unknown'}.',
+            '${_failureDescription(completedState.manualFailure)}.',
           );
         }
         final answer = completedState.messages.last;
@@ -210,7 +211,7 @@ void main() {
         if (readyState.modelStatus == ObserverModelStatus.failure) {
           fail(
             'Verified cache restart failed: '
-            '${readyState.modelFailure?.code ?? 'unknown'}.',
+            '${_failureDescription(readyState.modelFailure)}.',
           );
         }
         expect(offlineGuard.downloadCalls, downloadCallsBeforeRestart);
@@ -233,7 +234,7 @@ void main() {
         if (completedState.manualFailure != null) {
           fail(
             'Offline generation failed: '
-            '${completedState.manualFailure?.code ?? 'unknown'}.',
+            '${_failureDescription(completedState.manualFailure)}.',
           );
         }
         expect(completedState.messages.last.content.trim(), isNotEmpty);
@@ -245,6 +246,14 @@ void main() {
     skip: !_runNativeAssistantTest,
     timeout: const Timeout(_offlineScenarioTimeout),
   );
+}
+
+String _failureDescription(Object? failure) {
+  if (failure is! AppFailure) return 'unknown';
+  final message = failure.message;
+  return message == null || message.isEmpty
+      ? failure.code
+      : '${failure.code}: $message';
 }
 
 Future<void> _pumpUntilFound<CandidateType>(

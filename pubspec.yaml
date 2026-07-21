@@ -73,9 +73,10 @@ flutter:
   generate: true
 
   assets:
-    # Keeps the pinned Core ML model available without a first-run download.
+    # Keeps the pinned platform YOLO models available without a first-run download.
     - assets/models/yolo26n.mlpackage.zip
-    # Provides deterministic camera input for the iOS Simulator acceptance lane.
+    - assets/models/yolo26n_w8a32.tflite
+    # Provides deterministic camera input for simulator and emulator acceptance lanes.
     - assets/video/pedestrians.mp4
 
   # Makes Material Icons available to widgets exported by ultralytics_yolo.

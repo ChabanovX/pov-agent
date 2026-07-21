@@ -171,9 +171,9 @@ final class AppRuntime with WidgetsBindingObserver {
           observerBloc.isClosed) {
         return;
       }
-      // Ticks and generation are already quiescent. Let the camera controller
-      // settle before freeing llama.cpp so model teardown never races a final
-      // camera inference command buffer.
+      // Both runtimes can submit native accelerator work. Ticks and generation
+      // are already quiescent; let the camera controller settle before freeing
+      // llama.cpp so teardown cannot race its final inference submission.
       observerBloc.add(const ObserverSuspended());
     } on Object catch (error, stackTrace) {
       if (_phase == _AppRuntimePhase.closing || _phase == _AppRuntimePhase.closed) {

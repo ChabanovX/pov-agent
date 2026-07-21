@@ -294,9 +294,9 @@ int32_t quiesce_generation(
   }
   try {
     if (runtime->context != nullptr) {
-      // llama_decode may return before Metal completes its command buffer. The
-      // Dart generation contract cannot report completion or cancellation
-      // until that final native step is safe to release or reuse.
+      // An accelerated backend may finish work after llama_decode returns. The
+      // Dart contract cannot report completion or cancellation until the last
+      // native step is safe to release or reuse.
       llama_synchronize(runtime->context);
     }
     release_sampler(runtime);
@@ -422,7 +422,12 @@ pov_llama_runtime* pov_llama_create_impl(
     const int32_t requested_gpu_layers = gpu_layers;
     std::string backend_diagnostic;
 
-#if defined(TARGET_OS_SIMULATOR) && TARGET_OS_SIMULATOR
+#if defined(POV_LLAMA_CPU_ONLY)
+    // The Android artifact intentionally ships the portable CPU backend. Keep
+    // the shared Dart configuration platform-neutral without loading twice in
+    // search of a backend that was not linked into this binary.
+    gpu_layers = 0;
+#elif defined(TARGET_OS_SIMULATOR) && TARGET_OS_SIMULATOR
     // Simulator Metal does not model iPhone memory or command scheduling. Keep
     // its acceptance lane deterministic and reserve Metal validation for device.
     if (gpu_layers > 0) {

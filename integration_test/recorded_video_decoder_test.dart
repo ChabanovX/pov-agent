@@ -10,7 +10,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'iOS decodes distinct JPEG frames and loops the bundled MP4',
+    'platform decoder emits distinct JPEG frames and loops the bundled MP4',
     (tester) async {
       await tester.runAsync<void>(() async {
         final source = MethodChannelRecordedVideoFrameSource(

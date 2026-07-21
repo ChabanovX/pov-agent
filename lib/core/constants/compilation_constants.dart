@@ -80,7 +80,7 @@ abstract final class CompilationConstants {
     defaultValue: '4',
   );
 
-  /// Number of model layers requested from Metal before CPU fallback.
+  /// Number of model layers requested from an available accelerator.
   static const String qwenGpuLayers = String.fromEnvironment(
     'QWEN_GPU_LAYERS',
     defaultValue: '99',
