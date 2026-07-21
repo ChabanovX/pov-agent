@@ -15,6 +15,16 @@ application-owned speech transport. Voice availability and any engine-level
 network behavior remain device capabilities; the adapter validates an
 installed English locale before speaking.
 
+## record
+
+- Upstream: <https://github.com/llfbandit/record/tree/main/record>
+- Dart package: `record` 7.1.1
+- License: BSD-3-Clause, retained in the package's `LICENSE` file
+
+The application uses this plugin only for foreground microphone capture. PCM16
+samples stream directly into the bounded on-device ASR queue; production audio
+is neither written to a file nor sent over a network.
+
 ## sherpa-onnx
 
 - Upstream: <https://github.com/k2-fsa/sherpa-onnx/tree/v1.13.4>
@@ -24,10 +34,31 @@ installed English locale before speaking.
   [pinned upstream tag](https://github.com/k2-fsa/sherpa-onnx/blob/v1.13.4/LICENSE)
 
 The application uses the package's platform FFI libraries for offline
-VITS/Piper synthesis. Native model creation, generation, and destruction stay
-on one worker isolate; the runtime is freed before the generated PCM is played.
-The Apache-2.0 license recorded here applies to sherpa-onnx itself, not
-automatically to every model or phonemizer component used with it.
+VITS/Piper synthesis and streaming CTC recognition. Each native runtime is
+owned by one worker isolate; Piper is freed before generated PCM playback, and
+ASR accepts microphone PCM through a bounded queue. The Apache-2.0 license
+recorded here applies to sherpa-onnx itself, not automatically to every model
+or phonemizer component used with it.
+
+## NeMo streaming FastConformer CTC English int8 bundle
+
+- Archive:
+  [`sherpa-onnx-nemo-streaming-fast-conformer-ctc-en-80ms-int8.tar.bz2`](https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-streaming-fast-conformer-ctc-en-80ms-int8.tar.bz2)
+- Exact archive size: `99459493` bytes
+- Archive SHA-256: `479759fbd5c69c909e7175d7773105a1bfabf82fa533de68c546c89d85f234e8`
+- Exact expanded tar size: `132891648` bytes
+- Extracted regular-file size: `132884963` bytes across `6` files
+- Extracted tree SHA-256: `8ec5fb017edb1fc389101bf235cbc13063185657b91752b9b17fa649eeade040`
+- Upstream model family:
+  [NVIDIA NeMo FastConformer Hybrid Streaming Multi](https://catalog.ngc.nvidia.com/orgs/nvidia/nemo/models/stt_en_fastconformer_hybrid_large_streaming_multi/-)
+- Model terms: NVIDIA NGC Terms of Use, recorded as `NVIDIA-NGC-TOU`
+
+The application uses only the quantized 80 ms CTC branch, `tokens.txt`, and
+metadata needed by sherpa-onnx. Runtime acquisition verifies the compressed
+archive, owns and removes the expanded tar, and verifies the complete extracted
+tree before atomically publishing the cache. The values are mirrored in
+[`.env.example`](.env.example). These NVIDIA model terms are independent of
+sherpa-onnx's Apache-2.0 runtime license.
 
 ## Piper LJSpeech medium-int8 voice bundle
 

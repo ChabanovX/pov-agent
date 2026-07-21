@@ -7,9 +7,10 @@ as context.
 > **Project status:** early prototype. Live and recorded camera input,
 > on-device YOLO detection, stable scene tracking, and manual conversation with
 > a local Qwen model work today. Automatic scene observation and spoken
-> observer comments also work. Milestone 6 now selects local Piper as the
-> primary English speech runtime. Its iOS Simulator, Android Emulator, and
-> iPhone 11 end-to-end gates pass. Speech recognition remains on the roadmap.
+> observer comments also work. Milestone 7 adds foreground microphone capture,
+> local streaming ASR, an English wake phrase, scene-aware voice questions, and
+> Piper answers. Its deterministic iOS Simulator and iPhone 11 gates pass, as
+> does a live-microphone turn on the iPhone 11.
 
 <p align="center">
   <img
@@ -55,6 +56,13 @@ be persisted between launches.
   lifecycle cancellation, and stale-utterance suppression. Composition now
   selects an offline Piper voice first and retains system TTS only as a
   technical fallback before local playback starts.
+- A foreground hands-free loop that waits for “Assistant,” recognizes one
+  English question locally, supplies the current stable scene and four recent
+  dialogue pairs to Qwen, speaks the answer through Piper, and re-arms ASR only
+  after playback completes.
+- Recoverable ASR download, verification, microphone-permission, silence,
+  empty-transcript, native-load, and input failures. Audio and transcripts are
+  session-only and barge-in remains outside the MVP.
 - Unit, widget, and repository-boundary tests enforced by the checked-in
   Flutter Agentic Harness, plus explicit device integration lanes.
 
@@ -66,8 +74,12 @@ the local cache. Synthesis runs away from the UI isolate, releases the native
 TTS runtime before playback, and plays the generated PCM from memory rather
 than persisting utterance audio.
 
-The repository does not yet capture microphone audio. Speech is limited to
-completed automatic observer comments; manual answers are text-only.
+The streaming recognizer uses the pinned
+`sherpa-onnx-nemo-streaming-fast-conformer-ctc-en-80ms-int8` bundle through
+`sherpa_onnx`. Its roughly 99 MB archive expands to a temporary 133 MB tar and
+a 133 MB verified model tree. Microphone PCM crosses a bounded worker-isolate
+queue and is never written to disk; ASR is suspended while Piper owns audio so
+the agent cannot hear its own answer.
 
 ## Target interaction
 
@@ -75,16 +87,15 @@ completed automatic observer comments; manual answers are text-only.
 flowchart LR
     Camera --> YOLO["On-device YOLO<br/>working"]
     YOLO --> Scene["Stable scene model<br/>working"]
-    Microphone -.-> ASR["Wake phrase and local ASR<br/>planned"]
+    Microphone --> ASR["Wake phrase and local ASR<br/>device-verified"]
     Scene --> LLM["Automatic scene prompt<br/>working"]
     UserText --> LLM["Local Qwen language model<br/>working"]
-    ASR -.-> LLM
+    ASR --> LLM
     LLM --> TTS["Local Piper speech<br/>device-verified"]
     TTS --> Speaker
 ```
 
-Solid arrows represent the current implementation. Dashed arrows represent the
-planned local agent loop.
+Solid arrows represent the current implementation.
 
 ## Roadmap
 
@@ -94,8 +105,8 @@ planned local agent loop.
 - [x] Periodic scene-aware observations.
 - [x] System text-to-speech for automatic observer comments.
 - [x] Local Piper speech independent of an installed system voice.
-- [ ] Wake phrase and local streaming speech recognition.
-- [ ] End-to-end hands-free question and answer flow.
+- [x] Wake phrase and local streaming speech recognition.
+- [x] End-to-end hands-free question and answer flow on iOS.
 - [ ] Long-running device, memory, and thermal validation.
 
 The detailed acceptance criteria and model choices live in
@@ -140,8 +151,9 @@ xcrun --find metal
 xcrun --find metallib
 ```
 
-All Qwen and Piper artifact, integrity, runtime, sampling/decoding, and
-preferred system-speech locale policy is compile-time configuration in
+All Qwen, Piper, and ASR artifact, integrity, runtime, sampling/decoding,
+endpoint, wake-phrase, and preferred system-speech locale policy is
+compile-time configuration in
 [`.env.example`](.env.example). Run the app with the checked example values (or
 a reviewed copy):
 
@@ -164,6 +176,15 @@ tree before publishing it atomically. A verified cache supports later offline
 speech and replay without downloading the model again. `.env` also selects the
 provider, thread count, speaker, VITS noise and length scales, speaking speed,
 silence scale, sentence limit, and native debug policy at compile time.
+
+ASR preparation begins alongside Qwen startup, but microphone permission is
+requested only when foreground recognition is ready to start. The store applies
+the same exact-length, SHA-256, staged extraction, complete-tree verification,
+and atomic publication rules to the pinned ASR archive. `.env` selects the
+provider, thread count, 16 kHz feature policy, greedy decoder, endpoint
+silences, 15-second utterance limit, bounded pending-audio queue, English wake
+phrase, and native debug policy. Verified caches support later offline voice
+turns; live PCM and transcripts remain in memory only.
 
 The iOS Simulator uses CPU inference intentionally. On iOS 15 and newer, a
 physical iPhone requests Metal offload and falls back to CPU if native
@@ -220,6 +241,11 @@ Piper follows the same boundary: the shared typed `ModelStore` contract owns
 bundle readiness, the data layer owns sherpa-onnx synthesis and in-memory audio
 playback, and app composition chooses Piper plus the narrowly scoped system
 fallback behind the existing `SpeechSynthesizer` port.
+
+Hands-free input follows a parallel boundary: `SpeechRecognizer` and
+`MicrophonePermissionGateway` are application ports, data adapters own the
+`record` and sherpa-onnx APIs, and `ObserverBloc` arbitrates ASR, Qwen, and TTS
+without importing plugin types or resolving dependencies from presentation.
 
 ## Verification
 
@@ -318,6 +344,18 @@ Capture an Instruments Activity Monitor or Time Profiler trace alongside that
 gate to retain device thermal-state evidence; the test itself reports the
 per-minute resident-memory samples and final growth limits.
 
+Milestone 7 adds deterministic and live hands-free lanes. The deterministic
+lane feeds a checked PCM fixture through the real streaming recognizer while
+recorded YOLO supplies scene context; it then requires a committed Qwen answer
+and completed Piper playback. The live lane replaces only the PCM fixture with
+the iPhone microphone and prints a READY marker before the spoken prompt:
+
+```sh
+tool/verify_hands_free_ios.sh <simulator-id>
+tool/verify_hands_free_device_ios.sh <physical-device-id>
+tool/verify_hands_free_live_device_ios.sh <physical-device-id>
+```
+
 ## Privacy and offline behavior
 
 - Camera inference runs on the device.
@@ -326,10 +364,11 @@ per-minute resident-memory samples and final growth limits.
 - The application does not intentionally save camera frames, recorded audio,
   transcripts, or conversation history.
 - Camera and model runtimes are scoped to foreground use. The verified GGUF is
-  cached alongside the verified Piper archive and extracted voice bundle,
-  while prompts, generated answers, reasoning, and synthesized utterance audio
-  remain session-only.
-- The current codebase contains no microphone or cloud-LLM transport.
+  cached alongside the verified Piper and ASR archives and extracted bundles,
+  while microphone PCM, transcripts, prompts, generated answers, reasoning,
+  and synthesized utterance audio remain session-only.
+- The microphone is captured only while the foreground recognizer is armed;
+  the codebase contains no cloud-ASR or cloud-LLM transport.
 - The pinned Core ML and LiteRT YOLO models are bundled for deterministic iOS
   and Android startup; the plugin retains its download-and-cache fallback for
   other supported model IDs.
@@ -347,6 +386,8 @@ The bundled YOLO model and recorded fixture retain their upstream terms:
   distributed under Apache-2.0.
 - Pinned llama.cpp and Qwen model provenance, checksums, build flags, and
   license details are recorded in [THIRD_PARTY.md](THIRD_PARTY.md).
+- The pinned NeMo streaming ASR artifact, exact archive/tree integrity values,
+  and NVIDIA model terms are recorded in [THIRD_PARTY.md](THIRD_PARTY.md).
 - The selected
   [LJSpeech Piper voice model](https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/ljspeech/medium/MODEL_CARD)
   records its dataset as public domain. Its bundle also contains eSpeak NG data
