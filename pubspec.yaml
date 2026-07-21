@@ -13,6 +13,10 @@ environment:
   sdk: ^3.12.0
 
 dependencies:
+  # Extracts the pinned Piper tar.bz2 into an atomically published model bundle.
+  archive: 4.0.9
+  # Configures foreground speech routing without monopolizing other audio.
+  audio_session: 0.2.4
   # Applies explicit concurrency policies to camera lifecycle Bloc events.
   bloc_concurrency: ^0.3.0
   # Describes native code assets emitted by the llama.cpp build hook.
@@ -41,6 +45,8 @@ dependencies:
   hooks: ^2.0.2
   # Backs generated localization messages and locale canonicalization.
   intl: ^0.20.2
+  # Plays generated in-memory WAV streams without persisting utterances.
+  just_audio: 0.10.6
   # Provides the backend wrapped by the project-wide AppLogger facade.
   logger: ^2.7.0
   # Marks test-only seams without introducing Flutter imports into data code.
@@ -49,6 +55,8 @@ dependencies:
   path_provider: ^2.1.5
   # Implements the data-layer camera permission gateway on iOS and Android.
   permission_handler: ^12.0.3
+  # Runs the pinned Piper-compatible VITS voice fully on device.
+  sherpa_onnx: 1.13.4
   # Drives the native camera surface and on-device YOLO inference boundary.
   ultralytics_yolo: ^0.6.10
 
