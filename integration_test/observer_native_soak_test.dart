@@ -46,14 +46,23 @@ void main() {
       StreamSubscription<ObserverState>? observerSubscription;
       SceneSnapshot? generatedScene;
       var observedStreaming = false;
+      Object? primaryFailure;
       try {
-        await runtime.start().timeout(_runtimeStartTimeout);
+        await _startRuntime(
+          tester,
+          runtime,
+          prefix: 'OBSERVER_LIVE_ACCEPTANCE',
+        );
         await tester.pumpWidget(const PovAgentApp());
         await _waitForScene(
           runtime,
           tester,
           timeout: _liveSceneTimeout,
           sourceLabel: 'Live YOLO',
+        );
+        tester.printToConsole(
+          'OBSERVER_LIVE_ACCEPTANCE stage=scene_ready '
+          'objects=${runtime.observerBloc.state.scene.objects.length}',
         );
         await _expectModelReady(runtime.observerBloc);
 
@@ -159,10 +168,21 @@ void main() {
           'objects=${comment.scene.objects.length} '
           'comment=${comment.text}',
         );
+      } on Object catch (error) {
+        primaryFailure = error;
+        rethrow;
       } finally {
         await observerSubscription?.cancel();
         semantics.dispose();
-        await _disposeRuntime(tester, runtime);
+        try {
+          await _disposeRuntime(tester, runtime);
+        } on Object catch (error) {
+          if (primaryFailure == null) rethrow;
+          tester.printToConsole(
+            'OBSERVER_LIVE_ACCEPTANCE stage=cleanup_failure '
+            'error=${_singleLine('$error')}',
+          );
+        }
       }
     },
     skip: !_runLiveObserverTest,
@@ -175,14 +195,23 @@ void main() {
       final runtime = configureDependencies();
       final semantics = tester.ensureSemantics();
       StreamSubscription<ObserverState>? observerSubscription;
+      Object? primaryFailure;
       try {
-        await runtime.start().timeout(_runtimeStartTimeout);
+        await _startRuntime(
+          tester,
+          runtime,
+          prefix: 'OBSERVER_ACCEPTANCE',
+        );
         await tester.pumpWidget(const PovAgentApp());
         await _waitForScene(
           runtime,
           tester,
           timeout: _stateTransitionTimeout,
           sourceLabel: 'Recorded YOLO',
+        );
+        tester.printToConsole(
+          'OBSERVER_ACCEPTANCE stage=scene_ready '
+          'objects=${runtime.observerBloc.state.scene.objects.length}',
         );
         await _expectModelReady(runtime.observerBloc);
 
@@ -358,14 +387,52 @@ void main() {
           'sampled_peak_growth_mib='
           '${_mebibytes(sampledPeakRss - baselineRss)}',
         );
+      } on Object catch (error) {
+        primaryFailure = error;
+        rethrow;
       } finally {
         await observerSubscription?.cancel();
         semantics.dispose();
-        await _disposeRuntime(tester, runtime);
+        try {
+          await _disposeRuntime(tester, runtime);
+        } on Object catch (error) {
+          if (primaryFailure == null) rethrow;
+          tester.printToConsole(
+            'OBSERVER_ACCEPTANCE stage=cleanup_failure '
+            'error=${_singleLine('$error')}',
+          );
+        }
       }
     },
     skip: !_runNativeObserverTest,
     timeout: const Timeout(_scenarioTimeout),
+  );
+}
+
+Future<void> _startRuntime(
+  WidgetTester tester,
+  AppRuntime runtime, {
+  required String prefix,
+}) async {
+  tester.printToConsole('$prefix stage=runtime_start');
+  try {
+    await runtime.start().timeout(_runtimeStartTimeout);
+  } on TimeoutException {
+    final cameraState = runtime.cameraBloc.state;
+    final failure = cameraState.failure;
+    fail(
+      'Runtime startup timed out: '
+      'camera_status=${cameraState.status.name}; '
+      'camera_model_status=${cameraState.modelStatus.name}; '
+      'camera_failure=${failure?.code ?? 'none'}; '
+      'observer_started=${runtime.observerBloc.state.started}; '
+      'observer_model_status=${runtime.observerBloc.state.modelStatus.name}.',
+    );
+  }
+  tester.printToConsole(
+    '$prefix stage=runtime_ready '
+    'camera_status=${runtime.cameraBloc.state.status.name} '
+    'observer_started=${runtime.observerBloc.state.started}',
   );
 }
 
@@ -439,11 +506,7 @@ Future<void> _disposeRuntime(
   WidgetTester tester,
   AppRuntime runtime,
 ) async {
-  await tester
-      .pumpWidget(const SizedBox.shrink())
-      .timeout(
-        _stateTransitionTimeout,
-      );
+  await tester.pumpWidget(const SizedBox.shrink()).timeout(_stateTransitionTimeout);
   await tester.pump();
   await runtime.close().timeout(_runtimeCloseTimeout);
   await appDependencies.reset(dispose: false).timeout(_dependencyResetTimeout);
