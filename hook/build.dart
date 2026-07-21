@@ -49,7 +49,10 @@ Future<void> main(List<String> arguments) async {
       '-DGGML_ACCELERATE=ON',
       '-DGGML_BLAS=OFF',
       '-DGGML_METAL=ON',
-      '-DGGML_METAL_EMBED_LIBRARY=ON',
+      // Xcode compiles the iOS shader into Runner.app/default.metallib. The
+      // embedded mode stores source and compiles it on-device, which can fail
+      // intermittently with an internal Metal compiler error.
+      '-DGGML_METAL_EMBED_LIBRARY=${code.targetOS == OS.iOS ? 'OFF' : 'ON'}',
       '-DGGML_METAL_NDEBUG=ON',
       ..._appleTargetArguments(code),
     ];

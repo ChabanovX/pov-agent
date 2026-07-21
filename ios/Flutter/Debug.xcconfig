@@ -1,1 +1,6 @@
 #include "Generated.xcconfig"
+
+// Package the pinned llama.cpp shader as Runner.app/default.metallib. Metal 2.3
+// is the minimum language revision that supports its 64-bit kernel arguments.
+MTL_HEADER_SEARCH_PATHS = $(inherited) "$(PROJECT_DIR)/../native/third_party/llama.cpp/ggml/src" "$(PROJECT_DIR)/../native/third_party/llama.cpp/ggml/src/ggml-metal"
+MTL_LANGUAGE_REVISION = Metal23

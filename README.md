@@ -107,7 +107,15 @@ cp .env.example .env
 
 The first iOS build compiles the pinned llama.cpp submodule locally through the
 Dart build hook. It does not download native sources or binaries. CMake, Ninja,
-and an Xcode toolchain with the selected iOS SDK must be available.
+and an Xcode toolchain with the selected iOS SDK must be available. Install the
+separate Xcode Metal Toolchain component once before building the iOS app, then
+verify that both shader tools are discoverable:
+
+```sh
+xcodebuild -downloadComponent MetalToolchain
+xcrun --find metal
+xcrun --find metallib
+```
 
 All Qwen artifact, context, sampling, and decoding policy is compile-time
 configuration. Run the app with the checked example values (or a reviewed

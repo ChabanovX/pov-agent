@@ -1,6 +1,7 @@
 #include "llama_bridge.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <mutex>
@@ -33,6 +34,19 @@ namespace {
 
 constexpr std::size_t kMaxCapturedLogBytes = 16384;
 constexpr std::size_t kMaxFailureLogBytes = 1536;
+
+void configure_ios_metal_capabilities() {
+#if defined(TARGET_OS_IOS) && TARGET_OS_IOS
+  static std::once_flag configure_once;
+  std::call_once(configure_once, []() {
+    // The bundled Metal 2.3 library cannot contain llama.cpp's BF16 or tensor
+    // kernels, which require newer language revisions. Do not advertise
+    // runtime capabilities that the precompiled library cannot provide.
+    setenv("GGML_METAL_BF16_DISABLE", "1", 0);
+    setenv("GGML_METAL_TENSOR_DISABLE", "1", 0);
+  });
+#endif
+}
 
 struct llama_log_dispatcher {
   std::mutex capture_mutex;
@@ -393,6 +407,7 @@ pov_llama_runtime* pov_llama_create_impl(
     }
 
     scoped_llama_log_capture native_log;
+    configure_ios_metal_capabilities();
     llama_backend_init();
     backend_initialized = true;
     runtime = new (std::nothrow) pov_llama_runtime();
