@@ -251,6 +251,7 @@ void main() {
         var automaticWasActive = false;
         Stopwatch? automaticWatch;
         Duration? automaticFirstDraft;
+        var latestAutomaticDraft = '';
         var slowestComment = Duration.zero;
         var observedStreaming = false;
         var automaticFailureVisible = false;
@@ -262,10 +263,12 @@ void main() {
           if (nowAutomatic && !automaticWasActive) {
             automaticWatch = Stopwatch()..start();
             automaticFirstDraft = null;
+            latestAutomaticDraft = '';
           }
           if (nowAutomatic && state.automaticDraft.isNotEmpty) {
             observedStreaming = true;
             automaticFirstDraft ??= automaticWatch?.elapsed;
+            latestAutomaticDraft = state.automaticDraft;
           }
           final automaticFailure = state.automaticFailure;
           if (automaticFailure != null && !automaticFailureVisible) {
@@ -274,7 +277,9 @@ void main() {
               'OBSERVER_ACCEPTANCE stage=automatic_failure '
               'code=${automaticFailure.code} '
               'message=${automaticFailure.message ?? 'none'} '
-              'cause=${automaticFailure.cause ?? 'none'}',
+              'cause=${automaticFailure.cause ?? 'none'} '
+              'latency_ms=${automaticWatch?.elapsedMilliseconds ?? -1} '
+              'draft=${_singleLine(latestAutomaticDraft)}',
             );
           }
           automaticFailureVisible = automaticFailure != null;
@@ -298,6 +303,7 @@ void main() {
             }
             automaticWatch = null;
             automaticFirstDraft = null;
+            latestAutomaticDraft = '';
           }
           automaticWasActive = nowAutomatic;
         });
