@@ -33,21 +33,25 @@ LLAMA_OPENSSL=OFF
 GGML_BACKEND_DL=OFF
 GGML_NATIVE=OFF
 GGML_OPENMP=OFF
-GGML_ACCELERATE=ON
 GGML_BLAS=OFF
-GGML_METAL=ON
-GGML_METAL_EMBED_LIBRARY=ON
-GGML_METAL_NDEBUG=ON
 ```
 
-iOS builds set `CMAKE_SYSTEM_NAME=iOS`, the selected device or Simulator SDK
-and architecture, and Flutter's deployment target (iOS 13 for the app). The
-bridge links Apple Accelerate, Foundation, Metal, and MetalKit. Physical iOS
-devices on iOS 15 and newer request Metal offload and retry on CPU if
-model/context creation fails; iOS 13 and 14 use CPU directly because the pinned
-Metal backend calls an iOS 15 API. The Simulator intentionally uses CPU
-inference because Simulator Metal does not represent physical-device memory or
-scheduling.
+iOS builds additionally enable `GGML_ACCELERATE`, `GGML_METAL`, embedded Metal
+shaders, and `GGML_METAL_NDEBUG`. They set `CMAKE_SYSTEM_NAME=iOS`, the selected
+device or Simulator SDK and architecture, and Flutter's deployment target (iOS
+13 for the app). The bridge links Apple Accelerate, Foundation, Metal, and
+MetalKit. Physical iOS devices on iOS 15 and newer request Metal offload and
+retry on CPU if model/context creation fails; iOS 13 and 14 use CPU directly
+because the pinned Metal backend calls an iOS 15 API. The Simulator
+intentionally uses CPU inference because Simulator Metal does not represent
+physical-device memory or scheduling.
+
+Android builds disable Accelerate, Metal, and llamafile and compile a portable
+CPU backend through NDK `28.2.13676358`. The hook selects the ABI and minimum
+API from Flutter's code-asset target, links the C++ runtime statically, and emits
+one bundled `libpov_llama.so`. GPU layers are forced to zero before model load,
+so Android does not perform a redundant failed load for a backend absent from
+the artifact.
 
 `LLAMA_BUILD_MTMD=OFF` is intentional for this text-only milestone. A later
 visual adapter may extend the same project-owned bridge with the pinned

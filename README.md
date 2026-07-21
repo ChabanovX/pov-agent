@@ -38,8 +38,8 @@ be persisted between launches.
 - Front and rear camera switching, explicit camera enable/disable controls, and
   foreground lifecycle handling.
 - Recoverable permission, model-loading, and inference failure states.
-- Deterministic recorded-video input for testing the real iOS decoder and YOLO
-  boundary without camera hardware.
+- Deterministic recorded-video input for testing the real iOS and Android
+  decoders and YOLO boundary without camera hardware.
 - Session-scoped object tracking that suppresses isolated YOLO misses and emits
   only stable object appearance, movement, and disappearance.
 - A manual Assistant conversation backed by Qwen3-0.6B Q4_K_M through the
@@ -85,12 +85,14 @@ The detailed acceptance criteria and model choices live in
 
 ## Platform scope
 
-The current MVP target is iOS, with an iPhone 11 as the baseline physical
-device. Live camera mode requires physical camera hardware. The recorded-video
-acceptance path runs on an iOS Simulator.
+The current foreground MVP supports iOS 13+ and Android API 24+. The iPhone 11
+remains the baseline physical iOS device; Android is validated on a 64-bit ARM
+Android 16 emulator. Live mode uses the device camera or an emulator-provided
+virtual camera. Recorded-video acceptance runs on both iOS Simulator and
+Android Emulator without camera hardware.
 
-Android parity, background observation, persistent memory, and barge-in are not
-part of the current MVP.
+Background observation, persistent memory, and barge-in are not part of the
+current MVP.
 
 ## Getting started
 
@@ -103,9 +105,12 @@ git submodule update --init --recursive
 cp .env.example .env
 ```
 
-The first iOS build compiles the pinned llama.cpp submodule locally through the
-Dart build hook. It does not download native sources or binaries. CMake, Ninja,
-and an Xcode toolchain with the selected iOS SDK must be available.
+The first build compiles the pinned llama.cpp submodule locally through the
+Dart build hook. It does not download native sources or binaries. Both
+platforms require CMake and Ninja. iOS additionally requires Xcode; Android
+requires Java 17, the Android SDK, and NDK `28.2.13676358` below
+`ANDROID_HOME` or `ANDROID_SDK_ROOT` (an explicit `ANDROID_NDK*` path is also
+accepted).
 
 All Qwen artifact, context, sampling, and decoding policy is compile-time
 configuration. Run the app with the checked example values (or a reviewed
@@ -124,10 +129,14 @@ Later launches can use the verified cache without network access.
 The iOS Simulator uses CPU inference intentionally. On iOS 15 and newer, a
 physical iPhone requests Metal offload and falls back to CPU if native
 model/context creation fails; iOS 13 and 14 use the CPU runtime directly.
+Android packages a portable CPU llama.cpp backend. YOLO independently requests
+the Android LiteRT GPU accelerator and falls back to CPU when the target cannot
+compile the model for its GPU.
 
 ### Live camera
 
-List the available devices and run on physical hardware:
+List the available devices and run on physical hardware or an Android emulator
+with a virtual camera:
 
 ```sh
 flutter devices
@@ -140,14 +149,14 @@ Recorded mode replaces the camera with the bundled `pedestrians.mp4` fixture:
 
 ```sh
 # Set USE_RECORDED_VIDEO=true in .env.
-flutter run -d <simulator-id> --dart-define-from-file=.env
+flutter run -d <device-id> --dart-define-from-file=.env
 ```
 
-The iOS implementation reads the MP4 with `AVAssetReader`, encodes each selected
-frame as JPEG, and passes it through the same single-image `YOLO.predict`
-boundary covered by the repository tests. The decoder is pull-based: slow
-inference skips timing opportunities instead of building an unbounded frame
-queue.
+iOS reads the MP4 with `AVAssetReader`; Android uses
+`MediaMetadataRetriever`. Each implementation encodes the selected frame as
+JPEG and passes it through the same single-image `YOLO.predict` boundary covered
+by the repository tests. The decoder is pull-based: slow inference skips timing
+opportunities instead of building an unbounded frame queue.
 
 Set `USE_RECORDED_VIDEO=false`, or omit the define, to restore live camera
 input.
@@ -183,6 +192,20 @@ both native decoding and the full MP4-to-YOLO application journey:
 flutter devices
 tool/verify_recorded_ios.sh <simulator-id>
 ```
+
+The Android lane requires a booted Android device or emulator. It verifies the
+real storage and video channels, bundled LiteRT model and cached reopen,
+recorded application flow, native Qwen download/verification/streaming/
+cancellation/lifecycle/offline restart, and live camera controls:
+
+```sh
+tool/verify_android.sh <android-device-id>
+```
+
+The checked Android emulator baseline is the stable Android 16 / API 36 ARM64
+system image. The API 36.1 preview image is unsuitable for native-ML acceptance
+on the tested Apple Silicon host because it advertises ARM SME instructions
+that its emulator cannot execute.
 
 Live camera behavior must additionally be exercised on physical hardware.
 
@@ -224,8 +247,9 @@ per-minute resident-memory samples and final growth limits.
 - Camera and model runtimes are scoped to foreground use. The verified GGUF is
   cached, while prompts, generated answers, and reasoning remain session-only.
 - The current codebase contains no microphone or cloud-LLM transport.
-- The pinned YOLO model is bundled for the deterministic iOS path; the runtime
-  may use its download-and-cache fallback when a required model is unavailable.
+- The pinned Core ML and LiteRT YOLO models are bundled for deterministic iOS
+  and Android startup; the plugin retains its download-and-cache fallback for
+  other supported model IDs.
 
 Future agent milestones preserve this local and session-scoped data contract.
 
@@ -233,7 +257,8 @@ Future agent milestones preserve this local and session-scoped data contract.
 
 The bundled YOLO model and recorded fixture retain their upstream terms:
 
-- [`yolo26n.mlpackage.zip`](assets/models/README.md) is distributed by
+- [`yolo26n.mlpackage.zip`](assets/models/README.md) and
+  [`yolo26n_w8a32.tflite`](assets/models/README.md) are distributed by
   Ultralytics under its applicable AGPL-3.0 terms.
 - [`pedestrians.mp4`](assets/video/README.md) is derived from an OpenCV fixture
   distributed under Apache-2.0.
