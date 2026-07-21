@@ -6,8 +6,8 @@ as context.
 
 > **Project status:** early prototype. Live and recorded camera input,
 > on-device YOLO detection, stable scene tracking, and manual conversation with
-> a local Qwen model work today. Automatic scene observation also works;
-> speech recognition and spoken responses remain on the roadmap.
+> a local Qwen model work today. Automatic scene observation and system-spoken
+> observer comments also work; speech recognition remains on the roadmap.
 
 <p align="center">
   <img
@@ -49,10 +49,13 @@ be persisted between launches.
 - A foreground automatic observer that samples the latest stable scene every
   10 seconds by default, streams local Qwen comments, retains session-only
   context, and supports 10/30/60/120/300-second cadences.
+- Foreground system speech for completed automatic comments, with mute, stop,
+  replay, lifecycle cancellation, and stale-utterance suppression.
 - Unit, widget, and repository-boundary tests enforced by the checked-in
   Flutter Agentic Harness, plus explicit device integration lanes.
 
-The repository does not yet capture microphone audio or synthesize speech.
+The repository does not yet capture microphone audio. System speech is limited
+to completed automatic observer comments; manual answers are text-only.
 
 ## Target interaction
 
@@ -64,8 +67,8 @@ flowchart LR
     Scene --> LLM["Automatic scene prompt<br/>working"]
     UserText --> LLM["Local Qwen language model<br/>working"]
     ASR -.-> LLM
-    LLM -.-> TTS["On-device speech<br/>planned"]
-    TTS -.-> Speaker
+    LLM --> TTS["System text-to-speech<br/>working"]
+    TTS --> Speaker
 ```
 
 Solid arrows represent the current implementation. Dashed arrows represent the
@@ -77,7 +80,8 @@ planned local agent loop.
 - [x] Stable scene state derived from noisy detections.
 - [x] Local Qwen language model and manual text conversation.
 - [x] Periodic scene-aware observations.
-- [ ] System text-to-speech, followed by local Piper speech.
+- [x] System text-to-speech for automatic observer comments.
+- [ ] Local Piper speech independent of an installed system voice.
 - [ ] Wake phrase and local streaming speech recognition.
 - [ ] End-to-end hands-free question and answer flow.
 - [ ] Long-running device, memory, and thermal validation.
@@ -110,9 +114,10 @@ cp .env.example .env
 The first build compiles the pinned llama.cpp submodule locally through the
 Dart build hook. It does not download native sources or binaries. Both
 platforms require CMake and Ninja. iOS additionally requires Xcode with the
-selected iOS SDK and the separate Metal Toolchain component; Android requires
-Java 17, the Android SDK, and NDK `28.2.13676358` below `ANDROID_HOME` or
-`ANDROID_SDK_ROOT` (an explicit `ANDROID_NDK*` path is also accepted).
+selected iOS SDK, CocoaPods for the pinned `flutter_tts` bridge, and the
+separate Metal Toolchain component; Android requires Java 17, the Android SDK,
+and NDK `28.2.13676358` below `ANDROID_HOME` or `ANDROID_SDK_ROOT` (an explicit
+`ANDROID_NDK*` path is also accepted).
 
 Install the Metal Toolchain once before building the iOS app, then verify that
 both shader tools are discoverable:
@@ -123,9 +128,9 @@ xcrun --find metal
 xcrun --find metallib
 ```
 
-All Qwen artifact, context, sampling, and decoding policy is compile-time
-configuration. Run the app with the checked example values (or a reviewed
-copy):
+All Qwen artifact, context, sampling, decoding, and preferred system-speech
+locale policy is compile-time configuration. Run the app with the checked
+example values (or a reviewed copy):
 
 ```sh
 flutter run -d <device-id> --dart-define-from-file=.env
@@ -214,10 +219,10 @@ cancellation/lifecycle/offline restart, and live camera controls:
 tool/verify_android.sh <android-device-id>
 ```
 
-The checked Android emulator baseline is the stable Android 16 / API 36 ARM64
-system image. The API 36.1 preview image is unsuitable for native-ML acceptance
-on the tested Apple Silicon host because it advertises ARM SME instructions
-that its emulator cannot execute.
+The checked Android emulator baseline is the stable Android 16 image
+`system-images;android-36;google_apis_playstore;arm64-v8a`. The API 36.1 preview
+image is unsuitable for native-ML acceptance on the tested Apple Silicon host
+because it advertises ARM SME instructions that its emulator cannot execute.
 
 Live camera behavior must additionally be exercised on physical hardware.
 
@@ -238,6 +243,18 @@ streaming, repeated non-overlapping comments, and stop/cancel behavior:
 
 ```sh
 tool/verify_observer_ios.sh <simulator-id>
+```
+
+Milestone 5 adds a focused native system-speech lane. It requires native
+start/progress/completion callbacks, proves stop and replay settle without a
+stale queue, and resolves the configured English locale to an installed system
+voice. Speech mixes with existing audio instead of acquiring plugin-managed
+focus, preventing native error or stop paths from leaving other audio paused or
+ducked. Android runs the same target as part of its combined verification lane:
+
+```sh
+tool/verify_speech_ios.sh <simulator-id>
+tool/verify_android.sh <android-device-id>
 ```
 
 This lane is skipped by the normal test suite so routine verification never
