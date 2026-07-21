@@ -26,6 +26,12 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Camera access is required to preview and analyze images.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- just_audio exposes in-memory StreamAudioSource bytes on loopback. -->
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
