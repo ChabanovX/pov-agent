@@ -236,7 +236,11 @@ session while still requiring Metal-backed Qwen generation. Camera control
 acceptance remains available independently in
 [`camera_hardware_test.dart`](integration_test/camera_hardware_test.dart) so
 this lane does not preload and unload the eager Qwen runtime in a redundant
-app invocation immediately before the live Observer check:
+app invocation immediately before the live Observer check. The device lane
+uses Flutter Profile mode so its ten-second latency contract measures
+production-like execution rather than Debug runtime overhead. The lane also
+disables the Dart sampling profiler so the acceptance load is the app's own
+camera and inference work:
 
 ```sh
 tool/verify_observer_device_ios.sh <physical-device-id>

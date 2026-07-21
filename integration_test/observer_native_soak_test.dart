@@ -250,6 +250,7 @@ void main() {
 
         var automaticWasActive = false;
         Stopwatch? automaticWatch;
+        Duration? automaticFirstDraft;
         var slowestComment = Duration.zero;
         var observedStreaming = false;
         var automaticFailureVisible = false;
@@ -260,9 +261,11 @@ void main() {
           final nowAutomatic = state.activeGeneration == ObserverGenerationKind.automatic;
           if (nowAutomatic && !automaticWasActive) {
             automaticWatch = Stopwatch()..start();
+            automaticFirstDraft = null;
           }
           if (nowAutomatic && state.automaticDraft.isNotEmpty) {
             observedStreaming = true;
+            automaticFirstDraft ??= automaticWatch?.elapsed;
           }
           final automaticFailure = state.automaticFailure;
           if (automaticFailure != null && !automaticFailureVisible) {
@@ -276,13 +279,25 @@ void main() {
           }
           automaticFailureVisible = automaticFailure != null;
           if (state.comments.length > previousCommentCount) {
-            automaticWatch?.stop();
-            if (automaticWatch case final watch?) {
-              if (watch.elapsed > slowestComment) slowestComment = watch.elapsed;
-            }
-            automaticWatch = null;
             completedDuringSoak += state.comments.length - previousCommentCount;
             previousCommentCount = state.comments.length;
+            automaticWatch?.stop();
+            if (automaticWatch case final watch?) {
+              if (watch.elapsed > slowestComment) {
+                slowestComment = watch.elapsed;
+                final text = state.comments.last.text.trim();
+                final wordCount = text.isEmpty ? 0 : text.split(RegExp(r'\s+')).length;
+                tester.printToConsole(
+                  'OBSERVER_ACCEPTANCE stage=slowest_comment '
+                  'comment=$completedDuringSoak '
+                  'latency_ms=${slowestComment.inMilliseconds} '
+                  'first_draft_ms=${automaticFirstDraft?.inMilliseconds ?? -1} '
+                  'words=$wordCount text=${_singleLine(text)}',
+                );
+              }
+            }
+            automaticWatch = null;
+            automaticFirstDraft = null;
           }
           automaticWasActive = nowAutomatic;
         });

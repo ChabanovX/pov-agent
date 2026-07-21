@@ -60,7 +60,11 @@ fi
 
 verify_metal_toolchain
 
-flutter test integration_test/observer_native_soak_test.dart \
+flutter drive \
+  --profile \
+  --no-enable-dart-profiling \
+  --driver=test_driver/integration_test.dart \
+  --target=integration_test/observer_native_soak_test.dart \
   -d "$device_id" \
   --dart-define-from-file=.env.example \
   --dart-define=QWEN_RANDOM_SEED=42 \
@@ -69,7 +73,11 @@ flutter test integration_test/observer_native_soak_test.dart \
 
 verify_precompiled_metallib
 
-flutter test integration_test/observer_native_soak_test.dart \
+flutter drive \
+  --profile \
+  --no-enable-dart-profiling \
+  --driver=test_driver/integration_test.dart \
+  --target=integration_test/observer_native_soak_test.dart \
   -d "$device_id" \
   --dart-define-from-file=.env.example \
   --dart-define=QWEN_RANDOM_SEED=42 \
