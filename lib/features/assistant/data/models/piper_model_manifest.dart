@@ -1,5 +1,7 @@
+import 'package:pov_agent/features/assistant/data/models/verified_archive_model_manifest.dart';
+
 /// Immutable acquisition and integrity metadata for one Piper voice bundle.
-final class PiperModelManifest {
+final class PiperModelManifest implements VerifiedArchiveModelManifest {
   /// Creates and validates an injectable Piper bundle manifest.
   factory PiperModelManifest({
     required String modelId,
@@ -19,79 +21,94 @@ final class PiperModelManifest {
     required String license,
     required int downloadReserveBytes,
   }) {
-    final uri = Uri.tryParse(downloadUrl);
-    if (uri == null || !uri.hasAuthority || (uri.scheme != 'https' && uri.scheme != 'http')) {
-      throw ArgumentError.value(
-        downloadUrl,
-        'downloadUrl',
-        'The Piper URL must be an absolute HTTP or HTTPS URL.',
-      );
-    }
-    _requireNonEmpty(modelId, 'modelId', 'The Piper model ID');
-    _requireNonEmpty(revision, 'revision', 'The Piper revision');
-    _requirePathComponent(
+    final uri = VerifiedArchiveManifestValidation.networkUri(
+      downloadUrl,
+      name: 'downloadUrl',
+      label: 'The Piper URL',
+    );
+    VerifiedArchiveManifestValidation.nonEmpty(
+      modelId,
+      name: 'modelId',
+      label: 'The Piper model ID',
+    );
+    VerifiedArchiveManifestValidation.nonEmpty(
+      revision,
+      name: 'revision',
+      label: 'The Piper revision',
+    );
+    VerifiedArchiveManifestValidation.pathComponent(
       archiveFilename,
-      'archiveFilename',
-      'The Piper archive filename',
+      name: 'archiveFilename',
+      label: 'The Piper archive filename',
     );
-    _requirePositive(archiveByteSize, 'archiveByteSize', 'archive byte size');
-    _requireSha256(archiveSha256, 'archiveSha256', 'archive SHA-256');
-    _requirePositive(
+    VerifiedArchiveManifestValidation.positive(
+      archiveByteSize,
+      name: 'archiveByteSize',
+      label: 'The Piper archive byte size',
+    );
+    VerifiedArchiveManifestValidation.sha256(
+      archiveSha256,
+      name: 'archiveSha256',
+      label: 'The Piper archive SHA-256',
+    );
+    VerifiedArchiveManifestValidation.positive(
       expandedArchiveByteSize,
-      'expandedArchiveByteSize',
-      'expanded archive byte size',
+      name: 'expandedArchiveByteSize',
+      label: 'The Piper expanded archive byte size',
     );
-    _requirePositive(
+    VerifiedArchiveManifestValidation.positive(
       extractedByteSize,
-      'extractedByteSize',
-      'extracted byte size',
+      name: 'extractedByteSize',
+      label: 'The Piper extracted byte size',
     );
-    _requirePositive(
+    VerifiedArchiveManifestValidation.positive(
       extractedFileCount,
-      'extractedFileCount',
-      'extracted file count',
+      name: 'extractedFileCount',
+      label: 'The Piper extracted file count',
     );
-    _requireSha256(
+    VerifiedArchiveManifestValidation.sha256(
       bundleTreeSha256,
-      'bundleTreeSha256',
-      'bundle tree SHA-256',
+      name: 'bundleTreeSha256',
+      label: 'The Piper bundle tree SHA-256',
     );
-    _requirePathComponent(
+    VerifiedArchiveManifestValidation.pathComponent(
       archiveRoot,
-      'archiveRoot',
-      'The Piper archive root',
+      name: 'archiveRoot',
+      label: 'The Piper archive root',
     );
-    _requirePathComponent(
+    VerifiedArchiveManifestValidation.pathComponent(
       modelFilename,
-      'modelFilename',
-      'The Piper model filename',
+      name: 'modelFilename',
+      label: 'The Piper model filename',
     );
-    _requirePathComponent(
+    VerifiedArchiveManifestValidation.pathComponent(
       tokensFilename,
-      'tokensFilename',
-      'The Piper tokens filename',
+      name: 'tokensFilename',
+      label: 'The Piper tokens filename',
     );
-    _requirePathComponent(
+    VerifiedArchiveManifestValidation.pathComponent(
       espeakDataDirectory,
-      'espeakDataDirectory',
-      'The Piper eSpeak data directory',
+      name: 'espeakDataDirectory',
+      label: 'The Piper eSpeak data directory',
     );
-    _requireDistinctPathComponents(
+    VerifiedArchiveManifestValidation.distinctPathComponents(
       [archiveFilename, archiveRoot],
-      'The Piper archive filename and extracted root',
+      label: 'The Piper archive filename and extracted root',
     );
-    _requireDistinctPathComponents(
+    VerifiedArchiveManifestValidation.distinctPathComponents(
       [modelFilename, tokensFilename, espeakDataDirectory],
-      'The Piper model, tokens, and eSpeak entries',
+      label: 'The Piper model, tokens, and eSpeak entries',
     );
-    _requireNonEmpty(license, 'license', 'The Piper model license');
-    if (downloadReserveBytes < 0) {
-      throw ArgumentError.value(
-        downloadReserveBytes,
-        'downloadReserveBytes',
-        'The Piper download reserve must not be negative.',
-      );
-    }
+    VerifiedArchiveManifestValidation.nonEmpty(
+      license,
+      name: 'license',
+      label: 'The Piper model license',
+    );
+    VerifiedArchiveManifestValidation.nonNegative(
+      downloadReserveBytes,
+      name: 'downloadReserveBytes',
+      label: 'The Piper download reserve',
+    );
 
     return PiperModelManifest._(
       modelId: modelId,
@@ -133,36 +150,47 @@ final class PiperModelManifest {
   });
 
   /// Stable upstream voice identifier.
+  @override
   final String modelId;
 
   /// URL of the compressed, checksum-pinned voice archive.
+  @override
   final Uri downloadUri;
 
   /// Exact upstream release or revision containing the archive.
+  @override
   final String revision;
 
   /// Filename used for the archive download cache.
+  @override
   final String archiveFilename;
 
   /// Exact expected compressed archive length.
+  @override
   final int archiveByteSize;
 
   /// Lowercase SHA-256 digest of the compressed archive.
+  @override
   final String archiveSha256;
 
   /// Exact tar byte length while the bzip2 archive is expanded for extraction.
+  @override
   final int expandedArchiveByteSize;
 
   /// Exact sum of regular-file bytes in the extracted bundle.
+  @override
   final int extractedByteSize;
 
   /// Exact number of regular files in the extracted bundle.
+  @override
   final int extractedFileCount;
 
   /// Lowercase SHA-256 of the canonical extracted bundle tree.
+  @override
   final String bundleTreeSha256;
 
   /// Single root directory expected inside the archive.
+  @override
   final String archiveRoot;
 
   /// ONNX graph filename relative to [archiveRoot].
@@ -175,46 +203,10 @@ final class PiperModelManifest {
   final String espeakDataDirectory;
 
   /// License identifier recorded for the selected voice.
+  @override
   final String license;
 
   /// Free bytes retained beyond archive and extracted bundle storage.
+  @override
   final int downloadReserveBytes;
-}
-
-void _requireNonEmpty(String value, String name, String label) {
-  if (value.trim().isEmpty) {
-    throw ArgumentError.value(value, name, '$label must not be empty.');
-  }
-}
-
-void _requirePathComponent(String value, String name, String label) {
-  if (value.trim().isEmpty || value == '.' || value == '..' || value.contains('/') || value.contains(r'\')) {
-    throw ArgumentError.value(
-      value,
-      name,
-      '$label must be one non-empty path component.',
-    );
-  }
-}
-
-void _requirePositive(int value, String name, String label) {
-  if (value <= 0) {
-    throw ArgumentError.value(value, name, 'The Piper $label must be positive.');
-  }
-}
-
-void _requireSha256(String value, String name, String label) {
-  if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(value)) {
-    throw ArgumentError.value(
-      value,
-      name,
-      'The Piper $label must contain 64 lowercase hexadecimal characters.',
-    );
-  }
-}
-
-void _requireDistinctPathComponents(List<String> values, String label) {
-  if (values.map((value) => value.toLowerCase()).toSet().length != values.length) {
-    throw ArgumentError('$label must use distinct cache paths.');
-  }
 }
