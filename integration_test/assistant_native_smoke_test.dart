@@ -251,9 +251,7 @@ void main() {
 String _failureDescription(Object? failure) {
   if (failure is! AppFailure) return 'unknown';
   final message = failure.message;
-  return message == null || message.isEmpty
-      ? failure.code
-      : '${failure.code}: $message';
+  return message == null || message.isEmpty ? failure.code : '${failure.code}: $message';
 }
 
 Future<void> _pumpUntilFound<CandidateType>(
