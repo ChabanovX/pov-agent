@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pov_agent/app/app.dart';
@@ -7,138 +9,193 @@ import 'support/fake_camera_controller.dart';
 import 'support/test_app_dependencies.dart';
 
 void main() {
-  testWidgets('keeps camera observation active behind the Assistant tab', (
+  testWidgets('renders the verified two-destination application shell', (
     tester,
   ) async {
-    final controller = FakeCameraController();
-    final runtime = await startTestAppRuntime(controller);
+    _useIPhone15Viewport(tester);
+    final dependencies = await createTestAppRuntime(
+      FakeCameraController(),
+      modelPackComplete: true,
+    );
     try {
       await tester.pumpWidget(
-        const PovAgentApp(
+        PovAgentApp(
+          runtime: dependencies.runtime,
+          modelPackController: dependencies.modelPackController,
           observationSurfaceBuilder: buildTestObservationSurface,
         ),
       );
-      await tester.pumpAndSettle();
+      await _pumpUntil(
+        tester,
+        () => dependencies.runtime.observerBloc.state.started,
+      );
 
       expect(find.byType(CupertinoApp), findsOneWidget);
       expect(tester.widget<Title>(find.byType(Title)).title, 'POV Agent');
-      expect(find.byKey(testObservationSurfaceKey), findsOneWidget);
-      expect(find.byKey(assistantPromptFieldKey), findsNothing);
-      expect(controller.enableCalls, hasLength(1));
       expect(
-        tester.widget<CupertinoTabBar>(find.byType(CupertinoTabBar)).currentIndex,
-        0,
+        tester.widget<CupertinoTabBar>(find.byType(CupertinoTabBar)).items.map((item) => item.label),
+        ['Assistant', 'Settings'],
       );
-
-      await tester.tap(find.text('Assistant'));
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(testObservationSurfaceKey), findsNothing);
       expect(find.byKey(assistantPromptFieldKey), findsOneWidget);
-      expect(controller.disableCalls, 0);
-      expect(
-        tester.widget<CupertinoTabBar>(find.byType(CupertinoTabBar)).currentIndex,
-        1,
-      );
+      expect(find.text('Let Assistant see the scene'), findsOneWidget);
+      expect(find.byKey(testObservationSurfaceKey), findsNothing);
+      expect(dependencies.cameraController.enableCalls, isEmpty);
 
-      await tester.tap(find.text('Camera'));
-      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue'));
+      await _pumpUntil(
+        tester,
+        () => dependencies.cameraController.enableCalls.length == 1,
+      );
 
       expect(find.byKey(testObservationSurfaceKey), findsOneWidget);
-      expect(controller.enableCalls, hasLength(1));
-
-      tester.binding.handleAppLifecycleStateChanged(
-        AppLifecycleState.inactive,
-      );
-      tester.binding.handleAppLifecycleStateChanged(
-        AppLifecycleState.hidden,
-      );
-      tester.binding.handleAppLifecycleStateChanged(
-        AppLifecycleState.paused,
-      );
-      await _pumpUntil(tester, () => controller.disableCalls == 1);
-      expect(controller.disableCalls, 1);
-
-      tester.binding.handleAppLifecycleStateChanged(
-        AppLifecycleState.hidden,
-      );
-      tester.binding.handleAppLifecycleStateChanged(
-        AppLifecycleState.inactive,
-      );
-      tester.binding.handleAppLifecycleStateChanged(
-        AppLifecycleState.resumed,
-      );
-      await _pumpUntil(tester, () => controller.enableCalls.length == 2);
-      expect(controller.enableCalls, hasLength(2));
+      expect(dependencies.cameraController.initCalls, 1);
     } finally {
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-      await tester.runAsync(() => disposeTestAppRuntime(runtime));
+      await _disposeDependencies(tester, dependencies);
     }
   });
 
-  testWidgets('keeps a manual camera disable across tab switches', (
+  testWidgets('keeps an explicit camera pause across destination switches', (
     tester,
   ) async {
-    final controller = FakeCameraController();
-    final runtime = await startTestAppRuntime(controller);
+    _useIPhone15Viewport(tester);
+    final dependencies = await createTestAppRuntime(
+      FakeCameraController(),
+      modelPackComplete: true,
+    );
     try {
       await tester.pumpWidget(
-        const PovAgentApp(
+        PovAgentApp(
+          runtime: dependencies.runtime,
+          modelPackController: dependencies.modelPackController,
           observationSurfaceBuilder: buildTestObservationSurface,
         ),
       );
-      await tester.pumpAndSettle();
+      await _pumpUntil(
+        tester,
+        () => dependencies.runtime.observerBloc.state.started,
+      );
+      await tester.tap(find.text('Continue'));
+      await _pumpUntil(
+        tester,
+        () => dependencies.cameraController.enableCalls.length == 1,
+      );
 
       await tester.tap(find.bySemanticsLabel('Disable camera'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Assistant'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Camera'));
-      await tester.pumpAndSettle();
+      await _pumpUntil(
+        tester,
+        () => !dependencies.runtime.cameraBloc.state.requestedEnabled,
+      );
+      await tester.tap(_tabLabel('Settings'));
+      await _pumpUntil(
+        tester,
+        () => !dependencies.runtime.observerBloc.state.foregroundActive,
+      );
+      await tester.tap(_tabLabel('Assistant'));
+      await _pumpUntil(
+        tester,
+        () => dependencies.runtime.observerBloc.state.foregroundActive,
+      );
 
-      expect(find.text('Camera is off.'), findsOneWidget);
-      expect(controller.enableCalls, hasLength(1));
+      expect(find.byKey(testObservationSurfaceKey), findsNothing);
+      expect(find.text('Paused'), findsWidgets);
+      expect(dependencies.cameraController.enableCalls, hasLength(1));
     } finally {
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-      await tester.runAsync(() => disposeTestAppRuntime(runtime));
+      await _disposeDependencies(tester, dependencies);
     }
   });
 
-  testWidgets('router recreation reuses the app-owned camera session', (
+  testWidgets('covers scene content and releases resources in background', (
     tester,
   ) async {
-    final controller = FakeCameraController();
-    final runtime = await startTestAppRuntime(controller);
+    _useIPhone15Viewport(tester);
+    final dependencies = await createTestAppRuntime(
+      FakeCameraController(),
+      modelPackComplete: true,
+    );
     try {
       await tester.pumpWidget(
-        const PovAgentApp(
+        PovAgentApp(
+          runtime: dependencies.runtime,
+          modelPackController: dependencies.modelPackController,
           observationSurfaceBuilder: buildTestObservationSurface,
         ),
       );
-      await tester.pumpAndSettle();
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-
-      expect(controller.closeCalls, 0);
-
-      await tester.pumpWidget(
-        const PovAgentApp(
-          observationSurfaceBuilder: buildTestObservationSurface,
-        ),
+      await _pumpUntil(
+        tester,
+        () => dependencies.runtime.observerBloc.state.started,
       );
-      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue'));
+      await _pumpUntil(
+        tester,
+        () => dependencies.cameraController.enableCalls.length == 1,
+      );
 
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await _pumpUntil(
+        tester,
+        () => dependencies.cameraController.disableCalls == 1,
+      );
+
+      expect(
+        find.byKey(const ValueKey('app-privacy-cover')),
+        findsOneWidget,
+      );
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await _pumpUntil(
+        tester,
+        () => dependencies.cameraController.enableCalls.length == 2,
+      );
+
+      expect(find.byKey(const ValueKey('app-privacy-cover')), findsNothing);
       expect(find.byKey(testObservationSurfaceKey), findsOneWidget);
-      expect(controller.initCalls, 1);
-      expect(controller.closeCalls, 0);
     } finally {
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-      await tester.runAsync(() => disposeTestAppRuntime(runtime));
+      await _disposeDependencies(tester, dependencies);
     }
   });
+}
+
+Finder _tabLabel(String label) {
+  return find.descendant(
+    of: find.byType(CupertinoTabBar),
+    matching: find.text(label),
+  );
+}
+
+void _useIPhone15Viewport(WidgetTester tester) {
+  tester.view
+    ..physicalSize = const Size(393, 852)
+    ..devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+}
+
+Future<void> _disposeDependencies(
+  WidgetTester tester,
+  TestAppRuntime dependencies,
+) async {
+  await tester.pumpWidget(const SizedBox.shrink());
+  final closeTask = disposeTestAppRuntime(dependencies);
+  var settled = false;
+  Object? failure;
+  StackTrace? failureStackTrace;
+  unawaited(
+    closeTask.then<void>(
+      (_) => settled = true,
+      onError: (Object error, StackTrace stackTrace) {
+        failure = error;
+        failureStackTrace = stackTrace;
+        settled = true;
+      },
+    ),
+  );
+  await _pumpUntil(tester, () => settled);
+  if (failure case final error?) {
+    Error.throwWithStackTrace(error, failureStackTrace!);
+  }
 }
 
 Future<void> _pumpUntil(
@@ -150,5 +207,5 @@ Future<void> _pumpUntil(
     await tester.runAsync(() => Future<void>.delayed(Duration.zero));
     if (predicate()) return;
   }
-  throw TestFailure('Expected lifecycle operation to settle.');
+  throw TestFailure('Expected application operation to settle.');
 }

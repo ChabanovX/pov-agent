@@ -4,6 +4,167 @@
   "@appTitle": {
     "description": "Application title used by the operating system."
   },
+  "modelSetupTitle": "Set up your on-device AI",
+  "@modelSetupTitle": {
+    "description": "Large title on the mandatory model setup root screen."
+  },
+  "modelSetupDescription": "Download the required models once. After setup, the assistant works offline.",
+  "@modelSetupDescription": {
+    "description": "Introductory copy explaining the one-time offline model setup."
+  },
+  "modelSetupPrivacyMessage": "Camera, audio, and conversations are not saved or uploaded.",
+  "@modelSetupPrivacyMessage": {
+    "description": "Privacy assurance shown at the bottom of model setup."
+  },
+  "modelSetupAssistantModelLabel": "Assistant",
+  "@modelSetupAssistantModelLabel": {
+    "description": "Friendly setup-row label for the local language model."
+  },
+  "modelSetupVisionModelLabel": "Vision",
+  "@modelSetupVisionModelLabel": {
+    "description": "Friendly setup-row label for the local object detector."
+  },
+  "modelSetupVoiceModelLabel": "Voice",
+  "@modelSetupVoiceModelLabel": {
+    "description": "Friendly setup-row label for the local speech synthesizer."
+  },
+  "modelSetupListeningModelLabel": "Listening",
+  "@modelSetupListeningModelLabel": {
+    "description": "Friendly setup-row label for local speech recognition."
+  },
+  "modelSetupModelAccessibilityLabel": "{title}. {technicalName}. {status}",
+  "@modelSetupModelAccessibilityLabel": {
+    "description": "VoiceOver summary for one model setup row.",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      },
+      "technicalName": {
+        "type": "String"
+      },
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "modelSetupDownloadSummary": "{downloadSize} download · {requiredStorage} free space required",
+  "@modelSetupDownloadSummary": {
+    "description": "Model setup summary showing transfer size and required storage headroom.",
+    "placeholders": {
+      "downloadSize": {
+        "type": "String"
+      },
+      "requiredStorage": {
+        "type": "String"
+      }
+    }
+  },
+  "modelSetupOverallProgressLabel": "Overall progress",
+  "@modelSetupOverallProgressLabel": {
+    "description": "Label above the combined progress bar for the required model pack."
+  },
+  "modelSetupPercentValue": "{percent}%",
+  "@modelSetupPercentValue": {
+    "description": "Percentage value used by model setup progress indicators.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "modelSetupModelWaitingStatus": "Waiting",
+  "@modelSetupModelWaitingStatus": {
+    "description": "Status for a required model that has not started downloading."
+  },
+  "modelSetupModelPreparingStatus": "Preparing…",
+  "@modelSetupModelPreparingStatus": {
+    "description": "Status for a required model whose local cache is being inspected."
+  },
+  "modelSetupModelDownloadingStatus": "Downloading {percent}%",
+  "@modelSetupModelDownloadingStatus": {
+    "description": "Status for a required model while bytes are being downloaded.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "modelSetupModelVerifyingStatus": "Verifying…",
+  "@modelSetupModelVerifyingStatus": {
+    "description": "Status for a required model while its local artifact is verified."
+  },
+  "modelSetupModelVerifiedStatus": "Verified",
+  "@modelSetupModelVerifiedStatus": {
+    "description": "Status for a required model whose pinned artifact passed verification."
+  },
+  "modelSetupModelFailureStatus": "Needs attention",
+  "@modelSetupModelFailureStatus": {
+    "description": "Status for a required model that failed preparation."
+  },
+  "modelSetupCheckingAction": "Checking device…",
+  "@modelSetupCheckingAction": {
+    "description": "Disabled primary action while model setup checks storage and receipts."
+  },
+  "modelSetupDownloadAction": "Download models",
+  "@modelSetupDownloadAction": {
+    "description": "Primary action that begins required model installation."
+  },
+  "modelSetupCancelAction": "Cancel download",
+  "@modelSetupCancelAction": {
+    "description": "Secondary action that stops unverified model transfers."
+  },
+  "modelSetupCancellingAction": "Cancelling…",
+  "@modelSetupCancellingAction": {
+    "description": "Disabled action label while model downloads are stopping."
+  },
+  "modelSetupVerifyingAction": "Verifying…",
+  "@modelSetupVerifyingAction": {
+    "description": "Disabled action label while the active model artifact is verified."
+  },
+  "modelSetupCompleteAction": "Models ready",
+  "@modelSetupCompleteAction": {
+    "description": "Disabled setup action shown briefly after every required model verifies."
+  },
+  "modelSetupOfflineMessage": "Connect once to download the models.",
+  "@modelSetupOfflineMessage": {
+    "description": "Recovery message when required models cannot download without a connection."
+  },
+  "modelSetupStorageMessage": "Not enough storage. {requiredStorage} is required; {availableStorage} is available. Manage storage in Settings, then check again.",
+  "@modelSetupStorageMessage": {
+    "description": "iOS recovery message showing required and available capacity without an unsupported Settings deep link.",
+    "placeholders": {
+      "requiredStorage": {
+        "type": "String"
+      },
+      "availableStorage": {
+        "type": "String"
+      }
+    }
+  },
+  "modelSetupIntegrityMessage": "A downloaded model could not be verified. Download it again.",
+  "@modelSetupIntegrityMessage": {
+    "description": "Recovery message after a required model fails integrity verification."
+  },
+  "modelSetupFailureMessage": "The required models could not be prepared.",
+  "@modelSetupFailureMessage": {
+    "description": "Fallback recovery message for a model setup failure."
+  },
+  "modelSetupTryAgainAction": "Try again",
+  "@modelSetupTryAgainAction": {
+    "description": "Action that retries setup after an offline or preflight failure."
+  },
+  "modelSetupRetryAction": "Retry",
+  "@modelSetupRetryAction": {
+    "description": "Action that retries a failed required-model preparation."
+  },
+  "modelSetupDownloadAgainAction": "Download again",
+  "@modelSetupDownloadAgainAction": {
+    "description": "Action that downloads a required model again after integrity failure."
+  },
+  "modelSetupCheckAgainAction": "Check again",
+  "@modelSetupCheckAgainAction": {
+    "description": "Action that rechecks available storage after the user frees space."
+  },
   "cameraTabLabel": "Camera",
   "@cameraTabLabel": {
     "description": "Label and page title for the camera tab."
@@ -193,6 +354,10 @@
   "handsFreeAgentMicrophonePermissionFailureMessage": "Microphone access is off. Allow it in Settings, then retry.",
   "@handsFreeAgentMicrophonePermissionFailureMessage": {
     "description": "Actionable failure shown when hands-free microphone permission is denied."
+  },
+  "handsFreeAgentMicrophoneRestrictedFailureMessage": "Microphone access is restricted by this device. Typed questions are still available.",
+  "@handsFreeAgentMicrophoneRestrictedFailureMessage": {
+    "description": "Explanation shown when device policy restricts microphone access and app settings cannot recover it."
   },
   "handsFreeAgentModelNetworkFailureMessage": "The speech model could not be downloaded. Check your connection and retry.",
   "@handsFreeAgentModelNetworkFailureMessage": {
@@ -478,5 +643,307 @@
   "retryAction": "Retry",
   "@retryAction": {
     "description": "Button label for retrying a failed operation."
+  },
+  "settingsTabLabel": "Settings",
+  "@settingsTabLabel": {
+    "description": "Label for the Settings root destination."
+  },
+  "assistantStatusStarting": "Starting",
+  "@assistantStatusStarting": {
+    "description": "Operational badge shown while Assistant resources are starting."
+  },
+  "assistantStatusWatching": "Watching",
+  "@assistantStatusWatching": {
+    "description": "Operational badge shown while camera observation is active and idle."
+  },
+  "assistantStatusListening": "Listening",
+  "@assistantStatusListening": {
+    "description": "Operational badge shown while hands-free input collects a question."
+  },
+  "assistantStatusThinking": "Thinking",
+  "@assistantStatusThinking": {
+    "description": "Operational badge shown while the local language model generates."
+  },
+  "assistantStatusSpeaking": "Speaking",
+  "@assistantStatusSpeaking": {
+    "description": "Operational badge shown while an Assistant response is spoken."
+  },
+  "assistantStatusPaused": "Paused",
+  "@assistantStatusPaused": {
+    "description": "Operational badge shown after the user pauses Assistant."
+  },
+  "assistantOnDeviceLabel": "On device",
+  "@assistantOnDeviceLabel": {
+    "description": "Privacy-preserving runtime label beside the Assistant status badge."
+  },
+  "assistantDiagnosticsPending": "Performance pending",
+  "@assistantDiagnosticsPending": {
+    "description": "Compact diagnostics placeholder before the first camera sample."
+  },
+  "assistantDiagnosticsLabel": "{fps} FPS · {milliseconds} ms",
+  "@assistantDiagnosticsLabel": {
+    "description": "Compact camera frame-rate and inference-duration diagnostic.",
+    "placeholders": {
+      "fps": {
+        "type": "int"
+      },
+      "milliseconds": {
+        "type": "int"
+      }
+    }
+  },
+  "assistantNoCameraContext": "No camera context",
+  "@assistantNoCameraContext": {
+    "description": "Persistent Assistant state when camera context is unavailable."
+  },
+  "assistantSceneBuilding": "Looking for stable objects",
+  "@assistantSceneBuilding": {
+    "description": "Stable-scene chip shown while no object has stabilized yet."
+  },
+  "assistantSceneObjectLabel": "{label} · {region}",
+  "@assistantSceneObjectLabel": {
+    "description": "Compact Assistant camera-overlay chip for a stable object and its coarse position.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "region": {
+        "type": "String"
+      }
+    }
+  },
+  "cameraRationaleTitle": "Let Assistant see the scene",
+  "@cameraRationaleTitle": {
+    "description": "Heading in the contextual camera-permission explanation."
+  },
+  "cameraRationaleMessage": "Camera access lets the on-device assistant recognize objects around you. Frames stay on this device and are never saved.",
+  "@cameraRationaleMessage": {
+    "description": "Privacy explanation shown before the native camera permission request."
+  },
+  "continueAction": "Continue",
+  "@continueAction": {
+    "description": "Action that proceeds from a contextual explanation to a system request."
+  },
+  "cameraPermissionDeniedInline": "Camera access is off. Typed questions still work without a scene.",
+  "@cameraPermissionDeniedInline": {
+    "description": "Inline iOS camera-denial explanation that preserves manual chat."
+  },
+  "cameraPermissionRestrictedInline": "Camera access is restricted by this device. Typed questions still work without a scene.",
+  "@cameraPermissionRestrictedInline": {
+    "description": "Inline explanation when device policy prevents camera access and app settings cannot recover it."
+  },
+  "openSettingsAction": "Open Settings",
+  "@openSettingsAction": {
+    "description": "Action that opens platform application settings for permission recovery."
+  },
+  "assistantCardStateLabel": "ASSISTANT · {status}",
+  "@assistantCardStateLabel": {
+    "description": "Compact state label above the latest Assistant response.",
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantStatusNeedsAttention": "Needs attention",
+  "@assistantStatusNeedsAttention": {
+    "description": "Operational badge shown while a recoverable Assistant or camera failure needs user action."
+  },
+  "assistantScenePromptPlaceholder": "Ask about the detected scene...",
+  "@assistantScenePromptPlaceholder": {
+    "description": "Placeholder in the camera-first manual question composer."
+  },
+  "assistantEmptyCardMessage": "I’ll describe stable objects here. You can also ask a question.",
+  "@assistantEmptyCardMessage": {
+    "description": "Assistant card copy before the first response in a runtime session."
+  },
+  "currentSessionOpenAction": "Open current session",
+  "@currentSessionOpenAction": {
+    "description": "Accessibility action for opening the session transcript sheet."
+  },
+  "currentSessionTitle": "Current session",
+  "@currentSessionTitle": {
+    "description": "Title of the in-memory session transcript sheet."
+  },
+  "currentSessionClearsMessage": "Clears when the app closes",
+  "@currentSessionClearsMessage": {
+    "description": "Privacy line beneath the current-session sheet title."
+  },
+  "currentSessionEmptyMessage": "No comments or questions yet.",
+  "@currentSessionEmptyMessage": {
+    "description": "Empty state inside the current-session transcript sheet."
+  },
+  "runtimeStartFailureMessage": "The on-device Assistant could not start. Close and reopen the app to try again.",
+  "@runtimeStartFailureMessage": {
+    "description": "Blocking message shown when the process runtime cannot start after setup."
+  },
+  "settingsTitle": "Settings",
+  "@settingsTitle": {
+    "description": "Large title of the Settings destination."
+  },
+  "settingsObservationSection": "Observation",
+  "@settingsObservationSection": {
+    "description": "Heading for automatic observation preferences."
+  },
+  "settingsObservationFooter": "Target cadence. Busy moments are skipped. Resets when the app closes.",
+  "@settingsObservationFooter": {
+    "description": "Explanatory footer below observation preferences."
+  },
+  "settingsCommentInterval": "Comment interval",
+  "@settingsCommentInterval": {
+    "description": "Disclosure row for selecting the automatic comment cadence."
+  },
+  "settingsObservationStatus": "Status",
+  "@settingsObservationStatus": {
+    "description": "Label for the observation status row in Settings."
+  },
+  "settingsPausedStatus": "Paused while Settings is open",
+  "@settingsPausedStatus": {
+    "description": "Observation status displayed while Settings owns the foreground."
+  },
+  "settingsAudioVoiceSection": "Audio and voice",
+  "@settingsAudioVoiceSection": {
+    "description": "Heading for speech and hands-free preferences."
+  },
+  "settingsSpeakResponses": "Speak automatic responses",
+  "@settingsSpeakResponses": {
+    "description": "Session switch controlling automatic and voice response speech."
+  },
+  "settingsHandsFreeListening": "Hands-free listening",
+  "@settingsHandsFreeListening": {
+    "description": "Session switch controlling wake-phrase microphone input."
+  },
+  "settingsWakePhrase": "Wake phrase",
+  "@settingsWakePhrase": {
+    "description": "Label for the configured hands-free wake phrase."
+  },
+  "settingsWakePhraseValue": "Say “{wakePhrase}”",
+  "@settingsWakePhraseValue": {
+    "description": "Displayed instruction for the hands-free wake phrase.",
+    "placeholders": {
+      "wakePhrase": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsMicrophoneAccess": "Microphone access",
+  "@settingsMicrophoneAccess": {
+    "description": "Permission-recovery row shown after hands-free microphone denial."
+  },
+  "settingsPermissionDenied": "Denied",
+  "@settingsPermissionDenied": {
+    "description": "Compact permission state shown when system access is denied."
+  },
+  "settingsPermissionRestricted": "Restricted by device policy",
+  "@settingsPermissionRestricted": {
+    "description": "Compact permission state shown when app settings cannot recover restricted microphone access."
+  },
+  "microphoneRationaleTitle": "Enable hands-free listening",
+  "@microphoneRationaleTitle": {
+    "description": "Heading in the contextual microphone-permission explanation."
+  },
+  "microphoneRationaleMessage": "The microphone is used only while Assistant is open. Audio is processed on this device and is not saved.",
+  "@microphoneRationaleMessage": {
+    "description": "Privacy explanation shown before the native microphone permission request."
+  },
+  "enableMicrophoneAction": "Enable microphone",
+  "@enableMicrophoneAction": {
+    "description": "Action that proceeds to the native microphone permission request."
+  },
+  "settingsModelsSection": "Models",
+  "@settingsModelsSection": {
+    "description": "Heading for verified on-device model rows."
+  },
+  "settingsModelVerified": "Verified",
+  "@settingsModelVerified": {
+    "description": "Status of a model that passed local integrity verification."
+  },
+  "settingsModelNeedsAttention": "Needs attention",
+  "@settingsModelNeedsAttention": {
+    "description": "Status of a required model that is not currently verified."
+  },
+  "settingsPrivacySection": "Privacy",
+  "@settingsPrivacySection": {
+    "description": "Heading for local-processing and retention information."
+  },
+  "settingsPrivacySummary": "Processing stays on this device.",
+  "@settingsPrivacySummary": {
+    "description": "Disclosure row summarizing the product privacy boundary."
+  },
+  "privacyProcessingStatement": "Processing stays on this device.",
+  "@privacyProcessingStatement": {
+    "description": "Privacy detail describing the local processing boundary."
+  },
+  "privacyMediaStatement": "Photos, video, and audio are not saved.",
+  "@privacyMediaStatement": {
+    "description": "Privacy detail describing media retention."
+  },
+  "privacyConversationStatement": "Conversations are not saved between app launches.",
+  "@privacyConversationStatement": {
+    "description": "Privacy detail describing conversation retention."
+  },
+  "privacyQwenStatement": "Qwen receives detected object labels and approximate positions—not a photo.",
+  "@privacyQwenStatement": {
+    "description": "Privacy detail describing the scene data given to Qwen."
+  },
+  "privacyLifecycleStatement": "The camera and microphone stop outside the Assistant tab and in the background.",
+  "@privacyLifecycleStatement": {
+    "description": "Privacy detail describing destination and lifecycle resource ownership."
+  },
+  "settingsDiagnosticsSection": "Diagnostics",
+  "@settingsDiagnosticsSection": {
+    "description": "Heading for performance and license information."
+  },
+  "settingsDiagnosticsAndLicenses": "Diagnostics and licenses",
+  "@settingsDiagnosticsAndLicenses": {
+    "description": "Disclosure row and detail title for diagnostics and third-party licenses."
+  },
+  "settingsCurrentPerformance": "Current performance",
+  "@settingsCurrentPerformance": {
+    "description": "Label for the latest camera inference performance sample."
+  },
+  "settingsThermalState": "Thermal state",
+  "@settingsThermalState": {
+    "description": "Label for current device thermal status."
+  },
+  "settingsThermalNominal": "Nominal",
+  "@settingsThermalNominal": {
+    "description": "Value shown when no thermal degradation is active."
+  },
+  "settingsRuntimeVersions": "Runtime versions",
+  "@settingsRuntimeVersions": {
+    "description": "Label for local inference runtime version information."
+  },
+  "settingsRuntimeVersionsValue": "YOLO · llama.cpp · Piper · ASR",
+  "@settingsRuntimeVersionsValue": {
+    "description": "Compact list of local runtime families used by the app."
+  },
+  "settingsLicenses": "Third-party licenses",
+  "@settingsLicenses": {
+    "description": "Label for third-party model and runtime license information."
+  },
+  "settingsLicensesValue": "Available in app bundle",
+  "@settingsLicensesValue": {
+    "description": "Compact value describing bundled third-party license notices."
+  },
+  "settingsIntervalTenSeconds": "10 sec",
+  "@settingsIntervalTenSeconds": {
+    "description": "Full Settings label for a ten-second comment interval."
+  },
+  "settingsIntervalThirtySeconds": "30 sec",
+  "@settingsIntervalThirtySeconds": {
+    "description": "Full Settings label for a thirty-second comment interval."
+  },
+  "settingsIntervalOneMinute": "1 min",
+  "@settingsIntervalOneMinute": {
+    "description": "Full Settings label for a one-minute comment interval."
+  },
+  "settingsIntervalTwoMinutes": "2 min",
+  "@settingsIntervalTwoMinutes": {
+    "description": "Full Settings label for a two-minute comment interval."
+  },
+  "settingsIntervalFiveMinutes": "5 min",
+  "@settingsIntervalFiveMinutes": {
+    "description": "Full Settings label for a five-minute comment interval."
   }
 }

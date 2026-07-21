@@ -71,6 +71,8 @@ dev_dependencies:
   bloc_lint: ^0.4.2
   # Runs the Bloc semantic checks included in repository verification.
   bloc_tools: ^0.1.0-dev.8
+  # Rebuilds platform launcher catalogs from the checked-in product mark.
+  flutter_launcher_icons: ^0.14.4
   # Exercises camera lifecycle and UI states with deterministic fakes.
   flutter_test:
     sdk: flutter
@@ -85,6 +87,8 @@ flutter:
   generate: true
 
   assets:
+    # Displays the product mark inside the required-model setup gate.
+    - assets/branding/pov_agent_logo.png
     # Keeps the pinned platform YOLO models available without a first-run download.
     - assets/models/yolo26n.mlpackage.zip
     - assets/models/yolo26n_w8a32.tflite
@@ -95,3 +99,9 @@ flutter:
 
   # Makes Material Icons available to widgets exported by ultralytics_yolo.
   uses-material-design: true
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/branding/pov_agent_logo.png
+  remove_alpha_ios: true

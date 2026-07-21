@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pov_agent/app/di/app_di.dart';
+import 'package:pov_agent/app/model_pack/model_pack_controller.dart';
+import 'package:pov_agent/app/model_pack/model_pack_receipt_store.dart';
 import 'package:pov_agent/core/constants/compilation_constants.dart';
 import 'package:pov_agent/features/assistant/application/models/model_store_state.dart';
 import 'package:pov_agent/features/assistant/application/ports/comment_generator.dart';
@@ -23,6 +25,7 @@ import 'package:pov_agent/features/assistant/data/repositories/verified_piper_mo
 import 'package:pov_agent/features/assistant/presentation/bloc/observer_bloc.dart';
 import 'package:pov_agent/features/camera/application/ports/observation_controller.dart';
 import 'package:pov_agent/features/camera/application/ports/recorded_observation_frame_source.dart';
+import 'package:pov_agent/features/camera/application/ports/vision_model_verifier.dart';
 import 'package:pov_agent/features/camera/data/adapters/recorded_observation_adapter.dart';
 import 'package:pov_agent/features/camera/data/adapters/yolo_observation_adapter.dart';
 import 'package:pov_agent/shared/domain/app_result.dart';
@@ -53,9 +56,18 @@ void main() {
         same(runtime.observerBloc),
       );
       expect(
+        appDependencies<ModelPackController>(),
+        same(runtime.modelPackController),
+      );
+      expect(
+        appDependencies<ModelPackReceiptStore>(),
+        isNotNull,
+      );
+      expect(
         appDependencies<QwenModelStore>(),
         same(runtime.modelStore),
       );
+      expect(appDependencies<VisionModelVerifier>(), isNotNull);
       expect(
         appDependencies<AsrModelStore>(),
         same(runtime.asrModelStore),
@@ -109,6 +121,9 @@ void main() {
       );
       expect(runtime.observerBloc.state.started, isFalse);
       expect(runtime.modelStore.current.phase, ModelStorePhase.idle);
+      expect(runtime.cameraBloc.state.requestedEnabled, isFalse);
+      expect(runtime.cameraBloc.state.activationRequested, isFalse);
+      expect(runtime.cameraBloc.state.surfaceMounted, isFalse);
 
       if (CompilationConstants.usesRecordedVideo) {
         final adapter = appDependencies<RecordedObservationAdapter>();

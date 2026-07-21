@@ -89,13 +89,199 @@ abstract class AppLocalizations {
   ];
 
   /// A list of this localizations delegate's supported locales.
-  static const List<Locale> supportedLocales = <Locale>[Locale('en')];
+  static const List<Locale> supportedLocales = <Locale>[Locale('en'), Locale('en', 'US')];
 
   /// Application title used by the operating system.
   ///
   /// In en, this message translates to:
   /// **'POV Agent'**
   String get appTitle;
+
+  /// Large title on the mandatory model setup root screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Set up your on-device AI'**
+  String get modelSetupTitle;
+
+  /// Introductory copy explaining the one-time offline model setup.
+  ///
+  /// In en, this message translates to:
+  /// **'Download the required models once. After setup, the assistant works offline.'**
+  String get modelSetupDescription;
+
+  /// Privacy assurance shown at the bottom of model setup.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera, audio, and conversations are not saved or uploaded.'**
+  String get modelSetupPrivacyMessage;
+
+  /// Friendly setup-row label for the local language model.
+  ///
+  /// In en, this message translates to:
+  /// **'Assistant'**
+  String get modelSetupAssistantModelLabel;
+
+  /// Friendly setup-row label for the local object detector.
+  ///
+  /// In en, this message translates to:
+  /// **'Vision'**
+  String get modelSetupVisionModelLabel;
+
+  /// Friendly setup-row label for the local speech synthesizer.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice'**
+  String get modelSetupVoiceModelLabel;
+
+  /// Friendly setup-row label for local speech recognition.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening'**
+  String get modelSetupListeningModelLabel;
+
+  /// VoiceOver summary for one model setup row.
+  ///
+  /// In en, this message translates to:
+  /// **'{title}. {technicalName}. {status}'**
+  String modelSetupModelAccessibilityLabel(String title, String technicalName, String status);
+
+  /// Model setup summary showing transfer size and required storage headroom.
+  ///
+  /// In en, this message translates to:
+  /// **'{downloadSize} download · {requiredStorage} free space required'**
+  String modelSetupDownloadSummary(String downloadSize, String requiredStorage);
+
+  /// Label above the combined progress bar for the required model pack.
+  ///
+  /// In en, this message translates to:
+  /// **'Overall progress'**
+  String get modelSetupOverallProgressLabel;
+
+  /// Percentage value used by model setup progress indicators.
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}%'**
+  String modelSetupPercentValue(int percent);
+
+  /// Status for a required model that has not started downloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting'**
+  String get modelSetupModelWaitingStatus;
+
+  /// Status for a required model whose local cache is being inspected.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing…'**
+  String get modelSetupModelPreparingStatus;
+
+  /// Status for a required model while bytes are being downloaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading {percent}%'**
+  String modelSetupModelDownloadingStatus(int percent);
+
+  /// Status for a required model while its local artifact is verified.
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying…'**
+  String get modelSetupModelVerifyingStatus;
+
+  /// Status for a required model whose pinned artifact passed verification.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified'**
+  String get modelSetupModelVerifiedStatus;
+
+  /// Status for a required model that failed preparation.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs attention'**
+  String get modelSetupModelFailureStatus;
+
+  /// Disabled primary action while model setup checks storage and receipts.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking device…'**
+  String get modelSetupCheckingAction;
+
+  /// Primary action that begins required model installation.
+  ///
+  /// In en, this message translates to:
+  /// **'Download models'**
+  String get modelSetupDownloadAction;
+
+  /// Secondary action that stops unverified model transfers.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel download'**
+  String get modelSetupCancelAction;
+
+  /// Disabled action label while model downloads are stopping.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelling…'**
+  String get modelSetupCancellingAction;
+
+  /// Disabled action label while the active model artifact is verified.
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying…'**
+  String get modelSetupVerifyingAction;
+
+  /// Disabled setup action shown briefly after every required model verifies.
+  ///
+  /// In en, this message translates to:
+  /// **'Models ready'**
+  String get modelSetupCompleteAction;
+
+  /// Recovery message when required models cannot download without a connection.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect once to download the models.'**
+  String get modelSetupOfflineMessage;
+
+  /// iOS recovery message showing required and available capacity without an unsupported Settings deep link.
+  ///
+  /// In en, this message translates to:
+  /// **'Not enough storage. {requiredStorage} is required; {availableStorage} is available. Manage storage in Settings, then check again.'**
+  String modelSetupStorageMessage(String requiredStorage, String availableStorage);
+
+  /// Recovery message after a required model fails integrity verification.
+  ///
+  /// In en, this message translates to:
+  /// **'A downloaded model could not be verified. Download it again.'**
+  String get modelSetupIntegrityMessage;
+
+  /// Fallback recovery message for a model setup failure.
+  ///
+  /// In en, this message translates to:
+  /// **'The required models could not be prepared.'**
+  String get modelSetupFailureMessage;
+
+  /// Action that retries setup after an offline or preflight failure.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get modelSetupTryAgainAction;
+
+  /// Action that retries a failed required-model preparation.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get modelSetupRetryAction;
+
+  /// Action that downloads a required model again after integrity failure.
+  ///
+  /// In en, this message translates to:
+  /// **'Download again'**
+  String get modelSetupDownloadAgainAction;
+
+  /// Action that rechecks available storage after the user frees space.
+  ///
+  /// In en, this message translates to:
+  /// **'Check again'**
+  String get modelSetupCheckAgainAction;
 
   /// Label and page title for the camera tab.
   ///
@@ -336,6 +522,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Microphone access is off. Allow it in Settings, then retry.'**
   String get handsFreeAgentMicrophonePermissionFailureMessage;
+
+  /// Explanation shown when device policy restricts microphone access and app settings cannot recover it.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone access is restricted by this device. Typed questions are still available.'**
+  String get handsFreeAgentMicrophoneRestrictedFailureMessage;
 
   /// Actionable speech-model failure shown for unavailable network transport.
   ///
@@ -702,6 +894,420 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Retry'**
   String get retryAction;
+
+  /// Label for the Settings root destination.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get settingsTabLabel;
+
+  /// Operational badge shown while Assistant resources are starting.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting'**
+  String get assistantStatusStarting;
+
+  /// Operational badge shown while camera observation is active and idle.
+  ///
+  /// In en, this message translates to:
+  /// **'Watching'**
+  String get assistantStatusWatching;
+
+  /// Operational badge shown while hands-free input collects a question.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening'**
+  String get assistantStatusListening;
+
+  /// Operational badge shown while the local language model generates.
+  ///
+  /// In en, this message translates to:
+  /// **'Thinking'**
+  String get assistantStatusThinking;
+
+  /// Operational badge shown while an Assistant response is spoken.
+  ///
+  /// In en, this message translates to:
+  /// **'Speaking'**
+  String get assistantStatusSpeaking;
+
+  /// Operational badge shown after the user pauses Assistant.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused'**
+  String get assistantStatusPaused;
+
+  /// Privacy-preserving runtime label beside the Assistant status badge.
+  ///
+  /// In en, this message translates to:
+  /// **'On device'**
+  String get assistantOnDeviceLabel;
+
+  /// Compact diagnostics placeholder before the first camera sample.
+  ///
+  /// In en, this message translates to:
+  /// **'Performance pending'**
+  String get assistantDiagnosticsPending;
+
+  /// Compact camera frame-rate and inference-duration diagnostic.
+  ///
+  /// In en, this message translates to:
+  /// **'{fps} FPS · {milliseconds} ms'**
+  String assistantDiagnosticsLabel(int fps, int milliseconds);
+
+  /// Persistent Assistant state when camera context is unavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No camera context'**
+  String get assistantNoCameraContext;
+
+  /// Stable-scene chip shown while no object has stabilized yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Looking for stable objects'**
+  String get assistantSceneBuilding;
+
+  /// Compact Assistant camera-overlay chip for a stable object and its coarse position.
+  ///
+  /// In en, this message translates to:
+  /// **'{label} · {region}'**
+  String assistantSceneObjectLabel(String label, String region);
+
+  /// Heading in the contextual camera-permission explanation.
+  ///
+  /// In en, this message translates to:
+  /// **'Let Assistant see the scene'**
+  String get cameraRationaleTitle;
+
+  /// Privacy explanation shown before the native camera permission request.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera access lets the on-device assistant recognize objects around you. Frames stay on this device and are never saved.'**
+  String get cameraRationaleMessage;
+
+  /// Action that proceeds from a contextual explanation to a system request.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get continueAction;
+
+  /// Inline iOS camera-denial explanation that preserves manual chat.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera access is off. Typed questions still work without a scene.'**
+  String get cameraPermissionDeniedInline;
+
+  /// Inline explanation when device policy prevents camera access and app settings cannot recover it.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera access is restricted by this device. Typed questions still work without a scene.'**
+  String get cameraPermissionRestrictedInline;
+
+  /// Action that opens platform application settings for permission recovery.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings'**
+  String get openSettingsAction;
+
+  /// Compact state label above the latest Assistant response.
+  ///
+  /// In en, this message translates to:
+  /// **'ASSISTANT · {status}'**
+  String assistantCardStateLabel(String status);
+
+  /// Operational badge shown while a recoverable Assistant or camera failure needs user action.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs attention'**
+  String get assistantStatusNeedsAttention;
+
+  /// Placeholder in the camera-first manual question composer.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask about the detected scene...'**
+  String get assistantScenePromptPlaceholder;
+
+  /// Assistant card copy before the first response in a runtime session.
+  ///
+  /// In en, this message translates to:
+  /// **'I’ll describe stable objects here. You can also ask a question.'**
+  String get assistantEmptyCardMessage;
+
+  /// Accessibility action for opening the session transcript sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Open current session'**
+  String get currentSessionOpenAction;
+
+  /// Title of the in-memory session transcript sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Current session'**
+  String get currentSessionTitle;
+
+  /// Privacy line beneath the current-session sheet title.
+  ///
+  /// In en, this message translates to:
+  /// **'Clears when the app closes'**
+  String get currentSessionClearsMessage;
+
+  /// Empty state inside the current-session transcript sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'No comments or questions yet.'**
+  String get currentSessionEmptyMessage;
+
+  /// Blocking message shown when the process runtime cannot start after setup.
+  ///
+  /// In en, this message translates to:
+  /// **'The on-device Assistant could not start. Close and reopen the app to try again.'**
+  String get runtimeStartFailureMessage;
+
+  /// Large title of the Settings destination.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get settingsTitle;
+
+  /// Heading for automatic observation preferences.
+  ///
+  /// In en, this message translates to:
+  /// **'Observation'**
+  String get settingsObservationSection;
+
+  /// Explanatory footer below observation preferences.
+  ///
+  /// In en, this message translates to:
+  /// **'Target cadence. Busy moments are skipped. Resets when the app closes.'**
+  String get settingsObservationFooter;
+
+  /// Disclosure row for selecting the automatic comment cadence.
+  ///
+  /// In en, this message translates to:
+  /// **'Comment interval'**
+  String get settingsCommentInterval;
+
+  /// Label for the observation status row in Settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get settingsObservationStatus;
+
+  /// Observation status displayed while Settings owns the foreground.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused while Settings is open'**
+  String get settingsPausedStatus;
+
+  /// Heading for speech and hands-free preferences.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio and voice'**
+  String get settingsAudioVoiceSection;
+
+  /// Session switch controlling automatic and voice response speech.
+  ///
+  /// In en, this message translates to:
+  /// **'Speak automatic responses'**
+  String get settingsSpeakResponses;
+
+  /// Session switch controlling wake-phrase microphone input.
+  ///
+  /// In en, this message translates to:
+  /// **'Hands-free listening'**
+  String get settingsHandsFreeListening;
+
+  /// Label for the configured hands-free wake phrase.
+  ///
+  /// In en, this message translates to:
+  /// **'Wake phrase'**
+  String get settingsWakePhrase;
+
+  /// Displayed instruction for the hands-free wake phrase.
+  ///
+  /// In en, this message translates to:
+  /// **'Say “{wakePhrase}”'**
+  String settingsWakePhraseValue(String wakePhrase);
+
+  /// Permission-recovery row shown after hands-free microphone denial.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone access'**
+  String get settingsMicrophoneAccess;
+
+  /// Compact permission state shown when system access is denied.
+  ///
+  /// In en, this message translates to:
+  /// **'Denied'**
+  String get settingsPermissionDenied;
+
+  /// Compact permission state shown when app settings cannot recover restricted microphone access.
+  ///
+  /// In en, this message translates to:
+  /// **'Restricted by device policy'**
+  String get settingsPermissionRestricted;
+
+  /// Heading in the contextual microphone-permission explanation.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable hands-free listening'**
+  String get microphoneRationaleTitle;
+
+  /// Privacy explanation shown before the native microphone permission request.
+  ///
+  /// In en, this message translates to:
+  /// **'The microphone is used only while Assistant is open. Audio is processed on this device and is not saved.'**
+  String get microphoneRationaleMessage;
+
+  /// Action that proceeds to the native microphone permission request.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable microphone'**
+  String get enableMicrophoneAction;
+
+  /// Heading for verified on-device model rows.
+  ///
+  /// In en, this message translates to:
+  /// **'Models'**
+  String get settingsModelsSection;
+
+  /// Status of a model that passed local integrity verification.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified'**
+  String get settingsModelVerified;
+
+  /// Status of a required model that is not currently verified.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs attention'**
+  String get settingsModelNeedsAttention;
+
+  /// Heading for local-processing and retention information.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy'**
+  String get settingsPrivacySection;
+
+  /// Disclosure row summarizing the product privacy boundary.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing stays on this device.'**
+  String get settingsPrivacySummary;
+
+  /// Privacy detail describing the local processing boundary.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing stays on this device.'**
+  String get privacyProcessingStatement;
+
+  /// Privacy detail describing media retention.
+  ///
+  /// In en, this message translates to:
+  /// **'Photos, video, and audio are not saved.'**
+  String get privacyMediaStatement;
+
+  /// Privacy detail describing conversation retention.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversations are not saved between app launches.'**
+  String get privacyConversationStatement;
+
+  /// Privacy detail describing the scene data given to Qwen.
+  ///
+  /// In en, this message translates to:
+  /// **'Qwen receives detected object labels and approximate positions—not a photo.'**
+  String get privacyQwenStatement;
+
+  /// Privacy detail describing destination and lifecycle resource ownership.
+  ///
+  /// In en, this message translates to:
+  /// **'The camera and microphone stop outside the Assistant tab and in the background.'**
+  String get privacyLifecycleStatement;
+
+  /// Heading for performance and license information.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostics'**
+  String get settingsDiagnosticsSection;
+
+  /// Disclosure row and detail title for diagnostics and third-party licenses.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostics and licenses'**
+  String get settingsDiagnosticsAndLicenses;
+
+  /// Label for the latest camera inference performance sample.
+  ///
+  /// In en, this message translates to:
+  /// **'Current performance'**
+  String get settingsCurrentPerformance;
+
+  /// Label for current device thermal status.
+  ///
+  /// In en, this message translates to:
+  /// **'Thermal state'**
+  String get settingsThermalState;
+
+  /// Value shown when no thermal degradation is active.
+  ///
+  /// In en, this message translates to:
+  /// **'Nominal'**
+  String get settingsThermalNominal;
+
+  /// Label for local inference runtime version information.
+  ///
+  /// In en, this message translates to:
+  /// **'Runtime versions'**
+  String get settingsRuntimeVersions;
+
+  /// Compact list of local runtime families used by the app.
+  ///
+  /// In en, this message translates to:
+  /// **'YOLO · llama.cpp · Piper · ASR'**
+  String get settingsRuntimeVersionsValue;
+
+  /// Label for third-party model and runtime license information.
+  ///
+  /// In en, this message translates to:
+  /// **'Third-party licenses'**
+  String get settingsLicenses;
+
+  /// Compact value describing bundled third-party license notices.
+  ///
+  /// In en, this message translates to:
+  /// **'Available in app bundle'**
+  String get settingsLicensesValue;
+
+  /// Full Settings label for a ten-second comment interval.
+  ///
+  /// In en, this message translates to:
+  /// **'10 sec'**
+  String get settingsIntervalTenSeconds;
+
+  /// Full Settings label for a thirty-second comment interval.
+  ///
+  /// In en, this message translates to:
+  /// **'30 sec'**
+  String get settingsIntervalThirtySeconds;
+
+  /// Full Settings label for a one-minute comment interval.
+  ///
+  /// In en, this message translates to:
+  /// **'1 min'**
+  String get settingsIntervalOneMinute;
+
+  /// Full Settings label for a two-minute comment interval.
+  ///
+  /// In en, this message translates to:
+  /// **'2 min'**
+  String get settingsIntervalTwoMinutes;
+
+  /// Full Settings label for a five-minute comment interval.
+  ///
+  /// In en, this message translates to:
+  /// **'5 min'**
+  String get settingsIntervalFiveMinutes;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
@@ -720,6 +1326,18 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
 }
 
 AppLocalizations lookupAppLocalizations(Locale locale) {
+  // Lookup logic when language+country codes are specified.
+  switch (locale.languageCode) {
+    case 'en':
+      {
+        switch (locale.countryCode) {
+          case 'US':
+            return AppLocalizationsEnUs();
+        }
+        break;
+      }
+  }
+
   // Lookup logic when only language code is specified.
   switch (locale.languageCode) {
     case 'en':
