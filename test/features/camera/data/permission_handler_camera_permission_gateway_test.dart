@@ -1,12 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:pov_agent/features/assistant/data/datasources/permission_handler_microphone_permission_gateway.dart';
+import 'package:pov_agent/features/camera/data/datasources/permission_handler_camera_permission_gateway.dart';
 import 'package:pov_agent/shared/domain/app_failure.dart';
 import 'package:pov_agent/shared/domain/app_result.dart';
 
 void main() {
-  test('accepts granted microphone permission', () async {
-    final gateway = PermissionHandlerMicrophonePermissionGateway(
+  test('accepts granted camera permission', () async {
+    final gateway = PermissionHandlerCameraPermissionGateway(
       requestPermission: () async => PermissionStatus.granted,
     );
 
@@ -14,12 +14,12 @@ void main() {
   });
 
   for (final entry in <PermissionStatus, String>{
-    PermissionStatus.denied: 'microphone_permission_denied',
-    PermissionStatus.restricted: 'microphone_permission_restricted',
-    PermissionStatus.permanentlyDenied: 'microphone_permission_permanently_denied',
+    PermissionStatus.denied: 'camera_permission_denied',
+    PermissionStatus.restricted: 'camera_permission_restricted',
+    PermissionStatus.permanentlyDenied: 'camera_permission_permanently_denied',
   }.entries) {
-    test('normalizes ${entry.key.name} microphone permission', () async {
-      final gateway = PermissionHandlerMicrophonePermissionGateway(
+    test('normalizes ${entry.key.name} camera permission', () async {
+      final gateway = PermissionHandlerCameraPermissionGateway(
         requestPermission: () async => entry.key,
       );
 
@@ -28,25 +28,24 @@ void main() {
   }
 
   test('normalizes plugin exceptions without swallowing Errors', () async {
-    final exceptionGateway = PermissionHandlerMicrophonePermissionGateway(
+    final exceptionGateway = PermissionHandlerCameraPermissionGateway(
       requestPermission: () => Future.error(Exception('channel unavailable')),
     );
     final programmerError = StateError('programmer failure');
-    final errorGateway = PermissionHandlerMicrophonePermissionGateway(
+    final errorGateway = PermissionHandlerCameraPermissionGateway(
       requestPermission: () => Future.error(programmerError),
     );
 
     expect(
       await exceptionGateway.request(),
-      _failureWithCode('microphone_permission_request_failed'),
+      _failureWithCode('camera_permission_request_failed'),
     );
     await expectLater(errorGateway.request(), throwsA(same(programmerError)));
   });
 
   test('opens application settings for denied-permission recovery', () async {
     var openCalls = 0;
-    final gateway = PermissionHandlerMicrophonePermissionGateway(
-      requestPermission: () async => PermissionStatus.denied,
+    final gateway = PermissionHandlerCameraPermissionGateway(
       openApplicationSettings: () async {
         openCalls += 1;
         return true;
@@ -61,22 +60,20 @@ void main() {
   });
 
   test('normalizes unavailable application settings and plugin exceptions', () async {
-    final unavailable = PermissionHandlerMicrophonePermissionGateway(
-      requestPermission: () async => PermissionStatus.denied,
+    final unavailable = PermissionHandlerCameraPermissionGateway(
       openApplicationSettings: () async => false,
     );
-    final exceptional = PermissionHandlerMicrophonePermissionGateway(
-      requestPermission: () async => PermissionStatus.denied,
+    final exceptional = PermissionHandlerCameraPermissionGateway(
       openApplicationSettings: () => Future.error(Exception('unavailable')),
     );
 
     expect(
       await unavailable.openApplicationSettings(),
-      _failureWithCode('microphone_permission_settings_unavailable'),
+      _failureWithCode('camera_settings_unavailable'),
     );
     expect(
       await exceptional.openApplicationSettings(),
-      _failureWithCode('microphone_permission_settings_failed'),
+      _failureWithCode('camera_permission_settings_failed'),
     );
   });
 }

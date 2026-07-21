@@ -54,12 +54,14 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
   factory ObserverBloc({
     required ObserverGenerationDependencies generation,
     required ObserverVoiceDependencies voice,
+    bool handsFreeInitiallyEnabled = false,
     ObserverPeriodicTimerFactory? periodicTimerFactory,
     ObserverVoiceDeadlineFactory? voiceDeadlineFactory,
   }) {
     return ObserverBloc._(
       generation,
       voice,
+      handsFreeInitiallyEnabled,
       periodicTimerFactory,
       voiceDeadlineFactory,
     );
@@ -68,13 +70,20 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
   ObserverBloc._(
     ObserverGenerationDependencies generation,
     ObserverVoiceDependencies voice,
+    bool handsFreeInitiallyEnabled,
     ObserverPeriodicTimerFactory? periodicTimerFactory,
     ObserverVoiceDeadlineFactory? voiceDeadlineFactory,
   ) : _sceneSource = generation.sceneSource,
       _requestBuilder = generation.requestBuilder,
-      super(ObserverState(wakePhrase: voice.wakePhrase)) {
+      super(
+        ObserverState(
+          wakePhrase: voice.wakePhrase,
+          handsFreeEnabled: handsFreeInitiallyEnabled,
+        ),
+      ) {
     _modelSession = ObserverModelSession(
       modelStore: generation.qwenModelStore,
+      commentGenerator: generation.commentGenerator,
       onUpdate: _forwardModelUpdate,
     );
     _generationSession = ObserverGenerationSession(
@@ -121,6 +130,10 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
 
   var _acceptsForegroundWork = true;
   var _closing = false;
+  // Native failures are reported back through this Bloc's queued event stream.
+  // Block eager re-arm synchronously so another already-queued model callback
+  // cannot consume the retry before the failure is visible to the user.
+  var _voiceRetryRequired = false;
 
   Future<void> _onEvent(
     ObserverEvent event,
@@ -145,12 +158,18 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
         await _onAnswerRetryRequested(emit);
       case ObserverVoiceRetryRequested():
         await _onVoiceRetryRequested(emit);
+      case ObserverHandsFreeEnabledChanged(:final enabled):
+        await _onHandsFreeEnabledChanged(enabled, emit);
+      case ObserverMicrophoneSettingsRequested():
+        await _onMicrophoneSettingsRequested(emit);
       case ObserverSpeechMutedChanged(:final muted):
         await _onSpeechMutedChanged(muted, emit);
       case ObserverSpeechStopped():
         await _onSpeechStopped(emit);
       case ObserverCommentReplayRequested(:final commentIndex):
         await _onCommentReplayRequested(commentIndex, emit);
+      case ObserverMessageReplayRequested(:final messageIndex):
+        await _onMessageReplayRequested(messageIndex, emit);
       case ObserverForegroundDeactivated():
         await _onForegroundDeactivated(emit);
       case ObserverSuspended():
@@ -203,8 +222,8 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
 
     emit(
       _preparingState(projected).copyWith(
-        asrModelStatus: ObserverModelStatus.loading,
-        voicePhase: VoiceAgentPhase.preparing,
+        asrModelStatus: state.handsFreeEnabled ? ObserverModelStatus.loading : ObserverModelStatus.idle,
+        voicePhase: state.handsFreeEnabled ? VoiceAgentPhase.preparing : VoiceAgentPhase.unavailable,
         asrModelDownloadProgress: () => null,
         asrModelFailure: () => null,
         voiceFailure: () => null,
@@ -212,7 +231,9 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
     );
     _replaceObservationTimer();
     _modelSession.requestPreparation();
-    unawaited(_voiceInputSession.prepareModel());
+    if (state.handsFreeEnabled) {
+      unawaited(_voiceInputSession.prepareModel());
+    }
   }
 
   Future<void> _onModelRetryRequested(Emitter<ObserverState> emit) async {
@@ -394,7 +415,7 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
     } finally {
       if (!emit.isDone && !_closing) {
         emit(_withoutGenerationDrafts(state));
-        unawaited(_voiceInputSession.watch());
+        _armVoiceIfAllowed();
       }
     }
   }
@@ -447,7 +468,7 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
           ),
         );
         if (_canKeepVoiceRecognitionArmed) {
-          unawaited(_voiceInputSession.watch());
+          _armVoiceIfAllowed();
         }
       case AppError<VerifiedModelArtifact>(:final failure):
         emit(
@@ -481,6 +502,11 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
   }
 
   void _forwardVoiceInputUpdate(ObserverVoiceInputUpdate update) {
+    if (update is ObserverVoiceInputFailed || update is ObserverVoiceModelLoadFailed) {
+      _voiceRetryRequired = true;
+    } else if (update is ObserverVoiceWatching) {
+      _voiceRetryRequired = false;
+    }
     if (!_closing && !isClosed) add(_VoiceInputUpdateReceived(update));
   }
 
@@ -497,6 +523,12 @@ final class ObserverBloc extends Bloc<ObserverEvent, ObserverState> {
   }
 
   void _cancelObservationTimer() => _timerController.stop();
+
+  void _armVoiceIfAllowed() {
+    if (!_voiceRetryRequired && _canKeepVoiceRecognitionArmed) {
+      unawaited(_voiceInputSession.watch());
+    }
+  }
 
   ObserverState _preparingState(ObserverState current) {
     return current.copyWith(

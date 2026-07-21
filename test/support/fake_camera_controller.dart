@@ -32,12 +32,14 @@ final class FakeCameraController implements ObservationController {
     this.disableFailure,
     this.retryModelFailure,
     this.retryObservationFailure,
+    this.openPermissionSettingsFailure,
     this.emitModelReadyOnInit = true,
     this.onInit,
     this.onEnable,
     this.onDisable,
     this.onRetryModel,
     this.onRetryObservation,
+    this.onOpenPermissionSettings,
     this.onClose,
   }) : _events = broadcastEvents
            ? StreamController<ObservationEvent>.broadcast(sync: true)
@@ -57,18 +59,21 @@ final class FakeCameraController implements ObservationController {
   AppFailure? disableFailure;
   AppFailure? retryModelFailure;
   AppFailure? retryObservationFailure;
+  AppFailure? openPermissionSettingsFailure;
   bool emitModelReadyOnInit;
   Future<void> Function()? onInit;
   Future<void> Function(CameraLens lens)? onEnable;
   Future<void> Function()? onDisable;
   Future<void> Function()? onRetryModel;
   Future<void> Function()? onRetryObservation;
+  Future<void> Function()? onOpenPermissionSettings;
   Future<void> Function()? onClose;
 
   int initCalls = 0;
   int disableCalls = 0;
   int retryModelCalls = 0;
   int retryObservationCalls = 0;
+  int openPermissionSettingsCalls = 0;
   int closeCalls = 0;
   final List<CameraLens> enableCalls = [];
 
@@ -119,6 +124,14 @@ final class FakeCameraController implements ObservationController {
     retryObservationCalls += 1;
     await onRetryObservation?.call();
     final failure = retryObservationFailure;
+    return failure == null ? const AppSuccess<void>(null) : AppError<void>(failure);
+  }
+
+  @override
+  Future<AppResult<void>> openPermissionSettings() async {
+    openPermissionSettingsCalls += 1;
+    await onOpenPermissionSettings?.call();
+    final failure = openPermissionSettingsFailure;
     return failure == null ? const AppSuccess<void>(null) : AppError<void>(failure);
   }
 

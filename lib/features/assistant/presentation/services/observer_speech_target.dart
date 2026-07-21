@@ -13,6 +13,15 @@ final class ObserverCommentSpeechTarget extends ObserverSpeechTarget {
   final int commentIndex;
 }
 
+/// One append-only committed Assistant message selected for replay.
+final class ObserverMessageSpeechTarget extends ObserverSpeechTarget {
+  /// Creates a target for [messageIndex].
+  const ObserverMessageSpeechTarget(this.messageIndex);
+
+  /// Append-only index in the dialogue transcript.
+  final int messageIndex;
+}
+
 /// One committed hands-free answer selected for mandatory speech.
 final class ObserverVoiceAnswerSpeechTarget extends ObserverSpeechTarget {
   /// Creates a target for the monotonic [turnId].

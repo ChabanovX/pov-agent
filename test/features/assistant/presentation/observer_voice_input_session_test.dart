@@ -24,6 +24,26 @@ const _bundle = VerifiedAsrModelBundle(
 );
 
 void main() {
+  test('replays a ready store snapshot to an existing subscription', () async {
+    final fixture = _VoiceFixture();
+
+    expect(
+      await fixture.session.prepareModel(),
+      isA<AppSuccess<VerifiedAsrModelBundle>>(),
+    );
+    fixture.updates.clear();
+
+    expect(
+      await fixture.session.prepareModel(),
+      isA<AppSuccess<VerifiedAsrModelBundle>>(),
+    );
+
+    final update = fixture.updates.whereType<ObserverVoiceModelStateChanged>().single;
+    expect(update.state.phase, ModelStorePhase.ready);
+    expect(fixture.store.prepareCalls, 1);
+    await fixture.close();
+  });
+
   test('prepares, requests permission, loads, and arms exactly once', () async {
     final fixture = _VoiceFixture();
 
@@ -440,6 +460,11 @@ final class _FakeMicrophonePermissionGateway implements MicrophonePermissionGate
 
   final List<AppResult<void>> results;
   int requestCalls = 0;
+
+  @override
+  Future<AppResult<void>> openApplicationSettings() async {
+    return const AppSuccess<void>(null);
+  }
 
   @override
   Future<AppResult<void>> request() async {

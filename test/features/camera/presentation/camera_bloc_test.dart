@@ -49,6 +49,38 @@ void main() {
     await bloc.close();
   });
 
+  test('discovers cameras without activating until the user continues', () async {
+    final controller = FakeCameraController();
+    final bloc = CameraBloc(
+      controller,
+      initiallyRequestedEnabled: false,
+    )..add(const CameraStarted());
+
+    await _waitForState(
+      bloc,
+      (state) => state.status == CameraStatus.disabled && state.availableLenses.isNotEmpty,
+    );
+
+    expect(bloc.state.requestedEnabled, isFalse);
+    expect(bloc.state.activationRequested, isFalse);
+    expect(bloc.state.surfaceMounted, isFalse);
+    expect(controller.initCalls, 1);
+    expect(controller.enableCalls, isEmpty);
+
+    bloc.add(const CameraEnableRequested());
+    await _waitForState(
+      bloc,
+      (state) => state.status == CameraStatus.enabled,
+    );
+
+    expect(bloc.state.requestedEnabled, isTrue);
+    expect(bloc.state.activationRequested, isTrue);
+    expect(bloc.state.surfaceMounted, isTrue);
+    expect(controller.enableCalls, [CameraLens.back]);
+
+    await bloc.close();
+  });
+
   test('switches to the latest requested lens serially', () async {
     final firstEnableStarted = Completer<void>();
     final firstEnableGate = Completer<void>();
@@ -147,9 +179,33 @@ void main() {
     await bloc.close();
   });
 
-  test('preserves permission failure across visibility changes and retries', () async {
+  test('closes after a manual disable and re-enable cycle', () async {
+    final controller = FakeCameraController();
+    final bloc = CameraBloc(controller)..add(const CameraStarted());
+    await _waitForState(
+      bloc,
+      (state) => state.status == CameraStatus.enabled,
+    );
+
+    bloc.add(const CameraDisableRequested());
+    await _waitForState(
+      bloc,
+      (state) => state.status == CameraStatus.disabled,
+    );
+    bloc.add(const CameraEnableRequested());
+    await _waitForState(
+      bloc,
+      (state) => state.status == CameraStatus.enabled,
+    );
+
+    await bloc.close();
+
+    expect(controller.closeCalls, 1);
+  });
+
+  test('revalidates denied permission across visibility changes and retry', () async {
     final controller = FakeCameraController(
-      initFailure: const PermissionDeniedFailure(),
+      enableFailure: const PermissionDeniedFailure(),
     );
     final bloc = CameraBloc(controller)..add(const CameraStarted());
     await _waitForState(
@@ -157,17 +213,20 @@ void main() {
       (state) => state.status == CameraStatus.failure,
     );
 
-    bloc
-      ..add(const CameraSurfaceActivityChanged(active: false))
-      ..add(const CameraSurfaceActivityChanged(active: true));
+    bloc.add(const CameraSurfaceActivityChanged(active: false));
+    await _waitForState(bloc, (state) => !state.surfaceActive);
     await pumpEventQueue();
+    expect(controller.enableCalls, hasLength(1));
+
+    bloc.add(const CameraSurfaceActivityChanged(active: true));
+    await _waitForCondition(() => controller.enableCalls.length == 2);
 
     expect(bloc.state.status, CameraStatus.failure);
     expect(bloc.state.failure, isA<PermissionDeniedFailure>());
     expect(controller.initCalls, 1);
-    expect(controller.enableCalls, isEmpty);
+    expect(controller.enableCalls, hasLength(2));
 
-    controller.initFailure = null;
+    controller.enableFailure = null;
     bloc.add(const CameraRetryRequested());
     await _waitForState(
       bloc,
@@ -175,6 +234,42 @@ void main() {
     );
 
     expect(controller.initCalls, 2);
+    expect(controller.enableCalls, hasLength(3));
+
+    await bloc.close();
+  });
+
+  test('opens permission settings and reports recovery launch failure', () async {
+    const permissionFailure = PermissionDeniedFailure();
+    const settingsFailure = DeviceUnavailableFailure(
+      code: 'camera_settings_unavailable',
+    );
+    final controller = FakeCameraController(
+      enableFailure: permissionFailure,
+    );
+    final bloc = CameraBloc(controller)..add(const CameraStarted());
+    await _waitForState(
+      bloc,
+      (state) => state.cameraFailure == permissionFailure,
+    );
+    expect(bloc.state.surfaceMounted, isFalse);
+
+    bloc.add(const CameraPermissionSettingsRequested());
+    await _waitForCondition(
+      () => controller.openPermissionSettingsCalls == 1,
+    );
+    await pumpEventQueue();
+    expect(bloc.state.cameraFailure, same(permissionFailure));
+
+    controller.openPermissionSettingsFailure = settingsFailure;
+    bloc.add(const CameraPermissionSettingsRequested());
+    await _waitForState(
+      bloc,
+      (state) => state.cameraFailure == settingsFailure,
+    );
+
+    expect(controller.openPermissionSettingsCalls, 2);
+    expect(bloc.state.status, CameraStatus.failure);
 
     await bloc.close();
   });
@@ -470,4 +565,12 @@ Future<CameraState> _waitForState(
 ) {
   if (predicate(bloc.state)) return Future.value(bloc.state);
   return bloc.stream.firstWhere(predicate);
+}
+
+Future<void> _waitForCondition(bool Function() predicate) async {
+  for (var attempt = 0; attempt < 100; attempt += 1) {
+    if (predicate()) return;
+    await Future<void>.delayed(Duration.zero);
+  }
+  fail('Expected asynchronous camera behavior to settle.');
 }

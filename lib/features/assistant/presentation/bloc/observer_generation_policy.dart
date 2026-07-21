@@ -109,6 +109,13 @@ extension _ObserverGenerationPolicy on ObserverBloc {
             state.copyWith(
               activeGeneration: () => null,
               comments: comments,
+              sessionEntries: [
+                ...state.sessionEntries,
+                ObserverSessionEntry(
+                  kind: ObserverSessionEntryKind.comment,
+                  index: commentIndex,
+                ),
+              ],
               automaticDraft: '',
               automaticFailure: () => null,
               voicePhase: VoiceAgentPhase.failure,
@@ -127,6 +134,13 @@ extension _ObserverGenerationPolicy on ObserverBloc {
           state.copyWith(
             activeGeneration: () => null,
             comments: comments,
+            sessionEntries: [
+              ...state.sessionEntries,
+              ObserverSessionEntry(
+                kind: ObserverSessionEntryKind.comment,
+                index: commentIndex,
+              ),
+            ],
             automaticDraft: '',
             automaticFailure: () => null,
             activeSpeechCommentIndex: speech == null ? null : () => commentIndex,
@@ -146,9 +160,10 @@ extension _ObserverGenerationPolicy on ObserverBloc {
               manualFailure: () => const UnexpectedFailure(code: 'assistant_empty_response'),
             ),
           );
-          unawaited(_voiceInputSession.watch());
+          _armVoiceIfAllowed();
           return;
         }
+        final firstMessageIndex = state.messages.length;
         emit(
           state.copyWith(
             activeGeneration: () => null,
@@ -157,12 +172,23 @@ extension _ObserverGenerationPolicy on ObserverBloc {
               ConversationMessage.user(state.manualDraftPrompt),
               ConversationMessage.assistant(answer),
             ],
+            sessionEntries: [
+              ...state.sessionEntries,
+              ObserverSessionEntry(
+                kind: ObserverSessionEntryKind.message,
+                index: firstMessageIndex,
+              ),
+              ObserverSessionEntry(
+                kind: ObserverSessionEntryKind.message,
+                index: firstMessageIndex + 1,
+              ),
+            ],
             manualDraftPrompt: '',
             manualDraftResponse: '',
             manualFailure: () => null,
           ),
         );
-        unawaited(_voiceInputSession.watch());
+        _armVoiceIfAllowed();
       case (ObserverGenerationKind.manual, AppError<String>(:final failure)):
         emit(
           state.copyWith(
@@ -170,7 +196,7 @@ extension _ObserverGenerationPolicy on ObserverBloc {
             manualFailure: () => failure,
           ),
         );
-        unawaited(_voiceInputSession.watch());
+        _armVoiceIfAllowed();
       case (ObserverGenerationKind.voice, AppSuccess<String>(:final value)):
         final answer = value.trim();
         final question = state.voiceQuestionDraft.trim();
@@ -186,6 +212,40 @@ extension _ObserverGenerationPolicy on ObserverBloc {
               ),
             ),
           );
+          return;
+        }
+        final firstMessageIndex = state.messages.length;
+        final messages = [
+          ...state.messages,
+          ConversationMessage.user(question),
+          ConversationMessage.assistant(answer),
+        ];
+        final sessionEntries = [
+          ...state.sessionEntries,
+          ObserverSessionEntry(
+            kind: ObserverSessionEntryKind.message,
+            index: firstMessageIndex,
+          ),
+          ObserverSessionEntry(
+            kind: ObserverSessionEntryKind.message,
+            index: firstMessageIndex + 1,
+          ),
+        ];
+        if (state.speechMuted) {
+          emit(
+            state.copyWith(
+              activeGeneration: () => null,
+              voicePhase: VoiceAgentPhase.unavailable,
+              messages: messages,
+              sessionEntries: sessionEntries,
+              voiceQuestionDraft: '',
+              voiceAnswerDraft: '',
+              voiceTurnId: () => null,
+              voiceFailure: () => null,
+              speechFailure: () => null,
+            ),
+          );
+          _armVoiceIfAllowed();
           return;
         }
         final speech = !_acceptsForegroundWork || _speechSession.isActive
@@ -209,11 +269,8 @@ extension _ObserverGenerationPolicy on ObserverBloc {
             activeGeneration: () => null,
             activeVoiceSpeechTurnId: () => turnId,
             voicePhase: VoiceAgentPhase.speaking,
-            messages: [
-              ...state.messages,
-              ConversationMessage.user(question),
-              ConversationMessage.assistant(answer),
-            ],
+            messages: messages,
+            sessionEntries: sessionEntries,
             voiceAnswerDraft: '',
             voiceFailure: () => null,
             speechFailure: () => null,

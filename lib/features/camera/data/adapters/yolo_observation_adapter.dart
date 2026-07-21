@@ -23,9 +23,10 @@ import 'package:ultralytics_yolo/ultralytics_yolo.dart';
 /// presentation; raw plugin values remain inside the data boundary.
 ///
 /// Lifecycle:
-/// - [init] requests initial permission and starts model-progress observation.
-/// - [enable] revalidates permission, records lens and power demand, and
-///   reconciles an attached native view.
+/// - [init] discovers product lenses and starts model-progress observation
+///   without touching camera permission.
+/// - [enable] requests or revalidates permission, records lens and power
+///   demand, and reconciles an attached native view.
 /// - [disable] pauses the attached native view without unloading the model.
 /// - [retryModel] stops the controller and advances the surface revision.
 /// - [close] invalidates callbacks before cancelling and disposing every owned
@@ -81,11 +82,6 @@ final class YoloObservationAdapter implements ObservationController {
       );
     }
     if (!_initialized) {
-      final permissionResult = await _cameraPermissionGateway.request();
-      if (_closed) return _closedResult();
-      if (permissionResult case AppError<void>(:final failure)) {
-        return AppError<CameraCapabilities>(failure);
-      }
       _initialized = true;
       _eventsController.add(const ObservationModelPreparing());
       // The package only exports DownloadProgress, so the pinned 0.6.10
@@ -171,6 +167,11 @@ final class YoloObservationAdapter implements ObservationController {
 
   @override
   Future<AppResult<void>> retryObservation() => retryModel();
+
+  @override
+  Future<AppResult<void>> openPermissionSettings() {
+    return _cameraPermissionGateway.openApplicationSettings();
+  }
 
   /// Accepts a successful model callback from the current surface [revision].
   ///

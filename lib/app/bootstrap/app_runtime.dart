@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:pov_agent/app/model_pack/model_pack_controller.dart';
 import 'package:pov_agent/core/logging/app_logger.dart';
+import 'package:pov_agent/features/assistant/application/models/verified_piper_model_bundle.dart';
 import 'package:pov_agent/features/assistant/application/ports/comment_generator.dart';
 import 'package:pov_agent/features/assistant/application/ports/model_store.dart';
 import 'package:pov_agent/features/assistant/application/ports/speech_recognizer.dart';
@@ -28,9 +31,12 @@ final class AppRuntimeCloseException implements Exception {
 /// The process-level owner of application resources and their lifecycle.
 ///
 /// Dependency registration constructs this object without side effects. [start]
-/// begins observation and scene tracking, while [close] is the single shutdown
-/// boundary. Shutdown wins an overlap with startup: it invalidates the startup
-/// wait before either owned resource begins closing.
+/// begins observation and scene tracking after model setup, while [close] is
+/// the single shutdown boundary. Destination and app-lifecycle reconciliation
+/// is serialized: every release request starts observer and camera quiescence
+/// together, and the latest acquisition intent runs only after both settle.
+/// Shutdown wins an overlap with startup by invalidating the startup wait
+/// before either owned resource begins closing.
 final class AppRuntime with WidgetsBindingObserver {
   /// Creates the process owner for camera, generation, ASR, and speech ports.
   AppRuntime({
@@ -42,6 +48,8 @@ final class AppRuntime with WidgetsBindingObserver {
     required this.commentGenerator,
     required this.speechRecognizer,
     required this.speechSynthesizer,
+    this.modelPackController,
+    this.standalonePiperModelStore,
   });
 
   /// The process-owned camera state machine.
@@ -68,16 +76,28 @@ final class AppRuntime with WidgetsBindingObserver {
   /// The process-owned foreground system speech runtime.
   final SpeechSynthesizer speechSynthesizer;
 
+  /// The optional root-gate coordinator detached before its subscribed stores.
+  final ModelPackController? modelPackController;
+
+  /// A Piper store not already owned by the configured speech synthesizer.
+  final ModelStore<VerifiedPiperModelBundle>? standalonePiperModelStore;
+
   late final Future<void> _startFuture;
   Future<void>? _rejectedStartFuture;
   Future<void>? _closeFuture;
+  Future<void>? _resourceReconciliationTask;
   final Completer<void> _closeRequested = Completer<void>();
   _AppRuntimePhase _phase = _AppRuntimePhase.idle;
   bool _bindingObserverRegistered = false;
   bool _appForegrounded = true;
+  bool _assistantDestinationActive = true;
   var _lifecycleEpoch = 0;
+  final ValueNotifier<bool> _privacyCoverVisible = ValueNotifier(false);
 
   static final AppLogger _logger = AppLogger('AppRuntime');
+
+  /// Whether the root must hide all scene-bearing content immediately.
+  ValueListenable<bool> get privacyCoverVisible => _privacyCoverVisible;
 
   /// Starts camera discovery and waits until the initial power state settles.
   ///
@@ -118,18 +138,26 @@ final class AppRuntime with WidgetsBindingObserver {
       final observerStarted = observerBloc.state.started
           ? null
           : observerBloc.stream.firstWhere((state) => state.started);
-      final cameraSettled = cameraBloc.stream.firstWhere(_isCameraSettled);
+      final cameraSettled = _isCameraSettled(cameraBloc.state) ? null : cameraBloc.stream.firstWhere(_isCameraSettled);
       observerBloc.add(const ObserverStarted());
       cameraBloc.add(const CameraStarted());
       await Future.any<void>([
         Future.wait<void>([
-          cameraSettled.then<void>((_) {}),
+          ?cameraSettled?.then<void>((_) {}),
           ?observerStarted?.then<void>((_) {}),
         ]),
         _closeRequested.future,
       ]);
       if (_closeRequested.isCompleted) return;
       _phase = _AppRuntimePhase.running;
+      if (!_assistantMayOwnResources) {
+        await _enqueueResourceReconciliation(
+          () => _quiesceObserverAndDeactivateCamera(
+            _lifecycleEpoch,
+            suspendModels: !_appForegrounded,
+          ),
+        );
+      }
     } on Object catch (error, stackTrace) {
       // A close request invalidates the settlement wait; stream completion from
       // that teardown is cancellation, not a startup failure.
@@ -144,56 +172,136 @@ final class AppRuntime with WidgetsBindingObserver {
     }
   }
 
+  /// Reconciles foreground resources with the selected root destination.
+  ///
+  /// Destination changes use serialized latest-wins semantics. Entering
+  /// Settings rejects new observer work while camera teardown begins in
+  /// parallel. Returning to Assistant reacquires only after both release paths
+  /// settle and only when the app is active; explicit camera/observer pause
+  /// intent remains authoritative in each Bloc.
+  Future<void> setAssistantDestinationActive({required bool active}) {
+    if (_phase == _AppRuntimePhase.closing || _phase == _AppRuntimePhase.closed) {
+      return Future.value();
+    }
+    if (_assistantDestinationActive == active) {
+      return _resourceReconciliationTask ?? Future.value();
+    }
+    _assistantDestinationActive = active;
+    final epoch = ++_lifecycleEpoch;
+    if (_phase == _AppRuntimePhase.idle) return Future.value();
+    if (!active) {
+      return _enqueueResourceReconciliation(
+        () => _quiesceObserverAndDeactivateCamera(
+          epoch,
+          suspendModels: !_appForegrounded,
+        ),
+      );
+    }
+    return _enqueueResourceReconciliation(
+      () => _resumeAssistantIfAllowed(epoch),
+    );
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.resumed:
         if (_appForegrounded) return;
         _appForegrounded = true;
-        _lifecycleEpoch += 1;
-        if (!observerBloc.isClosed) {
-          observerBloc.add(const ObserverResumed());
-        }
-        if (!cameraBloc.isClosed) {
-          cameraBloc.add(
-            const CameraSurfaceActivityChanged(active: true),
-          );
-        }
+        final epoch = ++_lifecycleEpoch;
+        unawaited(
+          _enqueueResourceReconciliation(
+            () => _resumeAssistantIfAllowed(epoch),
+          ),
+        );
       case AppLifecycleState.inactive || AppLifecycleState.hidden || AppLifecycleState.paused:
         if (!_appForegrounded) return;
         _appForegrounded = false;
+        _privacyCoverVisible.value = true;
         final epoch = ++_lifecycleEpoch;
-        unawaited(_quiesceObserverThenSuspendAfterCamera(epoch));
+        unawaited(
+          _enqueueResourceReconciliation(
+            () => _quiesceObserverAndDeactivateCamera(
+              epoch,
+              suspendModels: true,
+            ),
+          ),
+        );
       case AppLifecycleState.detached:
         _appForegrounded = false;
+        _privacyCoverVisible.value = true;
         _lifecycleEpoch += 1;
         unawaited(close());
     }
   }
 
-  Future<void> _quiesceObserverThenSuspendAfterCamera(int epoch) async {
+  Future<void> _enqueueResourceReconciliation(
+    Future<void> Function() reconcile,
+  ) {
+    final predecessor = _resourceReconciliationTask;
+    late final Future<void> task;
+    task = (() async {
+      if (predecessor != null) {
+        try {
+          await predecessor;
+        } on Object {
+          // The latest lifecycle intent must still run after an earlier
+          // reconciliation reports its already-logged resource failure.
+        }
+      }
+      await reconcile();
+    })();
+    _resourceReconciliationTask = task;
+    unawaited(
+      task.then<void>(
+        (_) => _clearResourceReconciliationTask(task),
+        onError: (Object _, StackTrace _) {
+          _clearResourceReconciliationTask(task);
+        },
+      ),
+    );
+    return task;
+  }
+
+  void _clearResourceReconciliationTask(Future<void> task) {
+    if (identical(_resourceReconciliationTask, task)) {
+      _resourceReconciliationTask = null;
+    }
+  }
+
+  Future<void> _quiesceObserverAndDeactivateCamera(
+    int epoch, {
+    required bool suspendModels,
+  }) async {
     try {
-      if (!observerBloc.isClosed && observerBloc.state.foregroundActive) {
-        final observerQuiesced = observerBloc.stream.firstWhere(
+      Future<void>? observerQuiesced;
+      if (!observerBloc.isClosed && observerBloc.state.started && observerBloc.state.foregroundActive) {
+        observerQuiesced = observerBloc.stream.firstWhere(
           (state) => !state.foregroundActive && !state.isGenerating && !state.isSpeaking,
         );
         observerBloc.add(const ObserverForegroundDeactivated());
-        await observerQuiesced;
       }
 
-      if (epoch != _lifecycleEpoch || _appForegrounded) return;
+      Future<void>? cameraSettled;
       if (!cameraBloc.isClosed) {
-        final cameraSettled = _isCameraInactive(cameraBloc.state)
-            ? null
-            : cameraBloc.stream.firstWhere(_isCameraInactive);
+        cameraSettled = _isCameraInactive(cameraBloc.state) ? null : cameraBloc.stream.firstWhere(_isCameraInactive);
         cameraBloc.add(
           const CameraSurfaceActivityChanged(active: false),
         );
-        await cameraSettled;
       }
 
+      // A later resume changes the epoch but does not cancel this release.
+      // Waiting for both owners preserves the serialized disable-then-enable
+      // boundary while camera privacy no longer depends on slow native speech,
+      // generation, or microphone cancellation.
+      await Future.wait<void>([
+        ?observerQuiesced,
+        ?cameraSettled,
+      ]);
+
       if (epoch != _lifecycleEpoch ||
-          _appForegrounded ||
+          _assistantMayOwnResources ||
+          !suspendModels ||
           _phase == _AppRuntimePhase.closing ||
           _phase == _AppRuntimePhase.closed ||
           observerBloc.isClosed) {
@@ -208,11 +316,54 @@ final class AppRuntime with WidgetsBindingObserver {
         return;
       }
       _logger.e(
-        'Failed to quiesce observer and camera resources before suspension.',
+        'Failed to quiesce observer and camera resources.',
         error: error,
         stackTrace: stackTrace,
       );
     }
+  }
+
+  Future<void> _resumeAssistantIfAllowed(int epoch) async {
+    if (_phase == _AppRuntimePhase.closing || _phase == _AppRuntimePhase.closed) {
+      return;
+    }
+    if (epoch != _lifecycleEpoch || !_assistantMayOwnResources) {
+      if (epoch == _lifecycleEpoch && _appForegrounded && !_assistantDestinationActive) {
+        _privacyCoverVisible.value = false;
+      }
+      return;
+    }
+    try {
+      if (!observerBloc.isClosed && observerBloc.state.started) {
+        // Queue resume even while deactivation still reports foreground=true.
+        // Observer events are sequential, so this latest intent runs after the
+        // in-flight quiescence instead of being lost in a rapid return.
+        observerBloc.add(const ObserverResumed());
+      }
+      if (!cameraBloc.isClosed) {
+        final cameraSettled = _isCameraSettledForActiveSurface(cameraBloc.state)
+            ? null
+            : cameraBloc.stream.firstWhere(_isCameraSettledForActiveSurface);
+        cameraBloc.add(const CameraSurfaceActivityChanged(active: true));
+        await cameraSettled;
+      }
+      if (epoch == _lifecycleEpoch && _assistantMayOwnResources) {
+        _privacyCoverVisible.value = false;
+      }
+    } on Object catch (error, stackTrace) {
+      if (epoch != _lifecycleEpoch || _phase == _AppRuntimePhase.closing || _phase == _AppRuntimePhase.closed) {
+        return;
+      }
+      _logger.e(
+        'Failed to reacquire assistant resources.',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  bool get _assistantMayOwnResources {
+    return _appForegrounded && _assistantDestinationActive;
   }
 
   /// Releases process-owned resources exactly once.
@@ -226,6 +377,7 @@ final class AppRuntime with WidgetsBindingObserver {
     final completion = Completer<void>();
     _closeFuture = completion.future;
     _phase = _AppRuntimePhase.closing;
+    _privacyCoverVisible.value = true;
     _lifecycleEpoch += 1;
     if (!_closeRequested.isCompleted) _closeRequested.complete();
     final closeFuture = completion.future;
@@ -266,6 +418,10 @@ final class AppRuntime with WidgetsBindingObserver {
         firstStackTrace ??= stackTrace;
       } finally {
         _bindingObserverRegistered = false;
+        // The setup gate subscribes directly to model stores. Detach it before
+        // any consumer or store can close its state stream.
+        final modelPack = modelPackController;
+        if (modelPack != null) await closeOwner(modelPack.close);
         // Stop the timer and generation owner before camera shutdown so it can
         // no longer submit work from a late tick. Camera-side owners may then
         // close concurrently before app-owned model ports are destroyed.
@@ -302,9 +458,14 @@ final class AppRuntime with WidgetsBindingObserver {
       }
     }
 
-    // The already-quiescent Bloc no longer consumes these ports. The store
-    // stops preparation and unloads before the generator destroys native state.
+    // The already-quiescent Bloc no longer consumes these ports. Stop artifact
+    // acquisition before the generator destroys its independently owned native
+    // runtime.
     await closeResource(modelStore.close);
+    final standalonePiper = standalonePiperModelStore;
+    if (standalonePiper != null) {
+      await closeResource(standalonePiper.close);
+    }
     await closeResource(commentGenerator.close);
 
     if (firstError case final error?) {
@@ -355,10 +516,18 @@ enum _AppRuntimePhase { idle, starting, running, closing, closed }
 
 bool _isCameraSettled(CameraState state) {
   if (state.status == CameraStatus.failure) return true;
-  final shouldEnable = state.requestedEnabled && state.surfaceActive;
+  final shouldEnable = state.requestedEnabled && state.surfaceActive && state.availableLenses.isNotEmpty;
   return shouldEnable ? state.status == CameraStatus.enabled : state.status == CameraStatus.disabled;
 }
 
 bool _isCameraInactive(CameraState state) {
   return state.status == CameraStatus.disabled || state.status == CameraStatus.failure;
+}
+
+bool _isCameraSettledForActiveSurface(CameraState state) {
+  if (!state.surfaceActive) return false;
+  if (state.status == CameraStatus.failure) return true;
+  return state.requestedEnabled && state.availableLenses.isNotEmpty
+      ? state.status == CameraStatus.enabled
+      : state.status == CameraStatus.disabled;
 }

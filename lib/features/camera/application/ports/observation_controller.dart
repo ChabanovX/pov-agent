@@ -33,6 +33,9 @@ abstract interface class ObservationController {
   /// Restarts frame acquisition or inference without reloading the model.
   Future<AppResult<void>> retryObservation();
 
+  /// Opens platform settings for camera-permission recovery.
+  Future<AppResult<void>> openPermissionSettings();
+
   /// Releases all observation resources and completes event streams.
   Future<void> close();
 }

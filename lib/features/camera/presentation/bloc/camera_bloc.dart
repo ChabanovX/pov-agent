@@ -35,6 +35,12 @@ final class CameraRetryRequested extends CameraIntentEvent {
   const CameraRetryRequested();
 }
 
+/// An intent to open platform settings after camera access is denied.
+final class CameraPermissionSettingsRequested extends CameraEvent {
+  /// Creates a camera-permission recovery intent.
+  const CameraPermissionSettingsRequested();
+}
+
 /// An intent to enable observation with the selected lens.
 final class CameraEnableRequested extends CameraIntentEvent {
   /// Creates a camera-enable intent.
@@ -92,6 +98,8 @@ enum _ReconciliationOutcome {
 /// reconciliation families may interleave. This keeps newer intent responsive
 /// while an earlier controller call awaits. Only reconciliation invokes
 /// controller lifecycle methods, so those calls never overlap.
+/// Permission-settings recovery is independently droppable so repeated taps
+/// cannot launch multiple platform-settings requests.
 ///
 /// [close] seals event admission, cancels the runtime-event subscription, waits
 /// for reconciliation handlers, then releases the controller.
@@ -100,7 +108,13 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
   CameraBloc(
     this._controller, {
     bool initiallySurfaceActive = true,
-  }) : super(CameraState(surfaceActive: initiallySurfaceActive)) {
+    bool initiallyRequestedEnabled = true,
+  }) : super(
+         CameraState(
+           surfaceActive: initiallySurfaceActive,
+           requestedEnabled: initiallyRequestedEnabled,
+         ),
+       ) {
     on<CameraIntentEvent>(
       _onIntent,
       transformer: sequential(),
@@ -112,6 +126,10 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
     on<_CameraReconciliationRequested>(
       _onReconciliationRequested,
       transformer: sequential(),
+    );
+    on<CameraPermissionSettingsRequested>(
+      _onPermissionSettingsRequested,
+      transformer: droppable(),
     );
   }
 
@@ -208,6 +226,7 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
                 ? CameraStatus.initializing
                 : state.status,
             requestedEnabled: true,
+            activationRequested: true,
             cameraFailure: () => null,
             observationFailure: () => null,
           ),
@@ -245,6 +264,17 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
     _observationSubscription ??= _controller.events.listen((event) {
       if (!isClosed) add(_ObservationRuntimeEventReceived(event));
     });
+  }
+
+  Future<void> _onPermissionSettingsRequested(
+    CameraPermissionSettingsRequested _,
+    Emitter<CameraState> emit,
+  ) async {
+    final result = await _controller.openPermissionSettings();
+    if (emit.isDone) return;
+    if (result case AppError<void>(:final failure)) {
+      emit(state.copyWith(cameraFailure: () => failure));
+    }
   }
 
   void _onObservationRuntimeEvent(
@@ -454,7 +484,6 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
         status: _controllerEnabled ? CameraStatus.enabled : CameraStatus.disabled,
         selectedLens: selectedLens,
         availableLenses: capabilities.availableLenses,
-        surfaceMounted: true,
         cameraFailure: () => null,
       ),
     );
@@ -515,10 +544,11 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
   ) async {
     final targetLens = state.selectedLens;
     if (_controllerEnabled && _controllerLens == targetLens) {
-      if (state.status != CameraStatus.enabled || state.cameraFailure != null) {
+      if (state.status != CameraStatus.enabled || state.cameraFailure != null || !state.surfaceMounted) {
         emit(
           state.copyWith(
             status: CameraStatus.enabled,
+            surfaceMounted: true,
             cameraFailure: () => null,
           ),
         );
@@ -545,6 +575,7 @@ final class CameraBloc extends Bloc<CameraEvent, CameraState> {
         emit(
           state.copyWith(
             status: CameraStatus.enabled,
+            surfaceMounted: true,
             cameraFailure: () => null,
           ),
         );

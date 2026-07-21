@@ -70,6 +70,30 @@ enum VoiceAgentPhase {
   suspended,
 }
 
+/// The append-only source reference for one current-session transcript row.
+enum ObserverSessionEntryKind {
+  /// A row in [ObserverState.comments].
+  comment,
+
+  /// A row in [ObserverState.messages].
+  message,
+}
+
+/// Preserves interleaving between automatic comments and dialogue messages.
+final class ObserverSessionEntry {
+  /// Creates a stable reference to [index] in the collection selected by [kind].
+  const ObserverSessionEntry({
+    required this.kind,
+    required this.index,
+  });
+
+  /// The source transcript collection.
+  final ObserverSessionEntryKind kind;
+
+  /// The append-only index inside the selected source collection.
+  final int index;
+}
+
 /// The observer's model, scene, timer, transcript, generation, and speech state.
 ///
 /// Automatic comments and user dialogue are stored separately so a previous
@@ -90,12 +114,15 @@ final class ObserverState {
     this.activeGeneration,
     this.speechMuted = false,
     this.activeSpeechCommentIndex,
+    this.activeSpeechMessageIndex,
     this.activeVoiceSpeechTurnId,
+    this.handsFreeEnabled = false,
     this.asrModelStatus = ObserverModelStatus.idle,
     this.voicePhase = VoiceAgentPhase.unavailable,
     this.voiceTurnId,
     List<ObserverComment> comments = const [],
     List<ConversationMessage> messages = const [],
+    List<ObserverSessionEntry> sessionEntries = const [],
     this.modelDownloadProgress,
     this.asrModelDownloadProgress,
     this.manualDraftPrompt = '',
@@ -110,7 +137,8 @@ final class ObserverState {
     this.automaticFailure,
     this.speechFailure,
   }) : comments = List.unmodifiable(comments),
-       messages = List.unmodifiable(messages);
+       messages = List.unmodifiable(messages),
+       sessionEntries = List.unmodifiable(sessionEntries);
 
   /// Configured phrase displayed while recognition waits for a voice turn.
   final String wakePhrase;
@@ -142,8 +170,14 @@ final class ObserverState {
   /// Append-only index of the comment currently being spoken.
   final int? activeSpeechCommentIndex;
 
+  /// Append-only index of the committed Assistant message being replayed.
+  final int? activeSpeechMessageIndex;
+
   /// Monotonic voice turn whose answer is currently being spoken.
   final int? activeVoiceSpeechTurnId;
+
+  /// Whether hands-free microphone processing is enabled for this session.
+  final bool handsFreeEnabled;
 
   /// The verified streaming-ASR model preparation phase.
   final ObserverModelStatus asrModelStatus;
@@ -159,6 +193,9 @@ final class ObserverState {
 
   /// Completed typed and hands-free dialogue in user/assistant order.
   final List<ConversationMessage> messages;
+
+  /// Comments and dialogue messages in the order they reached the session.
+  final List<ObserverSessionEntry> sessionEntries;
 
   /// Normalized download completion while [modelStatus] is downloading.
   final double? modelDownloadProgress;
@@ -193,6 +230,24 @@ final class ObserverState {
   /// The latest recoverable hands-free interaction failure.
   final AppFailure? voiceFailure;
 
+  /// Whether the current voice failure came from microphone authorization.
+  ///
+  /// Lifecycle quiescence retains this failure so Settings can explain the
+  /// disabled hands-free switch after microphone capture has been released.
+  bool get hasMicrophonePermissionFailure {
+    return voiceFailure is PermissionDeniedFailure;
+  }
+
+  /// Whether application settings can plausibly recover microphone access.
+  ///
+  /// Restricted access is controlled by the device rather than this app, so
+  /// exposing an Open Settings action would promise a recovery path that iOS
+  /// cannot provide.
+  bool get canOpenMicrophoneSettings {
+    final failure = voiceFailure;
+    return failure is PermissionDeniedFailure && failure.code != 'microphone_permission_restricted';
+  }
+
   /// The latest automatic-generation failure.
   final AppFailure? automaticFailure;
 
@@ -204,7 +259,7 @@ final class ObserverState {
 
   /// Whether one committed automatic comment or voice answer owns speech.
   bool get isSpeaking {
-    return activeSpeechCommentIndex != null || activeVoiceSpeechTurnId != null;
+    return activeSpeechCommentIndex != null || activeSpeechMessageIndex != null || activeVoiceSpeechTurnId != null;
   }
 
   /// The latest successfully committed automatic comment.
@@ -238,12 +293,15 @@ final class ObserverState {
     ObserverGenerationKind? Function()? activeGeneration,
     bool? speechMuted,
     int? Function()? activeSpeechCommentIndex,
+    int? Function()? activeSpeechMessageIndex,
     int? Function()? activeVoiceSpeechTurnId,
+    bool? handsFreeEnabled,
     ObserverModelStatus? asrModelStatus,
     VoiceAgentPhase? voicePhase,
     int? Function()? voiceTurnId,
     List<ObserverComment>? comments,
     List<ConversationMessage>? messages,
+    List<ObserverSessionEntry>? sessionEntries,
     double? Function()? modelDownloadProgress,
     double? Function()? asrModelDownloadProgress,
     String? manualDraftPrompt,
@@ -271,14 +329,19 @@ final class ObserverState {
       activeSpeechCommentIndex: activeSpeechCommentIndex == null
           ? this.activeSpeechCommentIndex
           : activeSpeechCommentIndex(),
+      activeSpeechMessageIndex: activeSpeechMessageIndex == null
+          ? this.activeSpeechMessageIndex
+          : activeSpeechMessageIndex(),
       activeVoiceSpeechTurnId: activeVoiceSpeechTurnId == null
           ? this.activeVoiceSpeechTurnId
           : activeVoiceSpeechTurnId(),
+      handsFreeEnabled: handsFreeEnabled ?? this.handsFreeEnabled,
       asrModelStatus: asrModelStatus ?? this.asrModelStatus,
       voicePhase: voicePhase ?? this.voicePhase,
       voiceTurnId: voiceTurnId == null ? this.voiceTurnId : voiceTurnId(),
       comments: comments ?? this.comments,
       messages: messages ?? this.messages,
+      sessionEntries: sessionEntries ?? this.sessionEntries,
       modelDownloadProgress: modelDownloadProgress == null ? this.modelDownloadProgress : modelDownloadProgress(),
       asrModelDownloadProgress: asrModelDownloadProgress == null
           ? this.asrModelDownloadProgress

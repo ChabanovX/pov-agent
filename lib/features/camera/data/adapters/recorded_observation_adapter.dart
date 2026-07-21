@@ -201,6 +201,11 @@ final class RecordedObservationAdapter implements ObservationController, Recorde
     return const AppSuccess<void>(null);
   }
 
+  @override
+  Future<AppResult<void>> openPermissionSettings() {
+    return Future.value(const AppSuccess<void>(null));
+  }
+
   AppResult<T> _closedResult<T>() {
     return AppError<T>(
       const DeviceUnavailableFailure(code: 'observation_closed'),

@@ -55,6 +55,7 @@ final class CameraState {
     List<CameraLens> availableLenses = const [],
     List<Detection> detections = const [],
     this.requestedEnabled = true,
+    bool? activationRequested,
     this.surfaceActive = true,
     this.surfaceMounted = false,
     this.modelDownloadProgress,
@@ -62,7 +63,8 @@ final class CameraState {
     this.cameraFailure,
     this.modelFailure,
     this.observationFailure,
-  }) : availableLenses = List.unmodifiable(availableLenses),
+  }) : activationRequested = activationRequested ?? requestedEnabled,
+       availableLenses = List.unmodifiable(availableLenses),
        detections = List.unmodifiable(detections);
 
   /// The current native camera phase.
@@ -83,10 +85,13 @@ final class CameraState {
   /// Whether the user wants observation enabled.
   final bool requestedEnabled;
 
+  /// Whether the user has crossed the contextual camera-access explanation.
+  final bool activationRequested;
+
   /// Whether the surface is visible while the app is foregrounded.
   final bool surfaceActive;
 
-  /// Whether a native or recorded observation surface can be rendered.
+  /// Whether permission-gated activation allows the observation surface to mount.
   final bool surfaceMounted;
 
   /// The model download fraction, or `null` outside a known download.
@@ -121,6 +126,7 @@ final class CameraState {
     List<CameraLens>? availableLenses,
     List<Detection>? detections,
     bool? requestedEnabled,
+    bool? activationRequested,
     bool? surfaceActive,
     bool? surfaceMounted,
     double? Function()? modelDownloadProgress,
@@ -136,6 +142,7 @@ final class CameraState {
       availableLenses: availableLenses ?? this.availableLenses,
       detections: detections ?? this.detections,
       requestedEnabled: requestedEnabled ?? this.requestedEnabled,
+      activationRequested: activationRequested ?? this.activationRequested,
       surfaceActive: surfaceActive ?? this.surfaceActive,
       surfaceMounted: surfaceMounted ?? this.surfaceMounted,
       modelDownloadProgress: modelDownloadProgress == null ? this.modelDownloadProgress : modelDownloadProgress(),

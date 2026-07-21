@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -68,7 +70,7 @@ void main() {
     );
 
     semantics.dispose();
-    await tester.runAsync(bloc.close);
+    await _unmountAndSealBloc(tester, bloc);
   });
 
   testWidgets('shows permission guidance and retries initialization', (
@@ -99,7 +101,7 @@ void main() {
     expect(find.byKey(testObservationSurfaceKey), findsOneWidget);
     expect(controller.initCalls, 2);
 
-    await tester.runAsync(bloc.close);
+    await _unmountAndSealBloc(tester, bloc);
   });
 
   testWidgets('shows first-download progress over the mounted surface', (
@@ -128,7 +130,7 @@ void main() {
 
     expect(find.bySemanticsLabel('Disable camera'), findsOneWidget);
 
-    await tester.runAsync(bloc.close);
+    await _unmountAndSealBloc(tester, bloc);
   });
 
   testWidgets('shows inference failure copy and retries observation', (
@@ -160,7 +162,7 @@ void main() {
     expect(find.text('The frame could not be analyzed.'), findsNothing);
     expect(find.bySemanticsLabel('Disable camera'), findsOneWidget);
 
-    await tester.runAsync(bloc.close);
+    await _unmountAndSealBloc(tester, bloc);
   });
 
   testWidgets('keeps inference failure retryable when retry fails', (
@@ -195,7 +197,7 @@ void main() {
     expect(controller.retryObservationCalls, 2);
     expect(find.text('The frame could not be analyzed.'), findsOneWidget);
 
-    await tester.runAsync(bloc.close);
+    await _unmountAndSealBloc(tester, bloc);
   });
 }
 
@@ -226,4 +228,14 @@ Future<CameraState> _waitForState(
 ) {
   if (predicate(bloc.state)) return Future.value(bloc.state);
   return bloc.stream.firstWhere(predicate);
+}
+
+Future<void> _unmountAndSealBloc(
+  WidgetTester tester,
+  CameraBloc bloc,
+) async {
+  await tester.pumpWidget(const SizedBox.shrink());
+  // The fake-async widget listener receives the stream's done event only while
+  // the test zone unwinds. Awaiting close here would deadlock that delivery.
+  unawaited(bloc.close());
 }

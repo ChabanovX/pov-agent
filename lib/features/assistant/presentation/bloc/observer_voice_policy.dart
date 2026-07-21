@@ -2,11 +2,22 @@ part of 'observer_bloc.dart';
 
 /// Projects hands-free input through the observer's single ordered queue.
 extension _ObserverVoicePolicy on ObserverBloc {
+  Future<void> _onMicrophoneSettingsRequested(
+    Emitter<ObserverState> emit,
+  ) async {
+    if (_closing || !state.canOpenMicrophoneSettings) return;
+    final result = await _voiceInputSession.openPermissionSettings();
+    if (emit.isDone || _closing) return;
+    if (result case AppError<void>(:final failure)) {
+      emit(state.copyWith(voiceFailure: () => failure));
+    }
+  }
+
   Future<void> _onVoiceInputUpdate(
     ObserverVoiceInputUpdate update,
     Emitter<ObserverState> emit,
   ) async {
-    if (_closing || !state.started) return;
+    if (_closing || !state.started || !state.handsFreeEnabled) return;
     switch (update) {
       case ObserverVoiceModelStateChanged(:final state):
         _onVoiceModelStateChanged(state, emit);
@@ -21,7 +32,7 @@ extension _ObserverVoicePolicy on ObserverBloc {
           ),
         );
       case ObserverVoiceWatching():
-        if (!_canKeepVoiceRecognitionArmed) {
+        if (!_canEnterVoiceWatching) {
           await _voiceInputSession.pause();
           return;
         }
@@ -98,6 +109,7 @@ extension _ObserverVoicePolicy on ObserverBloc {
     ModelStoreState<VerifiedAsrModelBundle> modelState,
     Emitter<ObserverState> emit,
   ) {
+    if (!state.handsFreeEnabled) return;
     // A suspended store update can already be queued when resume reconciles
     // the synchronous store state. Do not let that prior lifecycle projection
     // overwrite the foreground recovery state.
@@ -127,6 +139,65 @@ extension _ObserverVoicePolicy on ObserverBloc {
         voiceFailure: status == ObserverModelStatus.failure ? () => modelState.failure : null,
       ),
     );
+    if (status == ObserverModelStatus.ready) _armVoiceIfAllowed();
+  }
+
+  /// Enabling is explicit and single-flight through the Bloc queue. Disabling
+  /// invalidates recognition before awaiting native teardown, so a late wake
+  /// callback cannot reopen a voice turn after the switch is off.
+  Future<void> _onHandsFreeEnabledChanged(
+    bool enabled,
+    Emitter<ObserverState> emit,
+  ) async {
+    if (_closing || !state.started || enabled == state.handsFreeEnabled) {
+      return;
+    }
+    if (!enabled) {
+      emit(
+        state.copyWith(
+          handsFreeEnabled: false,
+          voicePhase: VoiceAgentPhase.unavailable,
+          voiceTurnId: () => null,
+          voiceQuestionDraft: '',
+          voiceAnswerDraft: '',
+          voiceFailure: () => null,
+        ),
+      );
+      final result = await _voiceInputSession.suspend();
+      if (emit.isDone || _closing) return;
+      if (result case AppError<void>(:final failure)) {
+        emit(state.copyWith(voiceFailure: () => failure));
+      } else {
+        emit(state.copyWith(asrModelStatus: ObserverModelStatus.suspended));
+      }
+      return;
+    }
+
+    emit(
+      state.copyWith(
+        handsFreeEnabled: true,
+        asrModelStatus: _acceptsForegroundWork ? ObserverModelStatus.loading : ObserverModelStatus.suspended,
+        voicePhase: _acceptsForegroundWork ? VoiceAgentPhase.preparing : VoiceAgentPhase.suspended,
+        asrModelFailure: () => null,
+        voiceFailure: () => null,
+      ),
+    );
+    if (!_acceptsForegroundWork) return;
+    _voiceRetryRequired = false;
+    final result = await _voiceInputSession.prepareModel();
+    if (emit.isDone || _closing || !state.handsFreeEnabled) return;
+    if (result case AppError<VerifiedAsrModelBundle>(:final failure)) {
+      emit(
+        state.copyWith(
+          asrModelStatus: ObserverModelStatus.failure,
+          voicePhase: VoiceAgentPhase.failure,
+          asrModelFailure: () => failure,
+          voiceFailure: () => failure,
+        ),
+      );
+      return;
+    }
+    _armVoiceIfAllowed();
   }
 
   Future<void> _onVoiceQuestionCompleted(
@@ -179,6 +250,7 @@ extension _ObserverVoicePolicy on ObserverBloc {
     if (_closing ||
         !_acceptsForegroundWork ||
         !state.started ||
+        !state.handsFreeEnabled ||
         state.voicePhase != VoiceAgentPhase.failure ||
         state.isGenerating ||
         (state.isSpeaking && !ownsFailedVoiceSpeech)) {
@@ -214,15 +286,44 @@ extension _ObserverVoicePolicy on ObserverBloc {
         speechFailure: ownsFailedVoiceSpeech ? () => null : null,
       ),
     );
+    _voiceRetryRequired = false;
+    final inputCleanup = await _voiceInputSession.pause();
+    if (emit.isDone || _closing || !_acceptsForegroundWork) return;
+    if (inputCleanup case AppError<void>(:final failure)) {
+      emit(
+        state.copyWith(
+          voicePhase: VoiceAgentPhase.failure,
+          voiceFailure: () => failure,
+        ),
+      );
+      return;
+    }
     await _voiceInputSession.watch();
   }
 
   bool _matchesVoiceTurn(int turnId) => state.voiceTurnId == turnId;
 
+  bool get _canEnterVoiceWatching {
+    final generationKind = _generationSession.active?.kind ?? state.activeGeneration;
+    return _acceptsForegroundWork &&
+        state.handsFreeEnabled &&
+        state.modelStatus == ObserverModelStatus.ready &&
+        state.voiceFailure == null &&
+        state.asrModelFailure == null &&
+        !state.isSpeaking &&
+        !_speechSession.isActive &&
+        generationKind != ObserverGenerationKind.manual &&
+        generationKind != ObserverGenerationKind.voice;
+  }
+
   bool get _canKeepVoiceRecognitionArmed {
     final generationKind = _generationSession.active?.kind ?? state.activeGeneration;
     return _acceptsForegroundWork &&
+        state.handsFreeEnabled &&
+        state.asrModelStatus == ObserverModelStatus.ready &&
         state.modelStatus == ObserverModelStatus.ready &&
+        state.voiceFailure == null &&
+        state.asrModelFailure == null &&
         !state.isSpeaking &&
         !_speechSession.isActive &&
         generationKind != ObserverGenerationKind.manual &&

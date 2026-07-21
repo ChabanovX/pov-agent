@@ -292,20 +292,41 @@ void main() {
     await adapter.close();
   });
 
-  test('denied camera permission prevents the native surface from starting', () async {
+  test('initialization defers camera permission until enable', () async {
     final adapter = YoloObservationAdapter(
       cameraPermissionGateway: const _FakeCameraPermissionGateway(
         AppError<void>(PermissionDeniedFailure()),
       ),
     );
 
-    final result = await adapter.init();
+    final initialization = await adapter.init();
+    final result = await adapter.enable(CameraLens.back);
 
-    expect(result, isA<AppError<CameraCapabilities>>());
+    expect(initialization, isA<AppSuccess<CameraCapabilities>>());
+    expect(result, isA<AppError<void>>());
     expect(
-      (result as AppError<CameraCapabilities>).failure,
+      (result as AppError<void>).failure,
       isA<PermissionDeniedFailure>(),
     );
+    await adapter.close();
+  });
+
+  test('delegates permission recovery to the platform gateway', () async {
+    const failure = DeviceUnavailableFailure(
+      code: 'camera_settings_unavailable',
+    );
+    final permissionGateway = _SettingsCameraPermissionGateway(
+      const AppError<void>(failure),
+    );
+    final adapter = YoloObservationAdapter(
+      cameraPermissionGateway: permissionGateway,
+    );
+
+    final result = await adapter.openPermissionSettings();
+
+    expect(result, isA<AppError<void>>());
+    expect((result as AppError<void>).failure, same(failure));
+    expect(permissionGateway.openApplicationSettingsCalls, 1);
     await adapter.close();
   });
 
@@ -318,6 +339,8 @@ void main() {
       cameraPermissionGateway: permissionGateway,
     );
     expect(await adapter.init(), isA<AppSuccess<CameraCapabilities>>());
+    expect(await adapter.enable(CameraLens.back), isA<AppSuccess<void>>());
+    expect(await adapter.disable(), isA<AppSuccess<void>>());
 
     final result = await adapter.enable(CameraLens.back);
 
@@ -337,6 +360,11 @@ final class _FakeCameraPermissionGateway implements CameraPermissionGateway {
 
   @override
   Future<AppResult<void>> request() async => result;
+
+  @override
+  Future<AppResult<void>> openApplicationSettings() async {
+    return const AppSuccess<void>(null);
+  }
 }
 
 final class _SequenceCameraPermissionGateway implements CameraPermissionGateway {
@@ -355,5 +383,28 @@ final class _SequenceCameraPermissionGateway implements CameraPermissionGateway 
     final result = _results[index];
     requestCalls += 1;
     return result;
+  }
+
+  @override
+  Future<AppResult<void>> openApplicationSettings() async {
+    return const AppSuccess<void>(null);
+  }
+}
+
+final class _SettingsCameraPermissionGateway implements CameraPermissionGateway {
+  _SettingsCameraPermissionGateway(this.settingsResult);
+
+  final AppResult<void> settingsResult;
+  int openApplicationSettingsCalls = 0;
+
+  @override
+  Future<AppResult<void>> request() async {
+    return const AppSuccess<void>(null);
+  }
+
+  @override
+  Future<AppResult<void>> openApplicationSettings() async {
+    openApplicationSettingsCalls += 1;
+    return settingsResult;
   }
 }

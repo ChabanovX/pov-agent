@@ -15,6 +15,9 @@ import 'package:pov_agent/features/assistant/application/ports/speech_synthesize
 import 'package:pov_agent/features/assistant/application/services/observer_request_builder.dart';
 import 'package:pov_agent/features/assistant/application/services/qwen_prompt_builder.dart';
 import 'package:pov_agent/features/assistant/presentation/bloc/observer_bloc.dart';
+import 'package:pov_agent/features/assistant/presentation/services/observer_timer_controller.dart';
+import 'package:pov_agent/features/camera/application/models/verified_vision_model_artifact.dart';
+import 'package:pov_agent/features/camera/application/ports/vision_model_verifier.dart';
 import 'package:pov_agent/shared/domain/app_failure.dart';
 import 'package:pov_agent/shared/domain/app_result.dart';
 import 'package:pov_agent/shared/domain/scene_snapshot.dart';
@@ -38,13 +41,16 @@ const _testShortCommentOptions = GenerationOptions(
 /// Assistant owners used by app-shell and lifecycle tests.
 final class TestAssistantResources {
   /// Creates a coherent test assistant dependency graph.
-  TestAssistantResources({SceneSource? sceneSource})
-    : modelStore = TestModelStore(),
-      asrModelStore = TestAsrModelStore(),
-      commentGenerator = TestCommentGenerator(),
-      microphonePermissionGateway = TestMicrophonePermissionGateway(),
-      speechRecognizer = TestSpeechRecognizer(),
-      speechSynthesizer = TestSpeechSynthesizer() {
+  TestAssistantResources({
+    SceneSource? sceneSource,
+    bool handsFreeInitiallyEnabled = false,
+    ObserverPeriodicTimerFactory? periodicTimerFactory,
+  }) : modelStore = TestModelStore(),
+       asrModelStore = TestAsrModelStore(),
+       commentGenerator = TestCommentGenerator(),
+       microphonePermissionGateway = TestMicrophonePermissionGateway(),
+       speechRecognizer = TestSpeechRecognizer(),
+       speechSynthesizer = TestSpeechSynthesizer() {
     observerBloc = ObserverBloc(
       generation: ObserverGenerationDependencies(
         sceneSource: sceneSource ?? const _EmptySceneSource(),
@@ -66,6 +72,8 @@ final class TestAssistantResources {
         wakePhrase: 'assistant',
         questionDeadline: const Duration(seconds: 15),
       ),
+      handsFreeInitiallyEnabled: handsFreeInitiallyEnabled,
+      periodicTimerFactory: periodicTimerFactory,
     );
   }
 
@@ -102,7 +110,7 @@ final class _EmptySceneSource implements SceneSource {
 }
 
 /// In-memory model store that becomes ready immediately.
-final class TestModelStore implements QwenModelStore {
+final class TestModelStore implements CacheVerifyingModelStore<VerifiedModelArtifact> {
   static const _artifact = VerifiedModelArtifact(
     modelId: 'test-model',
     revision: 'test-revision',
@@ -138,6 +146,13 @@ final class TestModelStore implements QwenModelStore {
   }
 
   @override
+  Future<AppResult<bool>> verifyCache() async {
+    _current = QwenModelStoreState.ready(_artifact);
+    _states.add(_current);
+    return const AppSuccess(true);
+  }
+
+  @override
   Future<void> suspend() async {
     suspendCalls += 1;
     _current = const QwenModelStoreState.suspended();
@@ -153,7 +168,7 @@ final class TestModelStore implements QwenModelStore {
 }
 
 /// In-memory ASR bundle store that becomes ready immediately.
-final class TestAsrModelStore implements AsrModelStore {
+final class TestAsrModelStore implements CacheVerifyingModelStore<VerifiedAsrModelBundle> {
   static const _bundle = VerifiedAsrModelBundle(
     modelId: 'test-asr',
     revision: 'test-revision',
@@ -197,6 +212,13 @@ final class TestAsrModelStore implements AsrModelStore {
   }
 
   @override
+  Future<AppResult<bool>> verifyCache() async {
+    _current = ModelStoreState.ready(_bundle);
+    _states.add(_current);
+    return const AppSuccess(true);
+  }
+
+  @override
   Future<void> suspend() async {
     suspendCalls += 1;
     _current = const ModelStoreState.suspended();
@@ -213,10 +235,35 @@ final class TestAsrModelStore implements AsrModelStore {
   }
 }
 
+/// Bundled-vision verifier that succeeds without platform services.
+final class TestVisionModelVerifier implements VisionModelVerifier {
+  /// Number of integrity-verification requests.
+  int verifyCalls = 0;
+
+  @override
+  Future<AppResult<VerifiedVisionModelArtifact>> verify() async {
+    verifyCalls += 1;
+    return const AppSuccess(
+      VerifiedVisionModelArtifact(
+        modelId: 'test-yolo',
+        revision: 'test-revision',
+        assetPath: 'assets/models/test-yolo.tflite',
+        byteSize: 1,
+        sha256: 'test-sha',
+      ),
+    );
+  }
+}
+
 /// Permission boundary that always grants microphone access.
 final class TestMicrophonePermissionGateway implements MicrophonePermissionGateway {
   /// Number of permission requests.
   int requestCalls = 0;
+
+  @override
+  Future<AppResult<void>> openApplicationSettings() async {
+    return const AppSuccess<void>(null);
+  }
 
   @override
   Future<AppResult<void>> request() async {
@@ -244,6 +291,9 @@ final class TestSpeechRecognizer implements SpeechRecognizer {
   /// Failures returned by successive terminal-close attempts.
   final List<AppFailure> closeFailures = [];
 
+  /// Optional recognition-handle stop behavior for lifecycle tests.
+  Future<AppResult<void>> Function()? onHandleStop;
+
   /// Stop count of the currently retained recognition handle.
   int get activeHandleStopCalls => _active?.stopCalls ?? 0;
 
@@ -258,7 +308,7 @@ final class TestSpeechRecognizer implements SpeechRecognizer {
   @override
   Future<AppResult<SpeechRecognitionHandle>> start() async {
     startCalls += 1;
-    final handle = _TestSpeechRecognitionHandle();
+    final handle = _TestSpeechRecognitionHandle(onStop: onHandleStop);
     _active = handle;
     return AppSuccess<SpeechRecognitionHandle>(handle);
   }
@@ -285,7 +335,10 @@ final class TestSpeechRecognizer implements SpeechRecognizer {
 }
 
 final class _TestSpeechRecognitionHandle implements SpeechRecognitionHandle {
+  _TestSpeechRecognitionHandle({this.onStop});
+
   final StreamController<SpeechRecognitionEvent> _events = StreamController.broadcast();
+  final Future<AppResult<void>> Function()? onStop;
   Future<AppResult<void>>? _stopTask;
 
   int stopCalls = 0;
@@ -303,8 +356,9 @@ final class _TestSpeechRecognitionHandle implements SpeechRecognitionHandle {
 
   Future<AppResult<void>> _stopOnce() async {
     stopCalls += 1;
-    await _events.close();
-    return const AppSuccess<void>(null);
+    final result = await onStop?.call() ?? const AppSuccess<void>(null);
+    if (result is AppSuccess<void>) await _events.close();
+    return result;
   }
 }
 
@@ -371,18 +425,24 @@ final class TestSpeechSynthesizer implements SpeechSynthesizer {
   /// Failures returned by successive terminal-close attempts.
   final List<AppFailure> closeFailures = [];
 
+  /// Optional speech behavior for lifecycle tests.
+  Future<AppResult<void>> Function(String text)? onSpeak;
+
+  /// Optional cooperative-stop behavior for lifecycle tests.
+  Future<AppResult<void>> Function()? onStop;
+
   bool _closed = false;
 
   @override
   Future<AppResult<void>> speak(String text) async {
     speakCalls += 1;
-    return const AppSuccess<void>(null);
+    return await onSpeak?.call(text) ?? const AppSuccess<void>(null);
   }
 
   @override
   Future<AppResult<void>> stop() async {
     stopCalls += 1;
-    return const AppSuccess<void>(null);
+    return await onStop?.call() ?? const AppSuccess<void>(null);
   }
 
   @override

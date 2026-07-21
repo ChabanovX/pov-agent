@@ -22,12 +22,21 @@ final class ObserverActiveSpeech {
   /// Comment index when [target] is an automatic comment.
   int? get commentIndex => switch (target) {
     ObserverCommentSpeechTarget(:final commentIndex) => commentIndex,
+    ObserverMessageSpeechTarget() => null,
+    ObserverVoiceAnswerSpeechTarget() => null,
+  };
+
+  /// Message index when [target] is a completed Assistant dialogue response.
+  int? get messageIndex => switch (target) {
+    ObserverCommentSpeechTarget() => null,
+    ObserverMessageSpeechTarget(:final messageIndex) => messageIndex,
     ObserverVoiceAnswerSpeechTarget() => null,
   };
 
   /// Voice turn when [target] is a hands-free answer.
   int? get voiceTurnId => switch (target) {
     ObserverCommentSpeechTarget() => null,
+    ObserverMessageSpeechTarget() => null,
     ObserverVoiceAnswerSpeechTarget(:final turnId) => turnId,
   };
 }
@@ -85,6 +94,12 @@ final class ObserverSpeechSession {
     _ => null,
   };
 
+  /// Message whose failed native stop remains available for UI recovery.
+  int? get stopRequiredMessageIndex => switch (_stopRequiredTarget) {
+    ObserverMessageSpeechTarget(:final messageIndex) => messageIndex,
+    _ => null,
+  };
+
   /// Voice turn whose failed native stop still occupies the speech slot.
   int? get stopRequiredVoiceTurnId => switch (_stopRequiredTarget) {
     ObserverVoiceAnswerSpeechTarget(:final turnId) => turnId,
@@ -112,6 +127,17 @@ final class ObserverSpeechSession {
   }) {
     return _start(
       target: ObserverVoiceAnswerSpeechTarget(turnId),
+      text: text,
+    );
+  }
+
+  /// Starts [text] for a committed Assistant [messageIndex] when idle.
+  ObserverActiveSpeech? startMessage({
+    required int messageIndex,
+    required String text,
+  }) {
+    return _start(
+      target: ObserverMessageSpeechTarget(messageIndex),
       text: text,
     );
   }

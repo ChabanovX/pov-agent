@@ -66,6 +66,21 @@ final class ObserverVoiceRetryRequested extends ObserverEvent {
   const ObserverVoiceRetryRequested();
 }
 
+/// Changes the session-only hands-free microphone preference.
+final class ObserverHandsFreeEnabledChanged extends ObserverEvent {
+  /// Creates a hands-free preference intent.
+  const ObserverHandsFreeEnabledChanged({required this.enabled});
+
+  /// Whether wake-phrase recognition may run while Assistant is active.
+  final bool enabled;
+}
+
+/// Opens platform application settings after microphone access is denied.
+final class ObserverMicrophoneSettingsRequested extends ObserverEvent {
+  /// Creates a microphone-permission recovery intent.
+  const ObserverMicrophoneSettingsRequested();
+}
+
 /// Changes the session-only automatic speech mute preference.
 final class ObserverSpeechMutedChanged extends ObserverEvent {
   /// Sets whether completed automatic comments may be spoken.
@@ -88,6 +103,15 @@ final class ObserverCommentReplayRequested extends ObserverEvent {
 
   /// Index in the current session's append-only comment transcript.
   final int commentIndex;
+}
+
+/// Replays one committed Assistant dialogue response by append-only index.
+final class ObserverMessageReplayRequested extends ObserverEvent {
+  /// Requests speech for [messageIndex] when generation and speech are idle.
+  const ObserverMessageReplayRequested(this.messageIndex);
+
+  /// Index in the current session's append-only dialogue transcript.
+  final int messageIndex;
 }
 
 /// Quiesces ticks and generation before camera foreground teardown.

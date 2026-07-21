@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pov_agent/features/assistant/application/models/generation_options.dart';
+import 'package:pov_agent/features/assistant/application/models/model_store_state.dart';
 import 'package:pov_agent/features/assistant/application/models/speech_recognition_event.dart';
 import 'package:pov_agent/features/assistant/application/ports/speech_recognizer.dart';
 import 'package:pov_agent/features/assistant/application/services/observer_request_builder.dart';
@@ -35,8 +36,302 @@ const _shortOptions = GenerationOptions(
 // - The live turn traverses wake, listening, scene-aware Qwen, and speech once.
 // - A wake preempts periodic work rather than racing the single Qwen slot.
 // - Permission and empty-turn failures stay recoverable through one retry.
+// - Disabling releases ASR ownership and a later enable starts a fresh epoch.
+// - Inactive Settings changes reconcile ready and suspended ASR snapshots.
 // - Lifecycle teardown rejects callbacks from the superseded microphone handle.
 void main() {
+  test('only actionable microphone denials expose application settings', () {
+    final denied = ObserverState(
+      wakePhrase: 'assistant',
+      voiceFailure: const PermissionDeniedFailure(
+        code: 'microphone_permission_denied',
+      ),
+    );
+    final permanentlyDenied = ObserverState(
+      wakePhrase: 'assistant',
+      voiceFailure: const PermissionDeniedFailure(
+        code: 'microphone_permission_permanently_denied',
+      ),
+    );
+    final restricted = ObserverState(
+      wakePhrase: 'assistant',
+      voiceFailure: const PermissionDeniedFailure(
+        code: 'microphone_permission_restricted',
+      ),
+    );
+
+    expect(denied.hasMicrophonePermissionFailure, isTrue);
+    expect(denied.canOpenMicrophoneSettings, isTrue);
+    expect(permanentlyDenied.canOpenMicrophoneSettings, isTrue);
+    expect(restricted.hasMicrophonePermissionFailure, isTrue);
+    expect(restricted.canOpenMicrophoneSettings, isFalse);
+  });
+
+  test('hands-free stays cold until the session switch is enabled', () async {
+    final fixture = await _HandsFreeFixture.start(
+      handsFreeInitiallyEnabled: false,
+    );
+
+    expect(fixture.bloc.state.handsFreeEnabled, isFalse);
+    expect(fixture.bloc.state.voicePhase, VoiceAgentPhase.unavailable);
+    expect(fixture.asrStore.prepareCalls, 0);
+    expect(fixture.permission.requestCalls, 0);
+    expect(fixture.recognizer.loadCalls, 0);
+
+    fixture.bloc.add(
+      const ObserverHandsFreeEnabledChanged(enabled: true),
+    );
+    await _waitForState(
+      fixture.bloc,
+      (state) => state.voicePhase == VoiceAgentPhase.watching,
+    );
+
+    expect(fixture.asrStore.prepareCalls, 1);
+    expect(fixture.permission.requestCalls, 1);
+    expect(fixture.recognizer.loadCalls, 1);
+    expect(fixture.recognizer.startCalls, 1);
+
+    await fixture.close();
+  });
+
+  test(
+    'disabling hands-free releases ASR and re-enables with a fresh input epoch',
+    () async {
+      final fixture = await _HandsFreeFixture.start();
+      final staleHandle = fixture.recognizer.activeHandle!;
+      final prepareCallsBeforeDisable = fixture.asrStore.prepareCalls;
+      final permissionCallsBeforeDisable = fixture.permission.requestCalls;
+      final loadCallsBeforeDisable = fixture.recognizer.loadCalls;
+      final startCallsBeforeDisable = fixture.recognizer.startCalls;
+
+      fixture.bloc.add(
+        const ObserverHandsFreeEnabledChanged(enabled: false),
+      );
+      final disabled = await _waitForState(
+        fixture.bloc,
+        (state) => !state.handsFreeEnabled && state.asrModelStatus == ObserverModelStatus.suspended,
+      );
+
+      expect(disabled.voicePhase, VoiceAgentPhase.unavailable);
+      expect(staleHandle.stopCalls, 1);
+      expect(fixture.asrStore.suspendCalls, 1);
+      expect(fixture.recognizer.unloadCalls, 1);
+      expect(fixture.recognizer.activeHandle, isNull);
+
+      staleHandle.emit(
+        const SpeechRecognitionEndpoint(
+          segmentId: 0,
+          revision: 1,
+          transcript: 'Assistant stale question',
+          reason: SpeechRecognitionEndpointReason.trailingSilence,
+        ),
+      );
+      await _flushEvents();
+      expect(fixture.generator.requests, isEmpty);
+
+      fixture.bloc.add(
+        const ObserverHandsFreeEnabledChanged(enabled: true),
+      );
+      final watching = await _waitForState(
+        fixture.bloc,
+        (state) => state.voicePhase == VoiceAgentPhase.watching,
+      );
+      final freshHandle = fixture.recognizer.activeHandle!;
+
+      expect(watching.handsFreeEnabled, isTrue);
+      expect(watching.asrModelStatus, ObserverModelStatus.ready);
+      expect(watching.voiceFailure, isNull);
+      expect(freshHandle, isNot(same(staleHandle)));
+      expect(fixture.asrStore.prepareCalls, prepareCallsBeforeDisable + 1);
+      expect(
+        fixture.permission.requestCalls,
+        permissionCallsBeforeDisable + 1,
+      );
+      expect(fixture.recognizer.loadCalls, loadCallsBeforeDisable + 1);
+      expect(fixture.recognizer.startCalls, startCallsBeforeDisable + 1);
+
+      staleHandle.emit(
+        const SpeechRecognitionEndpoint(
+          segmentId: 0,
+          revision: 2,
+          transcript: 'Assistant still stale',
+          reason: SpeechRecognitionEndpointReason.trailingSilence,
+        ),
+      );
+      await _flushEvents();
+      expect(fixture.bloc.state.voicePhase, VoiceAgentPhase.watching);
+      expect(fixture.generator.requests, isEmpty);
+
+      freshHandle.emit(
+        const SpeechRecognitionHypothesis(
+          segmentId: 0,
+          revision: 1,
+          transcript: 'Assistant what is here',
+        ),
+      );
+      await _waitForState(
+        fixture.bloc,
+        (state) => state.voicePhase == VoiceAgentPhase.listening,
+      );
+
+      await fixture.close();
+    },
+  );
+
+  test(
+    'inactive enable arms when a subscribed ASR store is already ready',
+    () async {
+      final fixture = await _HandsFreeFixture.start();
+      fixture.bloc.add(
+        const ObserverHandsFreeEnabledChanged(enabled: false),
+      );
+      await _waitForState(
+        fixture.bloc,
+        (state) => !state.handsFreeEnabled && state.asrModelStatus == ObserverModelStatus.suspended,
+      );
+
+      fixture.asrStore.emit(
+        ModelStoreState.ready(testAsrBundle),
+      );
+      await _flushEvents();
+      fixture.bloc.add(const ObserverForegroundDeactivated());
+      await _waitForState(
+        fixture.bloc,
+        (state) => !state.foregroundActive,
+      );
+
+      final permissionCallsBeforeEnable = fixture.permission.requestCalls;
+      fixture.bloc.add(
+        const ObserverHandsFreeEnabledChanged(enabled: true),
+      );
+      final enabledInSettings = await _waitForState(
+        fixture.bloc,
+        (state) => state.handsFreeEnabled && state.voicePhase == VoiceAgentPhase.suspended,
+      );
+      expect(enabledInSettings.asrModelStatus, ObserverModelStatus.suspended);
+      expect(fixture.permission.requestCalls, permissionCallsBeforeEnable);
+
+      fixture.bloc.add(const ObserverResumed());
+      final watching = await _waitForState(
+        fixture.bloc,
+        (state) => state.voicePhase == VoiceAgentPhase.watching,
+      );
+
+      expect(watching.asrModelStatus, ObserverModelStatus.ready);
+      expect(
+        fixture.permission.requestCalls,
+        permissionCallsBeforeEnable + 1,
+      );
+      await fixture.close();
+    },
+  );
+
+  test('inactive enable prepares and arms a suspended ASR store', () async {
+    final fixture = await _HandsFreeFixture.start(
+      handsFreeInitiallyEnabled: false,
+    );
+    await fixture.asrStore.suspend();
+    fixture.bloc.add(const ObserverForegroundDeactivated());
+    await _waitForState(
+      fixture.bloc,
+      (state) => !state.foregroundActive,
+    );
+
+    fixture.bloc.add(
+      const ObserverHandsFreeEnabledChanged(enabled: true),
+    );
+    await _waitForState(
+      fixture.bloc,
+      (state) => state.handsFreeEnabled && state.voicePhase == VoiceAgentPhase.suspended,
+    );
+    fixture.bloc.add(const ObserverResumed());
+    final watching = await _waitForState(
+      fixture.bloc,
+      (state) => state.voicePhase == VoiceAgentPhase.watching,
+    );
+
+    expect(watching.asrModelStatus, ObserverModelStatus.ready);
+    expect(fixture.asrStore.prepareCalls, 1);
+    expect(fixture.permission.requestCalls, 1);
+    await fixture.close();
+  });
+
+  test('microphone recovery opens platform application settings', () async {
+    final permission = FakeMicrophonePermissionGateway()
+      ..enqueue(
+        const AppError<void>(
+          PermissionDeniedFailure(code: 'microphone_permission_denied'),
+        ),
+      );
+    final fixture = await _HandsFreeFixture.start(permission: permission);
+    await _waitForState(
+      fixture.bloc,
+      (state) => state.canOpenMicrophoneSettings,
+    );
+
+    fixture.bloc.add(const ObserverMicrophoneSettingsRequested());
+    await _waitForCondition(() => fixture.permission.openSettingsCalls == 1);
+
+    expect(fixture.permission.openSettingsCalls, 1);
+    await fixture.close();
+  });
+
+  test('restricted microphone access never opens application settings', () async {
+    final permission = FakeMicrophonePermissionGateway()
+      ..enqueue(
+        const AppError<void>(
+          PermissionDeniedFailure(code: 'microphone_permission_restricted'),
+        ),
+      );
+    final fixture = await _HandsFreeFixture.start(permission: permission);
+    await _waitForState(
+      fixture.bloc,
+      (state) => state.voiceFailure?.code == 'microphone_permission_restricted',
+    );
+
+    fixture.bloc.add(const ObserverMicrophoneSettingsRequested());
+    await _flushEvents();
+
+    expect(fixture.bloc.state.canOpenMicrophoneSettings, isFalse);
+    expect(fixture.permission.openSettingsCalls, 0);
+    await fixture.close();
+  });
+
+  test(
+    'permission denial remains visible through Settings and suspension',
+    () async {
+      final permission = FakeMicrophonePermissionGateway()
+        ..enqueue(
+          const AppError<void>(
+            PermissionDeniedFailure(code: 'microphone_permission_denied'),
+          ),
+        );
+      final fixture = await _HandsFreeFixture.start(permission: permission);
+      await _waitForState(
+        fixture.bloc,
+        (state) => state.voiceFailure?.code == 'microphone_permission_denied',
+      );
+
+      fixture.bloc.add(const ObserverForegroundDeactivated());
+      final settingsState = await _waitForState(
+        fixture.bloc,
+        (state) => !state.foregroundActive,
+      );
+      expect(settingsState.voiceFailure?.code, 'microphone_permission_denied');
+      expect(settingsState.canOpenMicrophoneSettings, isTrue);
+
+      fixture.bloc.add(const ObserverSuspended());
+      final suspended = await _waitForState(
+        fixture.bloc,
+        (state) => state.modelStatus == ObserverModelStatus.suspended,
+      );
+      expect(suspended.voiceFailure?.code, 'microphone_permission_denied');
+      expect(suspended.canOpenMicrophoneSettings, isTrue);
+
+      await fixture.close();
+    },
+  );
+
   test(
     'voice turn uses the latest scene and four pairs, speaks once, then rearms',
     () async {
@@ -522,15 +817,17 @@ void main() {
 }
 
 final class _HandsFreeFixture {
-  _HandsFreeFixture._({FakeMicrophonePermissionGateway? permission})
-    : scene = FakeSceneSource(current: _scene()),
-      qwenStore = FakeAssistantModelStore(),
-      asrStore = FakeAsrModelStore(),
-      generator = FakeCommentGenerator(),
-      permission = permission ?? FakeMicrophonePermissionGateway(),
-      recognizer = FakeSpeechRecognizer(),
-      speech = FakeSpeechSynthesizer(),
-      timers = _TimerHarness() {
+  _HandsFreeFixture._({
+    FakeMicrophonePermissionGateway? permission,
+    bool handsFreeInitiallyEnabled = true,
+  }) : scene = FakeSceneSource(current: _scene()),
+       qwenStore = FakeAssistantModelStore(),
+       asrStore = FakeAsrModelStore(),
+       generator = FakeCommentGenerator(),
+       permission = permission ?? FakeMicrophonePermissionGateway(),
+       recognizer = FakeSpeechRecognizer(),
+       speech = FakeSpeechSynthesizer(),
+       timers = _TimerHarness() {
     bloc = ObserverBloc(
       generation: ObserverGenerationDependencies(
         sceneSource: scene,
@@ -552,16 +849,26 @@ final class _HandsFreeFixture {
         wakePhrase: 'assistant',
         questionDeadline: testVoiceQuestionDeadline,
       ),
+      handsFreeInitiallyEnabled: handsFreeInitiallyEnabled,
       periodicTimerFactory: timers.create,
     );
   }
 
   static Future<_HandsFreeFixture> start({
     FakeMicrophonePermissionGateway? permission,
+    bool handsFreeInitiallyEnabled = true,
   }) async {
-    final fixture = _HandsFreeFixture._(permission: permission);
+    final fixture = _HandsFreeFixture._(
+      permission: permission,
+      handsFreeInitiallyEnabled: handsFreeInitiallyEnabled,
+    );
     fixture.bloc.add(const ObserverStarted());
-    if (permission == null) {
+    if (!handsFreeInitiallyEnabled) {
+      await _waitForState(
+        fixture.bloc,
+        (state) => state.modelStatus == ObserverModelStatus.ready,
+      );
+    } else if (permission == null) {
       await _waitForState(
         fixture.bloc,
         (state) => state.voicePhase == VoiceAgentPhase.watching,

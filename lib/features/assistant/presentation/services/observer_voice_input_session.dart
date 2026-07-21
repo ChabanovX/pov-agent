@@ -211,7 +211,17 @@ final class ObserverVoiceInputSession {
       );
     }
     _ensureModelSubscription();
+    // An already-subscribed store may have become ready while hands-free was
+    // disabled and its updates were intentionally ignored by the Bloc. Replay
+    // the synchronous snapshot so foreground resume can arm without requiring
+    // the store to emit a redundant ready transition.
+    _onUpdate(ObserverVoiceModelStateChanged(_modelStore.current));
     return _resolveBundle();
+  }
+
+  /// Opens application settings through the injected permission boundary.
+  Future<AppResult<void>> openPermissionSettings() {
+    return _permissionGateway.openApplicationSettings();
   }
 
   /// Prepares the model, obtains permission, and arms recognition once.
@@ -379,7 +389,6 @@ final class ObserverVoiceInputSession {
 
   void _ensureModelSubscription() {
     if (_modelSubscription != null) return;
-    _onUpdate(ObserverVoiceModelStateChanged(_modelStore.current));
     _modelSubscription = _modelStore.states.listen((state) {
       if (!_closed) _onUpdate(ObserverVoiceModelStateChanged(state));
     });

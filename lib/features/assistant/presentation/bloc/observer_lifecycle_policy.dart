@@ -4,6 +4,7 @@ part of 'observer_bloc.dart';
 extension _ObserverLifecyclePolicy on ObserverBloc {
   Future<void> _onForegroundDeactivated(Emitter<ObserverState> emit) async {
     if (!_acceptsForegroundWork) return;
+    final retainedPermissionFailure = state.hasMicrophonePermissionFailure ? state.voiceFailure : null;
     // Reject new work before awaiting cancellation. `state.foregroundActive`
     // becomes false only after quiescence and serves as the runtime's ack.
     _acceptsForegroundWork = false;
@@ -19,6 +20,7 @@ extension _ObserverLifecyclePolicy on ObserverBloc {
       _withoutGenerationDrafts(state).copyWith(
         foregroundActive: false,
         activeSpeechCommentIndex: () => null,
+        activeSpeechMessageIndex: () => null,
         activeVoiceSpeechTurnId: () => null,
         voicePhase: VoiceAgentPhase.unavailable,
         voiceAnswerDraft: '',
@@ -27,7 +29,7 @@ extension _ObserverLifecyclePolicy on ObserverBloc {
           AppError<void>(:final failure) => failure,
         },
         voiceFailure: () => switch (voiceResult) {
-          AppSuccess<void>() => null,
+          AppSuccess<void>() => retainedPermissionFailure,
           AppError<void>(:final failure) => failure,
         },
       ),
@@ -36,18 +38,21 @@ extension _ObserverLifecyclePolicy on ObserverBloc {
 
   Future<void> _onSuspended(Emitter<ObserverState> emit) async {
     if (_closing || !state.started) return;
+    final retainedPermissionFailure = state.hasMicrophonePermissionFailure ? state.voiceFailure : null;
     _acceptsForegroundWork = false;
     _cancelObservationTimer();
     emit(
       _withoutGenerationDrafts(state).copyWith(
         foregroundActive: false,
         activeSpeechCommentIndex: () => null,
+        activeSpeechMessageIndex: () => null,
         activeVoiceSpeechTurnId: () => null,
         modelStatus: ObserverModelStatus.suspended,
         asrModelStatus: ObserverModelStatus.suspended,
         voicePhase: VoiceAgentPhase.suspended,
         modelDownloadProgress: () => null,
         modelFailure: () => null,
+        voiceFailure: () => retainedPermissionFailure,
       ),
     );
     final speechStop = _speechSession.stop();
@@ -65,7 +70,7 @@ extension _ObserverLifecyclePolicy on ObserverBloc {
               AppError<void>(:final failure) => failure,
             },
             voiceFailure: () => switch (voiceResult) {
-              AppSuccess<void>() => null,
+              AppSuccess<void>() => retainedPermissionFailure,
               AppError<void>(:final failure) => failure,
             },
           ),
@@ -94,6 +99,7 @@ extension _ObserverLifecyclePolicy on ObserverBloc {
     final storeState = _modelSession.current;
     final needsReload = switch (storeState.phase) {
       ModelStorePhase.idle || ModelStorePhase.suspended => true,
+      ModelStorePhase.loading when !_modelSession.preparationActive => true,
       _ => false,
     };
     var resumedState = state.copyWith(foregroundActive: true);
@@ -102,11 +108,13 @@ extension _ObserverLifecyclePolicy on ObserverBloc {
       resumedState = switch (speechRecovery) {
         AppSuccess<void>() => resumedState.copyWith(
           activeSpeechCommentIndex: () => null,
+          activeSpeechMessageIndex: () => null,
           activeVoiceSpeechTurnId: () => null,
           speechFailure: () => null,
         ),
         AppError<void>(:final failure) => resumedState.copyWith(
           activeSpeechCommentIndex: () => _speechSession.stopRequiredCommentIndex,
+          activeSpeechMessageIndex: () => _speechSession.stopRequiredMessageIndex,
           activeVoiceSpeechTurnId: () => retainedVoiceSpeechTurnId,
           speechFailure: () => failure,
           voiceFailure: retainedVoiceSpeechTurnId == null ? null : () => failure,
@@ -117,16 +125,24 @@ extension _ObserverLifecyclePolicy on ObserverBloc {
     final resumed = _projectModelState(resumedState, storeState);
     emit(
       (needsReload ? _preparingState(resumed) : resumed).copyWith(
-        voicePhase: retainedVoiceSpeechTurnId == null ? VoiceAgentPhase.preparing : VoiceAgentPhase.failure,
+        asrModelStatus: state.handsFreeEnabled ? state.asrModelStatus : ObserverModelStatus.suspended,
+        voicePhase: !state.handsFreeEnabled
+            ? VoiceAgentPhase.unavailable
+            : retainedVoiceSpeechTurnId == null
+            ? VoiceAgentPhase.preparing
+            : VoiceAgentPhase.failure,
         asrModelFailure: () => null,
         voiceFailure: retainedVoiceSpeechTurnId == null ? () => null : null,
       ),
     );
     _replaceObservationTimer();
     if (needsReload) _modelSession.requestPreparation();
-    unawaited(_voiceInputSession.prepareModel());
-    if (!needsReload && speechRecovery is! AppError<void>) {
-      unawaited(_voiceInputSession.watch());
+    if (state.handsFreeEnabled) {
+      if (retainedVoiceSpeechTurnId == null) _voiceRetryRequired = false;
+      unawaited(_voiceInputSession.prepareModel());
+    }
+    if (state.handsFreeEnabled && !needsReload && speechRecovery is! AppError<void>) {
+      _armVoiceIfAllowed();
     }
   }
 }
