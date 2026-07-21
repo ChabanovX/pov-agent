@@ -21,11 +21,13 @@ fi
 
 flutter test integration_test/observer_native_soak_test.dart \
   -d "$device_id" \
+  --dart-define-from-file=.env.example \
   --dart-define=RUN_LIVE_OBSERVER_TEST=true \
   --dart-define=REQUIRE_GPU_OBSERVER=true
 
 flutter test integration_test/observer_native_soak_test.dart \
   -d "$device_id" \
+  --dart-define-from-file=.env.example \
   --dart-define=USE_RECORDED_VIDEO=true \
   --dart-define=RUN_NATIVE_OBSERVER_TEST=true \
   --dart-define=REQUIRE_GPU_OBSERVER=true

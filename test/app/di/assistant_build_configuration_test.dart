@@ -18,6 +18,9 @@ void main() {
     );
     expect(configuration.manifest.license, 'Apache-2.0');
     expect(configuration.runtime.contextTokens, 2048);
+    expect(configuration.runtime.batchTokens, 512);
+    expect(configuration.runtime.threadCount, 4);
+    expect(configuration.runtime.gpuLayers, 99);
     expect(configuration.manualOptions.maxTokens, 512);
     expect(configuration.manualOptions.temperature, 0.6);
     expect(configuration.manualOptions.topP, 0.95);

@@ -63,7 +63,16 @@ void main() {
         expect(find.byKey(observerToggleButtonKey), findsOneWidget);
 
         final generator = runtime.commentGenerator as LlamaCommentGenerator;
-        expect(generator.loadedModelUsesGpu, isTrue);
+        _printBackendDiagnostic(
+          tester,
+          generator,
+          prefix: 'OBSERVER_LIVE_ACCEPTANCE',
+        );
+        expect(
+          generator.loadedModelUsesGpu,
+          isTrue,
+          reason: _gpuRequirementFailure(generator),
+        );
 
         // Startup observation may have raced model readiness. Quiesce it and
         // establish the baseline first, then correlate exactly the next
@@ -93,9 +102,17 @@ void main() {
 
         final completed = await _waitForState(
           runtime.observerBloc,
-          (state) => state.comments.length > initialCommentCount,
+          (state) => state.comments.length > initialCommentCount || state.automaticFailure != null,
           timeout: _liveSceneTimeout,
         );
+        if (completed.automaticFailure case final failure?) {
+          fail(
+            'The first live automatic generation failed: '
+            'code=${failure.code}; '
+            'message=${failure.message ?? 'none'}; '
+            'cause=${failure.cause ?? 'none'}.',
+          );
+        }
         final comment = completed.comments.last;
         expect(observedStreaming, isTrue);
         expect(generatedScene, isNotNull);
@@ -110,9 +127,19 @@ void main() {
         // than merely disabling an idle timer between comments.
         final active = await _waitForState(
           runtime.observerBloc,
-          (state) => state.activeGeneration == ObserverGenerationKind.automatic && state.automaticDraft.isNotEmpty,
+          (state) =>
+              state.automaticFailure != null ||
+              state.activeGeneration == ObserverGenerationKind.automatic && state.automaticDraft.isNotEmpty,
           timeout: _liveSceneTimeout,
         );
+        if (active.automaticFailure case final failure?) {
+          fail(
+            'The cancellable live automatic generation failed before stop: '
+            'code=${failure.code}; '
+            'message=${failure.message ?? 'none'}; '
+            'cause=${failure.cause ?? 'none'}.',
+          );
+        }
         final commentsAtStop = active.comments.length;
         runtime.observerBloc.add(const ObservationStopped());
         await _waitForState(
@@ -167,7 +194,18 @@ void main() {
         expect(find.text('Watching every 10 seconds'), findsOneWidget);
 
         final generator = runtime.commentGenerator as LlamaCommentGenerator;
-        if (_requireGpuObserver) expect(generator.loadedModelUsesGpu, isTrue);
+        _printBackendDiagnostic(
+          tester,
+          generator,
+          prefix: 'OBSERVER_ACCEPTANCE',
+        );
+        if (_requireGpuObserver) {
+          expect(
+            generator.loadedModelUsesGpu,
+            isTrue,
+            reason: _gpuRequirementFailure(generator),
+          );
+        }
 
         // Preparation and the first timer tick can overlap before the soak
         // subscribes. Quiesce that startup window so every measured failure,
@@ -372,6 +410,29 @@ Future<ObserverState> _waitForState(
 }) {
   if (predicate(bloc.state)) return Future.value(bloc.state);
   return bloc.stream.firstWhere(predicate).timeout(timeout);
+}
+
+void _printBackendDiagnostic(
+  WidgetTester tester,
+  LlamaCommentGenerator generator, {
+  required String prefix,
+}) {
+  final diagnostic = generator.loadedModelBackendDiagnostic;
+  tester.printToConsole(
+    '$prefix stage=model_backend '
+    'uses_gpu=${generator.loadedModelUsesGpu} '
+    'diagnostic=${diagnostic == null ? 'none' : _singleLine(diagnostic)}',
+  );
+}
+
+String _gpuRequirementFailure(LlamaCommentGenerator generator) {
+  return 'Physical iOS acceptance requires actual Metal model offload. '
+      'Native diagnostic: '
+      '${generator.loadedModelBackendDiagnostic ?? 'none'}';
+}
+
+String _singleLine(String value) {
+  return value.replaceAll(RegExp(r'\s+'), ' ').trim();
 }
 
 Future<void> _disposeRuntime(
