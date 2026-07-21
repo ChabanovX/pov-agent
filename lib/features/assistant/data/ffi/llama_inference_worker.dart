@@ -22,7 +22,7 @@ final class LlamaWorkerLoadResult {
   /// Creates a load result containing the selected execution backend.
   const LlamaWorkerLoadResult({required this.usesGpu});
 
-  /// Whether llama.cpp successfully offloaded the model to Metal.
+  /// Whether llama.cpp successfully offloaded the model to an accelerator.
   final bool usesGpu;
 }
 
